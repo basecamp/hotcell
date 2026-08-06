@@ -54,6 +54,15 @@ module HotCell
 
     SOCKETS = [ "work.sock", "control.sock" ].freeze
 
+    # Request memory is protected by kernel.yama.ptrace_scope >= 1, and nothing else protects it. That is a
+    # host sysctl no container flag can supply.
+    PTRACE_SCOPE = "/proc/sys/kernel/yama/ptrace_scope"
+
+    # A cell that has loaded an application framework has loaded its configuration, and probably its
+    # credentials with it. The thing that breaks this is a transitive require in somebody's operation rather
+    # than anything here, which is why it is a check at boot instead of a test.
+    FRAMEWORKS = %w[ ActiveRecord ActiveStorage ActionController ActionMailer ActionCable ].freeze
+
     # A control connection that has not sent its request yet. Reading it non-blockingly is what stops a
     # client that connects and then says nothing from stalling the loop every conversion depends on.
     Pending = Struct.new(:connection, :accepted_at, :buffer)
@@ -64,11 +73,13 @@ module HotCell
 
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
-    def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new)
+    def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
+                   ptrace_scope_path: PTRACE_SCOPE)
       @directory = directory
       @workspace = workspace || File.join(Dir.tmpdir, "hotcell-workspace")
       @configuration = configuration
       @log = log
+      @ptrace_scope_path = ptrace_scope_path
       @children = {}
       @queue = []
       @control_pending = []
@@ -79,8 +90,10 @@ module HotCell
     def boot
       verify_socket_paths!
       verify_limits!
+      verify_ptrace_scope!
       prepare_directories
       preload
+      verify_no_framework!
       @work = listen "work.sock"
       @control = listen "control.sock"
       @control_handler = Control.new(configuration: configuration, counters: counters)
@@ -471,6 +484,36 @@ module HotCell
           raise ConfigurationError, "#{path} is #{path.bytesize} bytes and a Unix socket path on this " \
                                     "platform holds #{SUN_PATH_MAX}. Choose a shorter directory."
         end
+      end
+
+      # Refuse to boot rather than warn and serve. A host sysctl is invisible to the image and it silently
+      # voids the guarantee, and a warning in a log is how a dead control stays dead. This is the one boot
+      # check that is worth having now.
+      #
+      # An unreadable file means this is not Linux or the kernel has no Yama, which is development rather
+      # than a deployment with a broken precondition — so that warns instead.
+      def verify_ptrace_scope!
+        unless File.readable?(@ptrace_scope_path)
+          return log.write "cell.ptrace_scope_unknown", path: @ptrace_scope_path,
+                                                        warning: "cannot verify that a worker is unable to read a sibling's memory"
+        end
+
+        scope = File.read(@ptrace_scope_path).strip
+        return unless scope == "0"
+
+        raise ConfigurationError,
+              "kernel.yama.ptrace_scope is 0 on this host, so one worker can read another request's memory " \
+              "through /proc/<pid>/mem. No container flag can set it. Set it to 1 or higher and boot again."
+      end
+
+      def verify_no_framework!
+        loaded = FRAMEWORKS.select { |framework| Object.const_defined?(framework) }
+        return if loaded.empty?
+
+        raise ConfigurationError,
+              "#{loaded.join(", ")} is loaded in this cell, which means an operation required an " \
+              "application framework — and a framework brings its configuration and its credentials. A cell " \
+              "holds neither."
       end
 
       def verify_limits!

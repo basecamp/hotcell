@@ -19,4 +19,15 @@ module HotCell
 
   # A message that is not what the protocol says it is: unparseable, too long, or missing a field.
   class MessageError < Error; end
+
+  # Either side configured wrongly. Raised at boot rather than at the first request, because a cell that
+  # cannot hold its limits and a client that cannot classify a failure are both worse discovered in traffic.
+  class ConfigurationError < Error; end
+
+  # A client naming a cell nobody registered.
+  class UnregisteredCell < Error; end
+
+  # A client calling a cell whose socket directory is unset, which means the deployment has not turned this
+  # path on. The caller is the one that knows what to do instead, so this is loud rather than silent.
+  class CellNotConfigured < Error; end
 end

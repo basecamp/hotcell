@@ -17,10 +17,6 @@ module HotCell
   # so none of the reasons the supervisor stays out of a conversion apply. Reading a bounded control line
   # from the trusted side starts no thread pool and cannot deadlock a later fork.
   class Control
-    DESCRIBE = "hotcell.describe"
-    METRICS = "hotcell.metrics"
-    OPERATIONS = [ DESCRIBE, METRICS ].freeze
-
     def initialize(configuration:, counters:)
       @configuration = configuration
       @counters = counters
@@ -36,7 +32,7 @@ module HotCell
       case request.op
       when DESCRIBE then Response.ok(result: describe)
       when METRICS then Response.ok(result: @counters.to_h(running: running, queued: queued))
-      else failed "unsupported", "control.sock answers #{OPERATIONS.join(" and ")}, not #{request.op.inspect}"
+      else failed "unsupported", "control.sock answers #{CONTROL_OPERATIONS.join(" and ")}, not #{request.op.inspect}"
       end
     rescue MessageError => error
       failed "invalid", error.message
