@@ -20,21 +20,21 @@ class InstallationTest < ActiveStorageHotCellClientTest
   # resolves to from a to_prepare block raises instead, because to_prepare runs earlier still and the value is
   # nil. So the only thing worth checking is the end state.
   def test_it_passes_when_the_transformer_is_the_one_rails_will_use
-    ActiveStorage.variant_transformer = ActiveStorage::HotCell::Transformer
+    ActiveStorage.variant_transformer = ActiveStorage::HotCell::Client::Transformer
 
-    assert ActiveStorage::HotCell.verify_installation!
+    assert ActiveStorage::HotCell::Client.verify_installation!
   end
 
   def test_it_passes_for_a_subclass
-    ActiveStorage.variant_transformer = Class.new(ActiveStorage::HotCell::Transformer)
+    ActiveStorage.variant_transformer = Class.new(ActiveStorage::HotCell::Client::Transformer)
 
-    assert ActiveStorage::HotCell.verify_installation!
+    assert ActiveStorage::HotCell::Client.verify_installation!
   end
 
   def test_it_says_so_when_the_configuration_never_took_effect
     ActiveStorage.variant_transformer = nil
 
-    error = assert_raises(HotCell::ConfigurationError) { ActiveStorage::HotCell.verify_installation! }
+    error = assert_raises(HotCell::ConfigurationError) { ActiveStorage::HotCell::Client.verify_installation! }
     assert_match "variants are not going through a cell", error.message
     assert_match "silently overwritten", error.message
   end
@@ -42,7 +42,7 @@ class InstallationTest < ActiveStorageHotCellClientTest
   def test_it_says_so_when_something_else_is_installed
     ActiveStorage.variant_transformer = ActiveStorage::Transformers::ImageProcessingTransformer
 
-    assert_raises(HotCell::ConfigurationError) { ActiveStorage::HotCell.verify_installation! }
+    assert_raises(HotCell::ConfigurationError) { ActiveStorage::HotCell::Client.verify_installation! }
   end
 
   # TransformJob, AnalyzeJob and PreviewImageJob declare retry_on ActiveStorage::IntegrityError and nothing else,
@@ -51,7 +51,7 @@ class InstallationTest < ActiveStorageHotCellClientTest
   def test_it_teaches_the_jobs_to_retry_the_transient_class
     with_canned_response failed("capacity")
 
-    ActiveStorage::HotCell.retry_transient_failures! jobs: [ "InstallationTest::FakeJob" ]
+    ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "InstallationTest::FakeJob" ]
 
     assert_equal [ TemporarilyUnavailable ], FakeJob.retried.map(&:first)
   ensure
@@ -61,7 +61,7 @@ class InstallationTest < ActiveStorageHotCellClientTest
   def test_it_does_not_teach_them_to_retry_the_permanent_class
     with_canned_response failed("unreadable")
 
-    ActiveStorage::HotCell.retry_transient_failures! jobs: [ "InstallationTest::FakeJob" ]
+    ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "InstallationTest::FakeJob" ]
 
     refute_includes FakeJob.retried.map(&:first), Unprocessable
   ensure
@@ -73,7 +73,7 @@ class InstallationTest < ActiveStorageHotCellClientTest
   def test_a_job_that_is_not_loaded_is_skipped
     with_canned_response failed("capacity")
 
-    assert_empty ActiveStorage::HotCell.retry_transient_failures!(jobs: [ "NoSuchJob::Nowhere" ])
+    assert_empty ActiveStorage::HotCell::Client.retry_transient_failures!(jobs: [ "NoSuchJob::Nowhere" ])
   end
 
   class FakeJob

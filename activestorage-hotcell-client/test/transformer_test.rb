@@ -78,7 +78,7 @@ class TransformerTest < ActiveStorageHotCellClientTest
 
   def test_a_cell_that_is_not_there_raises_the_transient_class
     HotCell.root = Dir.mktmpdir "hotcell-absent"
-    HotCell.register ActiveStorage::HotCell::CELL, permanent: Unprocessable, transient: TemporarilyUnavailable
+    HotCell.register ActiveStorage::HotCell::Client::CELL, permanent: Unprocessable, transient: TemporarilyUnavailable
 
     assert_raises TemporarilyUnavailable do
       transform({}, "colour.png") { flunk "should not have yielded" }
@@ -87,7 +87,7 @@ class TransformerTest < ActiveStorageHotCellClientTest
 
   private
     def transformer(transformations)
-      ActiveStorage::HotCell::Transformer.new transformations
+      ActiveStorage::HotCell::Client::Transformer.new transformations
     end
 
     def transform(transformations, name, format: "png", &block)

@@ -83,6 +83,6 @@ class TransformationsTest < ActiveStorageHotCellClientTest
 
   private
     def map(transformations, format: "png")
-      ActiveStorage::HotCell::Transformations.call transformations, format: format
+      ActiveStorage::HotCell::Client::Transformations.call transformations, format: format
     end
 end
