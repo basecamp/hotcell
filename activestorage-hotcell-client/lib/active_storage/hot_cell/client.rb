@@ -25,7 +25,10 @@ module ActiveStorage
     # `:polynomially_longer` is deliberately not the default here. Its first retry lands around three seconds
     # later, and three seconds after a cell answered `capacity` it is still saturated — that is a thundering
     # herd rather than a backoff.
-    JOBS = %w[ ActiveStorage::TransformJob ActiveStorage::AnalyzeJob ActiveStorage::PreviewImageJob ].freeze
+    JOBS = %w[
+      ActiveStorage::TransformJob ActiveStorage::AnalyzeJob
+      ActiveStorage::PreviewImageJob ActiveStorage::CreateVariantsJob
+    ].freeze
 
     class << self
       def retry_transient_failures!(wait: 30.seconds, attempts: 5, jobs: JOBS)
