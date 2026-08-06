@@ -84,6 +84,26 @@ class PayloadTest < HotCellTest
     end
   end
 
+  # JSON.generate refuses these, and it refuses them *after* validation has said the structure is fine. In a
+  # worker that meant dying with no answer at all, on a response that had already been decided — so the caller
+  # read a closed socket and retried something that would fail the same way forever. Converters produce these:
+  # a filename, or a line of stderr.
+  def test_a_string_whose_bytes_are_not_valid_utf8_is_refused_here_rather_than_by_the_generator
+    invalid = { note: "caf\xFF".dup.force_encoding(Encoding::UTF_8) }
+
+    error = assert_raises(HotCell::SerializationError) { HotCell::Payload.generate(invalid, "result") }
+    assert_match "result[:note] is a String whose bytes are not valid UTF-8", error.message
+
+    # The premise: without the check, this is where it would have blown up instead.
+    assert_raises(JSON::GeneratorError) { JSON.generate(invalid) }
+  end
+
+  def test_an_invalid_string_nested_anywhere_is_refused
+    assert_raises HotCell::SerializationError do
+      HotCell::Payload.generate({ lines: [ "fine", "bad \xC3".dup.force_encoding(Encoding::UTF_8) ] }, "result")
+    end
+  end
+
   def test_json_native_values_pass
     payload = { string: "s", integer: 1, float: 1.5, yes: true, no: false, nothing: nil,
                 list: [ 1, "two", nil ], nested: { deeper: true } }

@@ -2,6 +2,7 @@
 
 require "rake/testtask"
 require "rbconfig"
+require_relative "../mutations"
 
 Rake::TestTask.new(:test) do |task|
   task.libs << "test"
@@ -23,8 +24,8 @@ desc "Break each control in turn and confirm the suite notices"
 task :mutations do
   survivors = MUTATIONS.reject do |mutation, suite|
     output = `#{RbConfig.ruby} -Ilib -Itest -rmutations/#{mutation} test/#{suite} 2>&1`
-    caught = !output.include?("0 failures, 0 errors")
-    puts format("  %-26s %-26s %s", mutation, suite, caught ? "caught" : "SURVIVED")
+    caught, summary = Mutations.caught?(output)
+    puts format("  %-26s %-26s %-9s %s", mutation, suite, caught ? "caught" : "SURVIVED", summary)
     caught
   end
 

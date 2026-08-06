@@ -11,7 +11,7 @@ class BootTest < RegistryIsolatedTest
   # stays dead.
   def test_a_host_where_a_worker_could_read_a_siblings_memory_refuses_to_boot
     with_ptrace_scope "0" do |path|
-      error = assert_raises(RuntimeError) { HotCell::TestCell.boot(supervisor: { ptrace_scope_path: path }) }
+      error = assert_raises(RuntimeError) { HotCell::TestCell.boot(supervisor: { ptrace_scope_path: path }) { nil } }
 
       assert_match "kernel.yama.ptrace_scope is 0", error.message
       assert_match "No container flag can set it", error.message
@@ -45,7 +45,7 @@ class BootTest < RegistryIsolatedTest
       before_fork { Object.const_set :ActiveStorage, Module.new }
     end
 
-    error = assert_raises(RuntimeError) { HotCell::TestCell.boot }
+    error = assert_raises(RuntimeError) { HotCell::TestCell.boot { nil } }
 
     assert_match "ActiveStorage is loaded in this cell", error.message
     assert_match "a cell holds neither", error.message.downcase
@@ -65,7 +65,7 @@ class BootTest < RegistryIsolatedTest
     skip "this process has no finite descriptor limit" if hard == Process::RLIM_INFINITY
 
     error = assert_raises RuntimeError do
-      HotCell::TestCell.boot(open_files: hard + 1)
+      HotCell::TestCell.boot(open_files: hard + 1) { nil }
     end
 
     assert_match "is above this process's hard limit", error.message
@@ -101,6 +101,22 @@ class BootTest < RegistryIsolatedTest
 
       assert_empty cell.log_events("cell.reuse_warning")
     end
+  end
+
+  # The worker tells the supervisor when its operation asked for less than the cell allows, because the
+  # supervisor never reads a request and cannot know. It may only narrow. The worker is the one process here
+  # that runs untrusted code, so the number it reports is checked rather than trusted: this is the side that
+  # owns invariant 6.
+  def test_the_supervisor_narrows_a_reported_deadline_and_never_widens_it
+    supervisor = HotCell::Supervisor.new(directory: "/tmp/unused", log: HotCell::Log.null,
+                                         configuration: HotCell::Configuration.new(deadline: 30))
+
+    assert_equal 5, supervisor.send(:narrowed_deadline, 5)
+    assert_equal 30, supervisor.send(:narrowed_deadline, 3000)
+    assert_equal 30, supervisor.send(:narrowed_deadline, nil)
+    assert_equal 30, supervisor.send(:narrowed_deadline, 0)
+    assert_equal 30, supervisor.send(:narrowed_deadline, -1)
+    assert_equal 30, supervisor.send(:narrowed_deadline, "forever")
   end
 
   private

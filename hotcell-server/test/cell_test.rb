@@ -88,11 +88,15 @@ class CellTest < HotCellServerTest
     end
   end
 
-  def test_an_unknown_operation
+  # Transient, and the design document says otherwise. An accessory is not updated by a deploy, so an
+  # application that ships a client for a new operation before anybody reboots the cell gets this at one
+  # hundred percent until they do — and recording that as permanent condemns every blob uploaded during the
+  # window. A caller's typo shows up in the `unsupported` rate and in the client's boot-time warning instead.
+  def test_an_unknown_operation_is_a_deploy_window_rather_than_a_verdict_on_the_input
     TestCell.boot do |cell|
       failure = assert_failed "unsupported", cell.call("test.nonexistent")
 
-      assert_predicate failure, :terminal?
+      refute_predicate failure, :terminal?
       assert_match "test.nonexistent", failure.message
     end
   end
@@ -222,6 +226,39 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # JSON.generate refuses a String whose bytes are not valid UTF-8, and it refuses it after the response has
+  # already been decided. That used to kill the worker with no answer at all, so the caller read a closed
+  # socket and retried something that would fail the same way forever.
+  def test_a_result_carrying_bytes_json_cannot_encode_is_reported_rather_than_killing_the_worker
+    TestCell.boot do |cell|
+      failure = assert_failed "failed", cell.call("test.mojibake")
+
+      assert_match "not valid UTF-8", failure.message
+      assert_ok cell.call("test.echo")
+    end
+  end
+
+  # A worker that dies mid-request without a signal is the cell's fault rather than the input's, and a
+  # misconfigured cell does it on every request. Recording that against a blob would condemn everything
+  # uploaded during a broken deploy, so it is the one `killed` verdict that is not terminal alongside the
+  # deadline.
+  def test_a_worker_that_dies_without_answering_is_reported_and_is_not_terminal
+    TestCell.boot do |cell|
+      failure = assert_failed "killed", cell.call("test.vanishes"), limit: "crashed"
+
+      refute_predicate failure, :terminal?
+      assert_nil failure.signal
+    end
+  end
+
+  def test_the_cell_serves_normally_after_a_worker_vanishes
+    TestCell.boot(concurrency: 1) do |cell|
+      assert_failed "killed", cell.call("test.vanishes"), limit: "crashed"
+
+      assert_ok cell.call("test.echo")
+    end
+  end
+
   def test_scratch_is_gone_once_the_request_is_answered
     TestCell.boot do |cell|
       with_files do |source, destination|
@@ -238,6 +275,19 @@ class CellTest < HotCellServerTest
 
       assert_equal File.join(cell.workspace, "0", "home"), result[:home]
       assert_path_exists result[:home]
+    end
+  end
+
+  # The whole fast path, thirty times over: fork, dispatch, both of the worker's reports, the response, the
+  # reap, and the slot coming back. Anything that leaves a finished worker marked in flight shows up here as a
+  # spurious kill once its deadline passes.
+  def test_many_fast_requests_are_never_reported_as_deaths
+    TestCell.boot(deadline: 2, concurrency: 2) do |cell|
+      30.times { assert_ok cell.call("test.echo") }
+      cell.stop
+
+      assert_empty cell.log_events("worker.killed")
+      assert_equal 30, cell.log_events("request").size
     end
   end
 

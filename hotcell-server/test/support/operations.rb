@@ -220,11 +220,37 @@ module Fixtures
     limits memory: 1024 * 1024**2, file_size: 4 * 1024 * 1024, open_files: 64
   end
 
+  # Asks for more than any cell will allow, on every limit. Unclamped, the worker would try to set a soft limit
+  # above its own hard limit and die before it could answer.
+  class Extravagant < Rlimits
+    operation "test.extravagant"
+    limits memory: 8 * 1024**3, file_size: 512 * 1024**2, open_files: 4096, deadline: 3600
+  end
+
   class Greedy < HotCell::Operation
     operation "test.greedy"
 
     def perform(_inputs, _outputs, payload)
       { bytes: ("x" * (payload.fetch(:megabytes) * 1024 * 1024)).bytesize }
+    end
+  end
+
+  # A result carrying bytes a converter produced, which is where invalid UTF-8 comes from in practice.
+  class Mojibake < HotCell::Operation
+    operation "test.mojibake"
+
+    def perform(_inputs, _outputs, _payload)
+      { filename: "caf\xFF.jpg".dup.force_encoding(Encoding::UTF_8) }
+    end
+  end
+
+  # Dies mid-request without answering and without a signal, which is what a cell fault looks like as
+  # distinct from an input fault.
+  class Vanishes < HotCell::Operation
+    operation "test.vanishes"
+
+    def perform(_inputs, _outputs, _payload)
+      exit! 3
     end
   end
 

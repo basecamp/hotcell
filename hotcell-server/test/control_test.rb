@@ -81,7 +81,10 @@ class ControlTest < HotCellServerTest
         held.each do |connection|
           connection.send_message HotCell::Request.new(op: "test.blocking", payload: { seconds: 1.5 }).to_line
         end
-        wait_until(what: "the cell to saturate") { assert_failed "capacity", cell.call("test.echo") }
+
+        # An assertion inside wait_until raises on the first mismatch rather than retrying, so this waits on
+        # the plain condition and asserts once it holds.
+        wait_until(what: "the cell to saturate") { cell.call("test.echo").failure&.code == "capacity" }
 
         assert_ok cell.control("hotcell.describe")
         assert_ok cell.control("hotcell.metrics")
@@ -170,6 +173,29 @@ class ControlTest < HotCellServerTest
       end
 
       assert_failed "invalid", response
+    end
+  end
+
+  # This channel runs inside the loop every conversion depends on, so anything raised while answering a scrape
+  # would stop the cell serving. :unlimited was the case that reached it: a Symbol is not JSON-native, so a
+  # cell configured with it could not describe itself, and the attempt took the cell down.
+  def test_a_cell_configured_for_persistent_workers_can_still_describe_itself
+    TestCell.boot(reuse: :unlimited) do |cell|
+      assert_equal "unlimited", assert_ok(cell.control("hotcell.describe")).result[:reuse]
+
+      assert_ok cell.call("test.echo")
+    end
+  end
+
+  def test_a_control_message_that_is_valid_json_but_not_an_object
+    TestCell.boot do |cell|
+      response = cell.connect("control.sock") do |connection|
+        connection.write_line "[1,2,3]\n"
+        cell.answer connection
+      end
+
+      assert_failed "invalid", response
+      assert_ok cell.call("test.echo")
     end
   end
 end

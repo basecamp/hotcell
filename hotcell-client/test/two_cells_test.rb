@@ -39,10 +39,11 @@ class TwoCellsTest < HotCellClientTest
         HotCell::Connection.new(held).send_message(
           HotCell::Request.new(op: "test.blocking", payload: { seconds: 0.6 }).to_line
         )
-        wait_until(what: "the images cell to saturate") do
-          assert_raises(TemporarilyUnavailable) { Thumbnail.perform_in_hotcell [], [], {} }
-        end
+        # assert_raises returns the exception, so putting it inside wait_until makes the first attempt the only
+        # attempt. Wait on the plain condition, then assert once it holds.
+        wait_until(what: "the images cell to saturate") { refused?(Thumbnail) }
 
+        assert_raises(TemporarilyUnavailable) { Thumbnail.perform_in_hotcell [], [], {} }
         assert Preview.perform_in_hotcell([], [], {})[:home], "the documents cell should be unaffected"
       ensure
         held.close
@@ -83,6 +84,13 @@ class TwoCellsTest < HotCellClientTest
           yield images_cell, documents_cell
         end
       end
+    end
+
+    def refused?(client)
+      client.perform_in_hotcell [], [], {}
+      false
+    rescue TemporarilyUnavailable
+      true
     end
 
     def wait_until(within: 5, what: "the condition")

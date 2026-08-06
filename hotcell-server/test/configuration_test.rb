@@ -78,10 +78,29 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_nil HotCell::Configuration.new(reuse: 5).in_process_warning([ subprocess ])
   end
 
+  # This goes on the wire as the answer to hotcell.describe, so "reportable" has to mean serializable and not
+  # just present. :unlimited is the one supported value that is not JSON-native, and a cell configured with it
+  # could not describe itself at all.
   def test_the_whole_configuration_is_reportable
     reported = HotCell::Configuration.new(concurrency: 2, deadline: 30).to_h
 
     assert_equal 2, reported[:concurrency]
     assert_equal 30, reported[:deadline]
+    assert_equal reported, HotCell::Payload.validate!(reported, "result")
+  end
+
+  def test_unlimited_reuse_is_reportable_too
+    reported = HotCell::Configuration.new(reuse: :unlimited).to_h
+
+    assert_equal "unlimited", reported[:reuse]
+    assert_equal reported, HotCell::Payload.validate!(reported, "result")
+  end
+
+  # A nil is a missing number rather than "use the default". A cell whose deadline is nil accepts every
+  # request and then dies on the first arithmetic the supervisor does with it.
+  def test_a_limit_explicitly_set_to_nil_is_refused_where_it_is_written
+    error = assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(deadline: nil) }
+
+    assert_match "deadline cannot be nil", error.message
   end
 end

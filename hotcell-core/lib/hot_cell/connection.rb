@@ -67,12 +67,15 @@ module HotCell
       socket.write line
     end
 
+    # UTF-8 for the same reason receive_message forces it: a socket read comes back ASCII-8BIT, where every
+    # byte is "valid" and nothing downstream can tell a mis-encoded message from a good one. Both directions
+    # should behave the same way, and the one that scrubs is Failure.
     def read_line(limit: MAX_RESPONSE_BYTES)
       line = socket.gets("\n", limit)
       return nil if line.nil?
       raise MessageError, "message passed #{limit} bytes with no newline" unless line.end_with?("\n")
 
-      line
+      line.force_encoding Encoding::UTF_8
     end
 
     def close

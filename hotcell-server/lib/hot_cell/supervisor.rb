@@ -18,7 +18,7 @@ module HotCell
   # knows when every worker started its current request, which is what the deadline needs.
   class Supervisor
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired) do
+                       :retired, :buffer) do
       def busy?
         !connection.nil?
       end
@@ -235,8 +235,24 @@ module HotCell
         end
       end
 
+      # A control answer that cannot be serialized must not take the cell down with it. This channel exists to
+      # be available when nothing else is, and it runs inside the loop every conversion depends on — so
+      # anything raised while answering a scrape would stop the cell serving.
+      #
+      # **Unproven, on purpose.** `reuse: :unlimited` used to reach this, because a Symbol is not JSON-native
+      # and a cell configured that way could not describe itself. Configuration#to_h now reports it as a
+      # String, so nothing left in describe or metrics can raise here and no test can catch this rescue being
+      # removed. There is no mutation for it, and it stays for the same reason as the buffered read above.
       def answer_control(connection, line)
-        connection.write_line @control_handler.answer(line, running: running, queued: @queue.size).to_line
+        response = begin
+          @control_handler.answer(line, running: running, queued: @queue.size).to_line
+        rescue StandardError => error
+          log.write "control.unanswerable", error: error.class.name, message: Failure.sanitize(error.message)
+          Response.failed(Failure.new(code: "failed", error_class: error.class.name,
+                                      message: error.message)).to_line
+        end
+
+        connection.write_line response
       rescue SystemCallError, IOError
         counters.cancelled!
       ensure
@@ -266,10 +282,12 @@ module HotCell
 
         while @queue.any? && (child = available_child)
           connection, queued_at = @queue.shift
-          dispatch child, connection, Clock.ms_since(queued_at)
+          break unless dispatch child, connection, Clock.ms_since(queued_at)
         end
       end
 
+      # A worker can die between the fork and this write. Answering rather than raising is what keeps one dead
+      # worker from taking the whole cell down with it, and the caller gets a transient verdict either way.
       def dispatch(child, connection, queued_ms)
         child.connection = connection
         child.dispatched_at = Clock.now
@@ -279,6 +297,14 @@ module HotCell
 
         child.control.send_message JSON.generate({ queued_ms: queued_ms }) << "\n",
                                    descriptors: [ connection ]
+        true
+      rescue SystemCallError, IOError => error
+        log.write "worker.undispatchable", pid: child.pid, slot: child.slot.number,
+                                           error: error.class.name
+        child.connection = nil
+        child.retired = true
+        answer connection, Failure.new(code: Codes::KILLED, limit: "crashed", message: error.message)
+        false
       end
 
       def available_child
@@ -290,17 +316,26 @@ module HotCell
         slot = Slot.build(workspace, number)
         supervisor_side, worker_side = UNIXSocket.pair(:STREAM)
 
-        pid = fork do
-          become_worker supervisor_side
-          Worker.new(slot: slot, configuration: configuration, control: Connection.new(worker_side),
-                     log: log).run
+        # A fork that fails is a host under pressure, not a reason to stop serving. The request stays queued
+        # and is either dispatched on a later pass or answered `capacity` when its wait runs out.
+        pid = begin
+          fork do
+            become_worker supervisor_side
+            Worker.new(slot: slot, configuration: configuration, control: Connection.new(worker_side),
+                       log: log).run
+          end
+        rescue SystemCallError => error
+          log.write "worker.unforkable", slot: number, error: error.class.name, message: error.message
+          supervisor_side.close
+          worker_side.close
+          return nil
         end
 
         worker_side.close
         log.write "worker.forked", pid: pid, slot: number
 
         @children[number] = Child.new(slot, pid, Connection.new(supervisor_side), nil, nil,
-                                      configuration.limits.deadline, 0, nil, false)
+                                      configuration.limits.deadline, 0, nil, false, "".b)
       end
 
       # Everything the supervisor holds and the worker must not: the listener, the signal pipe, the other
@@ -324,21 +359,53 @@ module HotCell
         @control_pending.each { |pending| pending.connection.close }
       end
 
+      # Buffered and non-blocking, for the same reason read_control is, and more so: readability means a byte
+      # arrived rather than a line, and the peer here is the one process in this design that runs untrusted
+      # code. A blocking read would let a worker that writes half a report and then stops park the very loop
+      # that enforces its deadline. Draining every complete line rather than the first also means a read that
+      # carries two reports cannot strand the second in this process's own IO buffer, where the kernel buffer
+      # is empty and select will never fire again.
+      #
+      # **Unproven, on purpose.** Neither hazard has a reachable trigger: a report is one small write, well
+      # under PIPE_BUF, and 160 requests across four concurrent callers at reuse 8 never coalesced two of them
+      # into one read. So there is no mutation for this — one that nothing catches would fail the mutation
+      # task forever. It stays because it closes a whole class of cell death for a few lines.
       def child_reported(socket)
         child = @children.each_value.find { |candidate| candidate.control.socket == socket }
         return if child.nil?
 
-        line = child.control.read_line(limit: Worker::DISPATCH_BYTES)
-        return child.control.close if line.nil?
+        chunk = socket.read_nonblock(Worker::DISPATCH_BYTES, exception: false)
+        return if chunk == :wait_readable
 
+        # End of stream means the worker is gone. Retire it as well as closing, or it stays eligible for the
+        # next dispatch until the reap catches up.
+        if chunk.nil?
+          child.retired = true
+          return child.control.close
+        end
+
+        child.buffer << chunk
+
+        while (newline = child.buffer.index("\n"))
+          apply_report child, child.buffer.slice!(0, newline + 1).force_encoding(Encoding::UTF_8)
+        end
+
+        return if child.buffer.bytesize <= Worker::DISPATCH_BYTES
+
+        log.write "worker.unreadable_report", pid: child.pid,
+                                              message: "report passed #{Worker::DISPATCH_BYTES} bytes with no newline"
+        child.buffer.clear
+      end
+
+      def apply_report(child, line)
         message = Payload.parse(line)
         if message[:deadline]
-          child.deadline = message[:deadline]
+          child.deadline = narrowed_deadline(message[:deadline])
         elsif message[:idle]
           finish child, message[:code]
         end
       rescue MessageError, JSON::ParserError => error
-        log.write "worker.unreadable_report", pid: child&.pid, message: Failure.sanitize(error.message)
+        log.write "worker.unreadable_report", pid: child.pid, message: Failure.sanitize(error.message)
       end
 
       def finish(child, code)
@@ -409,6 +476,13 @@ module HotCell
           child = @children.each_value.find { |candidate| candidate.pid == pid }
           next if child.nil?
 
+          # Drain whatever the worker said before it exited. Its idle report and SIGCHLD race each other, and
+          # the report is the only thing that knows a response was already written — without this, a worker
+          # that answered and exited in the same breath gets reported as a death.
+          while !child.control.socket.closed? && child.control.socket.wait_readable(0)
+            child_reported child.control.socket
+          end
+
           @children.delete child.slot.number
           answer_for child, status
           remove_scratch child.slot
@@ -425,11 +499,14 @@ module HotCell
       # enforced by a signal. So the supervisor holds its copy of every dispatched connection and writes
       # the verdict itself. Without this the cold side sees a bare end of stream and cannot tell a limit
       # breach from a crash.
+      # A worker still holding a connection at reap time never answered: it reports itself idle after writing,
+      # and that report is drained above. So this is the only thing that can answer, and whether it says the
+      # input did this or the cell did turns on how the worker died.
       def answer_for(child, status)
-        return child.connection&.close if status.success?
-        return unless child.busy?
+        return child.connection&.close unless child.busy?
 
-        limit = child.killed_for || SIGNAL_LIMITS.fetch(signal_name(status), "signal")
+        limit = child.killed_for ||
+                (status.signaled? ? SIGNAL_LIMITS.fetch(signal_name(status), "signal") : "crashed")
         counters.record Codes::KILLED
         counters.record_kill limit
 
@@ -447,6 +524,17 @@ module HotCell
         counters.cancelled!
       ensure
         connection.close
+      end
+
+      # A worker tells the supervisor when its operation asked for less than the cell allows, because the
+      # supervisor never reads a request and cannot know. It may only ever narrow: the number the supervisor
+      # enforces is the one thing an operation must not be able to widen, and this is the side that owns
+      # invariant 6. Anything that is not a positive number is nonsense from the only process here running
+      # untrusted code, and the cell's own maximum stands.
+      def narrowed_deadline(reported)
+        return configuration.limits.deadline unless reported.is_a?(Numeric) && reported.positive?
+
+        [ reported, configuration.limits.deadline ].min
       end
 
       def signal_name(status)
