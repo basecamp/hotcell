@@ -42,13 +42,27 @@ class BootTest < RegistryIsolatedTest
   def test_a_cell_that_loaded_an_application_framework_refuses_to_boot
     Class.new(HotCell::Operation) do
       operation "boot_test.drags_in_a_framework"
-      before_fork { Object.const_set :ActiveStorage, Module.new }
+      before_fork { Object.const_set(:ActiveStorage, Module.new).const_set(:Blob, Class.new) }
     end
 
     error = assert_raises(RuntimeError) { HotCell::TestCell.boot { nil } }
 
     assert_match "ActiveStorage is loaded in this cell", error.message
     assert_match "a cell holds neither", error.message.downcase
+  end
+
+  # The check is keyed on a constant only the framework defines, not on the top-level name. A gem that serves
+  # Active Storage may namespace itself under ActiveStorage without linking against it, which is exactly what
+  # activestorage-hotcell-server does — its name says which consumer it serves, not what it loads.
+  def test_an_operation_may_namespace_itself_under_a_frameworks_name_without_loading_it
+    Class.new(HotCell::Operation) do
+      operation "boot_test.borrows_the_name"
+      before_fork { Object.const_set :ActiveStorage, Module.new }
+    end
+
+    TestCell.boot { |cell| assert_ok cell.call("test.echo") }
+  ensure
+    Object.send :remove_const, :ActiveStorage if Object.const_defined?(:ActiveStorage)
   end
 
   def test_a_socket_path_too_long_for_the_platform_says_which_limit_it_broke

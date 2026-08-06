@@ -61,7 +61,19 @@ module HotCell
     # A cell that has loaded an application framework has loaded its configuration, and probably its
     # credentials with it. The thing that breaks this is a transitive require in somebody's operation rather
     # than anything here, which is why it is a check at boot instead of a test.
-    FRAMEWORKS = %w[ ActiveRecord ActiveStorage ActionController ActionMailer ActionCable ].freeze
+    #
+    # Keyed on a constant only the framework itself defines, rather than on the top-level name. A gem that
+    # serves Active Storage may reasonably namespace itself under ActiveStorage without linking against it —
+    # activestorage-hotcell-server does exactly that, and the name says which consumer it serves rather than
+    # what it loads. Module#const_defined? counts an autoload as defined without triggering it, so a framework
+    # that is merely on the load path with its autoloads registered is still caught.
+    FRAMEWORKS = {
+      "ActiveRecord" => :Base,
+      "ActiveStorage" => :Blob,
+      "ActionController" => :Base,
+      "ActionMailer" => :Base,
+      "ActionCable" => :Server,
+    }.freeze
 
     # A control connection that has not sent its request yet. Reading it non-blockingly is what stops a
     # client that connects and then says nothing from stalling the loop every conversion depends on.
@@ -595,11 +607,13 @@ module HotCell
       end
 
       def verify_no_framework!
-        loaded = FRAMEWORKS.select { |framework| Object.const_defined?(framework) }
+        loaded = FRAMEWORKS.select do |framework, marker|
+          Object.const_defined?(framework) && Object.const_get(framework).const_defined?(marker, false)
+        end
         return if loaded.empty?
 
         raise ConfigurationError,
-              "#{loaded.join(", ")} is loaded in this cell, which means an operation required an " \
+              "#{loaded.keys.join(", ")} is loaded in this cell, which means an operation required an " \
               "application framework — and a framework brings its configuration and its credentials. A cell " \
               "holds neither."
       end
