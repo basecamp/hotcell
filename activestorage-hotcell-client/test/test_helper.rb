@@ -45,7 +45,7 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     end
 
     # Boots a real cell carrying the real operations, and registers it the way an application's initializer does.
-    def with_cell(name: ActiveStorage::HotCell::CELL, register: {}, **options)
+    def with_cell(name: ActiveStorage::HotCell::Client::CELL, register: {}, **options)
       Cell.boot(name: name, **options) do |cell|
         HotCell.root = cell.socket_root
         HotCell.register name, permanent: Unprocessable, transient: TemporarilyUnavailable, **register
@@ -57,7 +57,7 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     # For the cases about classification, where booting a cell to produce one verdict would be theatre.
     def with_canned_response(response, register: {})
       HotCell.root = "/nowhere"
-      HotCell.register ActiveStorage::HotCell::CELL, permanent: Unprocessable,
+      HotCell.register ActiveStorage::HotCell::Client::CELL, permanent: Unprocessable,
                        transient: TemporarilyUnavailable, transport: CannedTransport.new(response), **register
     end
 

@@ -58,12 +58,19 @@ control rather than the contents.
 **`activestorage-hotcell-server` does not load Active Storage either**, despite the name. The name says which
 consumer it serves, not what it links against.
 
+Everything the application side defines lives under `ActiveStorage::HotCell::Client` and everything the cell
+side defines lives under `ActiveStorage::HotCell::Server`. That is not a tidying convention. The two gems are
+never both loaded in production — and a cell is forked from a process that may well have loaded the client,
+after which a shared name is a superclass mismatch while the cell boots. Two namespaces make that impossible
+rather than avoided.
+
 ## Active Storage
 
 ```ruby
-config.active_storage.variant_processor = ActiveStorage::HotCell::Transformer
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::ImageAnalyzer
-config.active_storage.previewers = [ ActiveStorage::HotCell::PdfPreviewer, ActiveStorage::HotCell::VideoPreviewer ]
+config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformer
+config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::ImageAnalyzer
+config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
+                                     ActiveStorage::HotCell::Client::VideoPreviewer ]
 ```
 
 Three things break the moment `variant_processor` is a class rather than a symbol, and the client gem exists to
@@ -81,7 +88,7 @@ exception and no alert.
 **The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob`, `PreviewImageJob` and `CreateVariantsJob` each
 declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob has no default retry — so
 `capacity`, the one verdict whose whole point is "try later", fails its job outright on the first attempt.
-`ActiveStorage::HotCell.retry_transient_failures!` teaches them the transient class.
+`ActiveStorage::HotCell::Client.retry_transient_failures!` teaches them the transient class.
 
 ## How it works
 
@@ -127,7 +134,7 @@ Rails is configured with.
 `activestorage-hotcell-client` depends on [rails/rails#58384](https://github.com/rails/rails/pull/58384), which
 is unmerged — the Gemfile pins the branch. Without it a class value leaves `ActiveStorage.variant_transformer`
 at `nil` and the first variant dies with `NoMethodError` rather than a boot error, which is what
-`ActiveStorage::HotCell.verify_installation!` exists to catch.
+`ActiveStorage::HotCell::Client.verify_installation!` exists to catch.
 
 Not yet: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that give
 up mid-request, and the canary harness.
