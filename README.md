@@ -80,9 +80,9 @@ worker: every worker.
 
 ## Deployment
 
-One Kamal accessory per cell, `network: none`. See [DEPLOYMENT.md](DEPLOYMENT.md), which also covers the two
-volume-ownership mistakes that both fail as `EACCES` at boot, and the two exposures `cap-drop ALL` makes
-impossible to close.
+One Kamal accessory per cell, `network: none`. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), which
+also covers the two volume-ownership mistakes that both fail as `EACCES` at boot, and the two
+exposures `cap-drop ALL` makes impossible to close.
 
 ## Status
 
@@ -122,5 +122,5 @@ suite does not notice. A control with no mutation test behind it is a comment.
 
 ## Design
 
-`HOTCELL-SPEC.md` in the design repository is the authority on the wire contract, the threat model, and the
-measurements behind every limit.
+[docs/HOTCELL-SPEC.md](docs/HOTCELL-SPEC) is the authority on the wire contract, the threat model,
+and the measurements behind every limit.
