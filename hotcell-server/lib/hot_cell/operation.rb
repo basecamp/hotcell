@@ -114,15 +114,7 @@ module HotCell
 
       private
         def derived_operation_name
-          if name.nil?
-            raise ConfigurationError, "an anonymous operation needs an explicit `operation \"a.name\"`"
-          end
-
-          name.split("::").map { |part| underscore(part) }.join(".")
-        end
-
-        def underscore(camel)
-          camel.gsub(/([A-Z]+)([A-Z][a-z])/, '\1_\2').gsub(/([a-z\d])([A-Z])/, '\1_\2').downcase
+          Naming.default_operation_name self
         end
 
         def verify_one_of(value, allowed, setting)
@@ -151,5 +143,35 @@ module HotCell
     def perform(inputs, outputs, payload)
       raise NotImplementedError, "#{self.class} must implement perform(inputs, outputs, payload)"
     end
+
+    Converted = Struct.new(:status, :out, :err) do
+      def ok?
+        status.success?
+      end
+    end
+
+    # Runs a converter with `unsetenv_others` and a fully written environment, never a filtered copy of this
+    # worker's own. This is invariant 9, and it is the only point in the whole design where we control what a
+    # converter's /proc/<pid>/environ shows.
+    #
+    # Filtering would not work. The worker is forked, so its own /proc/self/environ is the exec-time
+    # environment of the process it was forked from, and ENV.delete changes nothing that a sibling worker can
+    # read. An exec'd child is different: it gets a fresh environ, and this is where that gets written.
+    #
+    # Bounded output, because a converter's stdout is attacker-influenced. The environment is also why
+    # parsing that output moves an operation from :subprocess to :in_process — see untrusted_input.
+    def convert(*command, env: {}, capture: 64 * 1024)
+      require "open3"
+
+      out, err, status = Open3.capture3(converter_environment(env), *command, unsetenv_others: true)
+      Converted.new status, out.byteslice(0, capture), err.byteslice(0, capture)
+    end
+
+    private
+      def converter_environment(overrides)
+        { "HOME" => ENV["HOME"], "PATH" => ENV["PATH"], "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8" }
+          .merge(overrides.transform_keys(&:to_s))
+          .compact
+      end
   end
 end

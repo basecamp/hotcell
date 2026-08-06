@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# Boots the base image with the accessory's real flags and converts one file through it from a second
+# container, over a shared named volume.
+#
+# Everything else in this repository runs a cell as a plain host process, which exercises the protocol, the
+# fork, the descriptor passing, and the limits — but not network: none, not cap-drop, not the read-only root
+# filesystem, and not the tmpfs flags. This is the only check that covers those, and the only one that shows a
+# descriptor crossing between two containers.
+#
+#   docker/smoke [image]
+set -euo pipefail
+
+IMAGE="${1:-hotcell:test}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+WORK="$(mktemp -d)"
+STAMP="$$"
+CELL="hotcell-smoke-cell-$STAMP"
+APP="hotcell-smoke-app-$STAMP"
+VOLUME="hotcell-smoke-$STAMP"
+
+cleanup() {
+  docker rm -f "$CELL" "$APP" >/dev/null 2>&1 || true
+  docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+mkdir -p "$WORK/operations" "$WORK/app"
+
+cat > "$WORK/operations/uppercase.rb" <<'RUBY'
+HotCell.limits concurrency: 2, deadline: 10, file_size: 8 * 1024 * 1024
+
+class Uppercase < HotCell::Operation
+  operation "smoke.uppercase"
+
+  def perform(inputs, outputs, _payload)
+    File.binwrite outputs.first.path, File.binread(inputs.first.path).upcase
+
+    { bytes: File.size(outputs.first.path),
+      interfaces: Dir.children("/sys/class/net").sort,
+      writable_root: File.writable?("/"),
+      scratch_noexec: File.read("/proc/self/mounts").lines.grep(%r{ /tmp .*noexec}).any? }
+  end
+end
+RUBY
+
+# The app side speaks the protocol with hotcell-core alone. hotcell-client is not in this image on purpose,
+# and the container properties are what is under test here rather than the client.
+cat > "$WORK/app/call.rb" <<'RUBY'
+require "hot_cell/core"
+require "socket"
+require "tempfile"
+
+DIRECTORY = "/run/hotcell/cell"
+
+deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 15
+until File.socket?(File.join(DIRECTORY, "work.sock"))
+  abort "the cell never created its socket" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+  sleep 0.1
+end
+
+def call(socket_name, request, descriptors = [])
+  connection = HotCell::Connection.new(UNIXSocket.new(File.join(DIRECTORY, socket_name)))
+  connection.send_message request.to_line, descriptors: descriptors
+  abort "the cell did not answer" unless connection.socket.wait_readable(20)
+  HotCell::Response.parse connection.read_line
+ensure
+  connection&.close
+end
+
+described = call("control.sock", HotCell::Request.new(op: HotCell::DESCRIBE))
+abort "describe failed: #{described.failure}" unless described.ok?
+abort "wrong consist: #{described.result[:operations]}" unless described.result[:operations] == [ "smoke.uppercase" ]
+puts "  describe: #{described.result[:operations].inspect} deadline=#{described.result[:deadline]}"
+
+source = Tempfile.new("in", binmode: true).tap { |file| file.write "across two containers"; file.flush }
+sink = Tempfile.new("out", binmode: true)
+
+response = File.open(source.path, "rb") do |input|
+  File.open(sink.path, "wb") do |output|
+    call "work.sock",
+         HotCell::Request.new(op: "smoke.uppercase", inputs: 1, outputs: 1),
+         [ HotCell::Input.new(input), HotCell::Output.new(output) ]
+  end
+end
+
+abort "the conversion failed: #{response.failure}" unless response.ok?
+
+converted = File.binread(sink.path)
+puts "  result:  #{response.result.inspect}"
+puts "  timing:  #{response.timing.inspect}"
+puts "  output:  #{converted.inspect}"
+
+abort "wrong output" unless converted == "ACROSS TWO CONTAINERS"
+abort "the cell has network interfaces: #{response.result[:interfaces]}" unless response.result[:interfaces] == [ "lo" ]
+abort "the cell's root filesystem is writable" if response.result[:writable_root]
+abort "the cell's scratch is not noexec" unless response.result[:scratch_noexec]
+
+metrics = call("control.sock", HotCell::Request.new(op: HotCell::METRICS))
+abort "metrics disagree: #{metrics.result[:requests]}" unless metrics.result[:requests][:ok] == 1
+puts "  metrics: #{metrics.result[:requests].inspect}"
+RUBY
+
+# A named volume inherits the ownership of the image's directory, which is why the base image creates
+# /run/hotcell owned by the cell's user. A bind mount does not: it keeps the host directory's ownership, and
+# the cell then cannot create its own socket. See DEPLOYMENT.md.
+docker volume create "$VOLUME" >/dev/null
+
+echo "booting $IMAGE with the accessory's flags"
+docker run --detach --name "$CELL" \
+  --network none \
+  --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m \
+  --memory 2g --memory-swap 2g \
+  --cpus 2 \
+  --pids-limit 512 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --user 10001:10001 \
+  --ulimit stack=2097152:2097152 \
+  --volume "$WORK/operations:/hotcell/operations:ro" \
+  --volume "$VOLUME:/run/hotcell/cell" \
+  "$IMAGE" >/dev/null
+
+echo "calling it from a second container over the shared volume"
+if ! docker run --rm --name "$APP" \
+  --network none \
+  --user 10001:10001 \
+  --tmpfs /tmp:rw,size=64m \
+  --volume "$WORK/app:/app:ro" \
+  --volume "$VOLUME:/run/hotcell/cell" \
+  "$IMAGE" bundle exec ruby /app/call.rb
+then
+  echo "the app side failed. Cell log:"
+  docker logs "$CELL"
+  exit 1
+fi
+
+echo
+echo "cell log:"
+docker logs "$CELL" 2>&1 | sed 's/^/  /'
+echo "PASS"

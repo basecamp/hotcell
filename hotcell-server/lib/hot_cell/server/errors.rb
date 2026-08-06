@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 module HotCell
-  # A cell that is configured wrongly must say so at boot rather than at the first request.
-  class ConfigurationError < Error; end
-
   # What an operation raises to choose its own verdict. An operation may also declare the library
   # exceptions that mean the same thing, with `unreadable Vips::Error`.
   class OperationError < StandardError; end

@@ -191,6 +191,20 @@ module Fixtures
     limits deadline: 300
   end
 
+  # Reports what an exec'd converter can see of its environment, and what the worker itself can see, so a
+  # test can prove the canary was really there before proving the converter never got it.
+  class Environment < HotCell::Operation
+    operation "test.environment"
+    untrusted_input :subprocess
+
+    def perform(_inputs, _outputs, payload)
+      converted = convert "env", env: payload[:env] || {}
+
+      { seen: converted.out.lines.map(&:chomp).sort, worker_saw: ENV[payload[:canary].to_s],
+        ok: converted.ok? }
+    end
+  end
+
   class Rlimits < HotCell::Operation
     operation "test.rlimits"
 

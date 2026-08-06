@@ -19,4 +19,10 @@ module HotCell
   # Nesting depth of a whole message line. Deep symbolization walks the structure, so this is what
   # bounds the recursion.
   MAX_NESTING = 8
+
+  # The two operations a cell answers on control.sock rather than work.sock. The names live here because
+  # both sides need them and neither owns them.
+  DESCRIBE = "hotcell.describe"
+  METRICS = "hotcell.metrics"
+  CONTROL_OPERATIONS = [ DESCRIBE, METRICS ].freeze
 end
