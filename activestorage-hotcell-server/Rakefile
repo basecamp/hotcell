@@ -20,6 +20,7 @@ MUTATIONS = {
   "no_format_allowlist" => "transform_image_test.rb",
   "loader_decodes_every_frame" => "transform_image_test.rb",
   "probe_reports_everything" => "probe_media_test.rb",
+  "unblock_untrusted" => "blocked_loaders_test.rb",
 }.freeze
 
 desc "Break each control in turn and confirm the suite notices"

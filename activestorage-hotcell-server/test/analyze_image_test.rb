@@ -13,23 +13,27 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
     end
   end
 
-  # EXIF says the pixels are stored rotated, so the dimensions a caller cares about are the other way round.
-  # Rails' own analyzer swaps for the same orientations, and this fixture is a 60x40 JPEG tagged RightTop.
-  def test_an_exif_orientation_swaps_the_dimensions
+  # The whole orientation matrix, which is what Rails' own analyzer tests and what an off-by-one in the 5..8
+  # range would show up in. Every fixture is stored 60x40; what differs is what EXIF says to do with it.
+  #
+  # Mirroring alone is orientation 2, which does not swap. Rotation is 6, which does. Mirrored *and* rotated is
+  # 5, which does — testing only the plain rotation would miss the two that share its answer for the other
+  # reason.
+  ORIENTATIONS = {
+    "colour.jpg" => [ 60, 40 ],            # TopLeft, stored as displayed
+    "mirrored.jpg" => [ 60, 40 ],          # TopRight, flipped but not turned
+    "rotated.jpg" => [ 40, 60 ],           # RightTop, turned a quarter
+    "mirrored_rotated.jpg" => [ 40, 60 ],  # LeftTop, flipped and turned
+  }.freeze
+
+  def test_exif_orientation_decides_which_way_round_the_dimensions_are
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("rotated.jpg") ])).result
+      ORIENTATIONS.each do |name, (width, height)|
+        result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])).result
 
-      assert_equal 40, result[:width]
-      assert_equal 60, result[:height]
-    end
-  end
-
-  def test_an_image_with_no_orientation_is_reported_as_stored
-    Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("colour.jpg") ])).result
-
-      assert_equal 60, result[:width]
-      assert_equal 40, result[:height]
+        assert_equal width, result[:width], "#{name} width"
+        assert_equal height, result[:height], "#{name} height"
+      end
     end
   end
 

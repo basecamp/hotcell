@@ -49,6 +49,12 @@ module ActiveStorage
       # than before it — which is the order that matters. Rails carries the same note in active_storage/vips:
       # doing it first lets the later require turn the loaders back on.
       #
+      # **This call is redundant today, and deliberately kept.** Measured: removing it leaves the unfuzzed
+      # loaders blocked anyway, because the require already did it — so there is no mutation for the line
+      # itself, only for the property. What it insures against is image_processing dropping that call, and
+      # anything in a derived image re-enabling a loader between the require and the fork. Rails keeps its own
+      # explicit call for the same reason.
+      #
       # The operation cache is set to nothing on purpose. Above `reuse: 1` it would span requests inside one
       # worker, which is a place one request's image data can sit while the next one runs.
       before_worker_boot do
