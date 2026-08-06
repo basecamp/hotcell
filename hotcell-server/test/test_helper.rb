@@ -34,6 +34,24 @@ class HotCellServerTest < Minitest::Test
       response
     end
 
+    # A cell writes its log and removes its scratch after it has answered, so a few properties are
+    # genuinely asynchronous with respect to the caller. Bounded polling says so; a sleep would not.
+    def wait_until(within: 5, what: "the condition")
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + within
+
+      until yield
+        flunk "#{what} did not happen within #{within}s" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+        sleep 0.01
+      end
+    end
+
+    def elapsed
+      at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      yield
+      Process.clock_gettime(Process::CLOCK_MONOTONIC) - at
+    end
+
     def assert_failed(code, response, limit: nil)
       assert response, "expected a response and got none"
       refute response.ok?, "expected #{code} and the response was ok: #{response.result.inspect}"

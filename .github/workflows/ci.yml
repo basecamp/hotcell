@@ -1,0 +1,68 @@
+name: ci
+
+permissions: {}
+
+concurrency:
+  group: "${{github.workflow}}-${{github.ref}}"
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize]
+    branches:
+      - '*'
+
+jobs:
+  lint-actions:
+    name: GitHub Actions audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Run actionlint
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+        with:
+          advanced-security: false
+
+  test:
+    name: "test (ruby ${{matrix.ruby}})"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.3", "3.4", "head"]
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
+        with:
+          ruby-version: "${{matrix.ruby}}"
+          bundler-cache: true
+      - run: bundle exec rake test
+
+  # A control with no mutation test behind it is a comment. This breaks each one in turn and fails if the
+  # suite does not notice.
+  mutations:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - run: cd hotcell-server && bundle exec rake mutations

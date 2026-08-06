@@ -155,13 +155,16 @@ module Fixtures
   # Pins the worker where Ruby cannot interrupt it.
   #
   # A deadline test built on sleep passes against a self-enforcing implementation that could never work in
-  # production, because Timeout raises at an interrupt checkpoint and a thread in a C extension does not
-  # reach one until it returns. libvips is the real case; Integer#** is the one in the standard library.
-  # Measured: 3 ** 20_000_000 runs for 2.3 seconds straight through a 0.05 second Timeout.
+  # production, because Timeout raises at an interrupt checkpoint and a thread inside a C extension does
+  # not reach one until it returns. libvips is the real case; Integer#** is the one in the standard
+  # library. Measured: 3 ** 40_000_000 runs for 6.7 seconds straight through a 0.05 second Timeout, so a
+  # deadline test against it fails loudly rather than passing by finishing early.
   class Uninterruptible < HotCell::Operation
     operation "test.uninterruptible"
-    EXPONENT = 20_000_000
+    EXPONENT = 40_000_000
 
+    # The premise, asserted rather than assumed. If a later Ruby adds an interrupt check to this path, the
+    # deadline tests should say so instead of quietly becoming weaker.
     def self.blocks_through_a_timeout?
       require "timeout"
       Timeout.timeout(0.05) { 3**5_000_000 }
@@ -177,12 +180,37 @@ module Fixtures
 
   # Declares less than the cell allows, so the supervisor has to learn the narrower number from the worker
   # rather than from the request it never reads.
-  class Impatient < HotCell::Operation
+  class Impatient < Uninterruptible
     operation "test.impatient"
     limits deadline: 1
+  end
+
+  # Declares more than the cell allows, which the cell clamps. Invariant 6.
+  class Patient < Uninterruptible
+    operation "test.patient"
+    limits deadline: 300
+  end
+
+  class Rlimits < HotCell::Operation
+    operation "test.rlimits"
 
     def perform(_inputs, _outputs, _payload)
-      { digits: (3**Uninterruptible::EXPONENT).bit_length }
+      { memory: Process.getrlimit(Process::RLIMIT_DATA), file_size: Process.getrlimit(Process::RLIMIT_FSIZE),
+        open_files: Process.getrlimit(Process::RLIMIT_NOFILE), core: Process.getrlimit(Process::RLIMIT_CORE) }
+    end
+  end
+
+  # Asks for less than the cell allows, so the soft limit narrows and the hard limit does not.
+  class Frugal < Rlimits
+    operation "test.frugal"
+    limits memory: 1024 * 1024**2, file_size: 4 * 1024 * 1024, open_files: 64
+  end
+
+  class Greedy < HotCell::Operation
+    operation "test.greedy"
+
+    def perform(_inputs, _outputs, payload)
+      { bytes: ("x" * (payload.fetch(:megabytes) * 1024 * 1024)).bytesize }
     end
   end
 
@@ -192,7 +220,7 @@ module Fixtures
     def perform(_inputs, _outputs, payload)
       sleep payload.fetch(:seconds)
 
-      { slept: payload[:seconds] }
+      { slept: payload[:seconds], pid: Process.pid }
     end
   end
 end
