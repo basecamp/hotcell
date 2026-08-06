@@ -1,0 +1,107 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class OperationTest < RegistryIsolatedTest
+  def test_the_name_defaults_to_the_underscored_class_name_with_namespaces_as_dots
+    assert_equal "operation_test.transform_image", TransformImage.operation_name
+  end
+
+  def test_an_acronym_in_the_class_name
+    assert_equal "operation_test.pdf_preview", PDFPreview.operation_name
+  end
+
+  def test_an_explicit_name_wins
+    assert_equal "test.uppercase", Fixtures::Uppercase.operation_name
+  end
+
+  # A wire name is never used to derive a constant, so an anonymous class has nothing to derive from and
+  # must say what it answers to.
+  def test_an_anonymous_operation_needs_a_name
+    anonymous = Class.new(HotCell::Operation)
+
+    error = assert_raises(HotCell::ConfigurationError) { anonymous.operation_name }
+    assert_match "needs an explicit", error.message
+  end
+
+  def test_limits_default_to_nothing_declared
+    assert_empty TransformImage.limits.declared
+  end
+
+  def test_limits_are_inherited_by_a_subclass
+    assert_equal 1, Fixtures::Impatient.limits.deadline
+    assert_equal 300, Fixtures::Patient.limits.deadline
+  end
+
+  def test_untrusted_input_defaults_to_the_cautious_answer
+    assert_equal :in_process, TransformImage.untrusted_input
+  end
+
+  def test_untrusted_input_can_say_the_parsing_happens_in_an_exec_ed_child
+    assert_equal :subprocess, ConvertDocument.untrusted_input
+  end
+
+  def test_a_nonsense_untrusted_input_is_refused
+    assert_raises HotCell::ConfigurationError do
+      Class.new(HotCell::Operation) { untrusted_input :somewhere_else }
+    end
+  end
+
+  def test_staging_defaults_to_paths_because_every_subprocess_tool_wants_a_filename
+    assert_equal :paths, TransformImage.stage
+    assert_equal :descriptors, Fixtures::Reverse.stage
+  end
+
+  def test_a_nonsense_staging_mode_is_refused
+    assert_raises(HotCell::ConfigurationError) { Class.new(HotCell::Operation) { stage :bytes } }
+  end
+
+  def test_callbacks_collect_rather_than_replace
+    assert_equal [ :required, :also_required ], Callbacks.new.tap { Callbacks.before_fork.each(&:call) }.log
+  end
+
+  def test_a_superclasss_callbacks_run_first
+    ran = []
+    parent = Class.new(HotCell::Operation) do
+      operation "operation_test.parent"
+      before_fork { ran << :parent }
+    end
+    child = Class.new(parent) do
+      operation "operation_test.child"
+      before_fork { ran << :child }
+    end
+
+    child.before_fork.each(&:call)
+
+    assert_equal [ :parent, :child ], ran
+  end
+
+  def test_unreadable_always_includes_the_frameworks_own_class
+    assert_includes TransformImage.unreadable, HotCell::UnreadableInput
+    assert_includes Fixtures::DeclaredUnreadable.unreadable, Fixtures::LibraryError
+  end
+
+  def test_an_operation_that_does_not_implement_perform_says_so
+    assert_raises(NotImplementedError) { TransformImage.new.perform([], [], {}) }
+  end
+
+  class TransformImage < HotCell::Operation; end
+  class PDFPreview < HotCell::Operation; end
+
+  class ConvertDocument < HotCell::Operation
+    untrusted_input :subprocess
+  end
+
+  class Callbacks < HotCell::Operation
+    def self.log
+      @log ||= []
+    end
+
+    def log
+      self.class.log
+    end
+
+    before_fork { log << :required }
+    before_fork { log << :also_required }
+  end
+end
