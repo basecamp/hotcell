@@ -1,0 +1,69 @@
+# frozen_string_literal: true
+
+module HotCell
+  # A cell's verdict on a request that did not succeed.
+  #
+  # The message is untrusted and it outlives the request. It comes out of a worker that has just parsed
+  # a hostile file, and Vips::Error#message routinely contains the input filename. Applications store
+  # these as durable blob metadata so they can re-decide later against a newer library, which means an
+  # unscrubbed byte sequence becomes a permanently poisoned row, and an invalid UTF-8 sequence makes a
+  # downstream regex raise ArgumentError instead of answering false.
+  #
+  # So the message is capped and scrubbed here, and that is not only hygiene: a cell that could not
+  # serialize its own error could not answer at all. The client scrubs again on receipt, because
+  # JSON.parse is not a filter — a \uD800 escape parses into an invalid UTF-8 String without complaint.
+  class Failure
+    MAX_MESSAGE_BYTES = 512
+
+    attr_reader :code, :message, :error_class, :limit, :signal
+
+    def initialize(code:, terminal: nil, message: nil, error_class: nil, limit: nil, signal: nil)
+      @code = code.to_s
+      @limit = limit&.to_s
+      @signal = signal&.to_s
+      @error_class = error_class&.to_s
+      @message = self.class.sanitize(message)
+      @terminal = terminal.nil? ? Codes.terminal?(@code, limit: @limit) : terminal
+    end
+
+    def terminal?
+      @terminal
+    end
+
+    def to_h
+      { code: code, terminal: terminal? }.tap do |wire|
+        wire[:limit]   = limit if limit
+        wire[:signal]  = signal if signal
+        wire[:class]   = error_class if error_class
+        wire[:message] = message if message
+      end
+    end
+
+    def to_s
+      [ code, limit, error_class, message ].compact.join(": ")
+    end
+
+    class << self
+      # A code this client has never heard of is not terminal. An old client will meet a code added
+      # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
+      # some work, while writing down a verdict that was temporary is irreversible.
+      def from_wire(wire)
+        terminal = if wire.key?(:terminal)
+          wire[:terminal]
+        else
+          Codes.known?(wire[:code]) && Codes.terminal?(wire[:code], limit: wire[:limit])
+        end
+
+        new code: wire[:code], terminal: terminal, limit: wire[:limit], signal: wire[:signal],
+            error_class: wire[:class], message: wire[:message]
+      end
+
+      def sanitize(message)
+        return nil if message.nil?
+
+        String(message).dup.force_encoding(Encoding::UTF_8)
+          .scrub("").byteslice(0, MAX_MESSAGE_BYTES).scrub("")
+      end
+    end
+  end
+end
