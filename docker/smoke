@@ -103,7 +103,7 @@ RUBY
 
 # A named volume inherits the ownership of the image's directory, which is why the base image creates
 # /run/hotcell owned by the cell's user. A bind mount does not: it keeps the host directory's ownership, and
-# the cell then cannot create its own socket. See DEPLOYMENT.md.
+# the cell then cannot create its own socket. See docs/DEPLOYMENT.md.
 docker volume create "$VOLUME" >/dev/null
 
 echo "booting $IMAGE with the accessory's flags"

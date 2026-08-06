@@ -7,7 +7,7 @@
 # language of the code it replaces will not be written.
 #
 # It carries no converter. Which toolchain a cell holds is the thing that decides its blast radius, so that
-# is a derived image's decision. See DEPLOYMENT.md.
+# is a derived image's decision. See docs/DEPLOYMENT.md.
 
 ARG RUBY_VERSION=3.4
 FROM ruby:${RUBY_VERSION}-slim
@@ -19,7 +19,7 @@ RUN groupadd --gid 10001 hotcell && \
 # The mount point itself has to exist here, owned by the cell's user, because a new named volume takes its
 # ownership from the directory it covers. Create only the parent and Docker creates the missing level as
 # root, and the cell's first act is a bare EACCES creating a socket it will never create. A bind mount does
-# not inherit anything at all — it keeps the host directory's ownership. See DEPLOYMENT.md.
+# not inherit anything at all — it keeps the host directory's ownership. See docs/DEPLOYMENT.md.
 RUN mkdir -p /run/hotcell/cell /hotcell/operations && chown -R hotcell:hotcell /run/hotcell /hotcell
 
 # HOME is /tmp because the cell's user has no home directory, and bundler wants one. A worker replaces it
