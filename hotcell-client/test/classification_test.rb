@@ -13,7 +13,6 @@ class ClassificationTest < HotCellClientTest
     { code: "unreadable" },
     { code: "failed" },
     { code: "invalid" },
-    { code: "unsupported" },
     { code: "killed", limit: "fsize" },
     { code: "killed", limit: "memory" },
     { code: "killed", limit: "signal" },
@@ -21,10 +20,12 @@ class ClassificationTest < HotCellClientTest
 
   TRANSIENT = [
     { code: "protocol" },
+    { code: "unsupported" },
     { code: "capacity" },
     { code: "unavailable" },
     { code: "timeout" },
     { code: "killed", limit: "deadline" },
+    { code: "killed", limit: "crashed" },
   ].freeze
 
   def test_every_permanent_code_raises_the_injected_permanent_class

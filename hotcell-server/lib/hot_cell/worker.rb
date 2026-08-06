@@ -25,6 +25,12 @@ module HotCell
       @effective = {}
     end
 
+    # exit! rather than exit, so that no finalizer and no library teardown ever runs. There is deliberately no
+    # shutdown hook: the exit! is the point, and a hook would invite cleanup code that is then skipped.
+    #
+    # A non-zero status for anything unexpected, because the supervisor holds the connection and is the only
+    # thing that can answer for a worker that died mid-request. Exiting zero here would leave a caller reading
+    # a closed socket with no verdict at all.
     def run
       configuration.limits.apply
       ENV["HOME"] = slot.home
@@ -32,8 +38,12 @@ module HotCell
       while (dispatch = await_dispatch)
         serve(*dispatch)
       end
-    ensure
+
       exit! 0
+    rescue Exception => error # rubocop:disable Lint/RescueException
+      log.write "worker.crashed", slot: slot.number, error: error.class.name,
+                                  message: Failure.sanitize(error.message)
+      exit! 1
     end
 
     private

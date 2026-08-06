@@ -59,6 +59,12 @@ module HotCell
 
       @pid = fork do
         reader.close
+
+        # The cell must not hold the test runner's stdout. A cell that outlives its test would otherwise keep
+        # the runner's pipe open, and a failing assertion becomes a hang rather than a failure.
+        $stdout.reopen log_path, "a"
+        $stderr.reopen log_path, "a"
+
         HotCell.limits(**@options) unless @options.empty?
 
         supervisor = Supervisor.new(directory: directory, workspace: workspace,

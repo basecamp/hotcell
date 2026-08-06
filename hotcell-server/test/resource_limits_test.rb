@@ -31,6 +31,19 @@ class ResourceLimitsTest < HotCellServerTest
     end
   end
 
+  # Invariant 6 where the kernel enforces it. An operation cannot exceed its cell's limits whatever it
+  # declares, and unclamped this does not merely get too much — it asks for a soft limit above its own hard
+  # limit, which is EINVAL, and the worker dies before it can answer.
+  def test_an_operation_asking_for_more_than_the_cell_allows_gets_the_cells_numbers
+    boot do |cell|
+      limits = assert_ok(cell.call("test.extravagant")).result
+
+      assert_equal [ CELL_MEMORY, CELL_MEMORY ], limits[:memory]
+      assert_equal [ CELL_FILE_SIZE, CELL_FILE_SIZE ], limits[:file_size]
+      assert_equal [ 256, 256 ], limits[:open_files]
+    end
+  end
+
   # A reused worker meets a tight operation and then a generous one. The second must get its own budget
   # back, which only works because the hard limit was never lowered.
   def test_a_reused_worker_widens_back_for_the_next_operation

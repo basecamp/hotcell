@@ -38,7 +38,16 @@ module HotCell
       raise ConfigurationError, "unknown setting #{unknown.join(", ")}" if unknown.any?
 
       SCHEDULING.each { |key, default| instance_variable_set :"@#{key}", options.fetch(key, default) }
-      @limits = Limits.new(**LIMITS.merge(options.slice(*Limits::KEYS)))
+
+      # A nil is not "use the default" here, it is a missing number. A cell whose deadline is nil accepts
+      # every request and then dies on the first arithmetic the supervisor does with it, so an explicit nil
+      # has to be refused where it is written rather than where it is used.
+      declared = options.slice(*Limits::KEYS)
+      if (empty = declared.select { |_, value| value.nil? }.keys).any?
+        raise ConfigurationError, "#{empty.join(", ")} cannot be nil; leave it out to take the default"
+      end
+
+      @limits = Limits.new(**LIMITS.merge(declared))
 
       verify!
     end
@@ -72,8 +81,12 @@ module HotCell
         "later request on it."
     end
 
+    # Goes on the wire as the answer to hotcell.describe, so every value has to be JSON-native. `reuse` is the
+    # one that is not: :unlimited is a Symbol, and a cell configured with it could not describe itself at all.
     def to_h
-      SCHEDULING.keys.to_h { |key| [ key, public_send(key) ] }.merge(limits.to_h)
+      SCHEDULING.keys.to_h { |key| [ key, public_send(key) ] }
+        .merge(limits.to_h)
+        .merge(reuse: unlimited_reuse? ? UNLIMITED.to_s : reuse)
     end
 
     private
