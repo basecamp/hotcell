@@ -27,6 +27,6 @@ Gem::Specification.new do |spec|
   spec.files = Dir[ "lib/**/*", "MIT-LICENSE", "README.md" ]
 
   spec.add_dependency "hotcell-server", ">= 0.1.0"
-  spec.add_dependency "image_processing", ">= 1.13"
+  spec.add_dependency "image_processing", ">= 2.0"
   spec.add_dependency "ruby-vips", ">= 2.2"
 end
