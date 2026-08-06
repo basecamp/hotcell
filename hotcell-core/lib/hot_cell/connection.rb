@@ -23,6 +23,13 @@ module HotCell
       @socket = socket
     end
 
+    # So that a connection can itself be passed over SCM_RIGHTS. That is how the supervisor hands an
+    # accepted connection to a worker without reading it: the caller's descriptors stay queued on the
+    # connection until somebody calls recvmsg, and the worker is the one who does.
+    def to_io
+      socket
+    end
+
     def send_message(line, descriptors: [])
       if descriptors.empty?
         socket.sendmsg line

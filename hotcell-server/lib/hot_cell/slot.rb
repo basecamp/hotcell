@@ -1,0 +1,24 @@
+# frozen_string_literal: true
+
+module HotCell
+  # Slots are a consequence of the concurrency limit rather than something to configure. At most
+  # `concurrency` workers run, so number them and hand each worker its number at fork. There is no
+  # leasing: a slot is always free when a worker starts, because the thing that bounds workers is the same
+  # thing that counts slots. A request never waits for a slot, it waits in the cell's queue.
+  #
+  # The home is reused between requests on purpose. Some converters cannot share one — LibreOffice keeps a
+  # profile under $HOME and corrupts itself when two instances share it — and because a per-slot home
+  # survives, that expensive profile is created once and is warm afterwards. This is the pre-warming
+  # benefit without a warming pass and without the supervisor spawning anything.
+  #
+  # It is also the one place in this design where two requests are not fully isolated from each other: one
+  # can leave a file the next reads. What bounds it is that nothing sensitive belongs in a converter's
+  # home, and that scratch is separate and per-request. The danger is what an earlier request wrote into
+  # the home rather than what a later one reads out of it — for LibreOffice the user layer composes last,
+  # so a write there can disable the converter's own hardening for every later request on that slot.
+  Slot = Struct.new(:number, :home, :scratch) do
+    def self.build(workspace, number)
+      new number, File.join(workspace, number.to_s, "home"), File.join(workspace, number.to_s, "scratch")
+    end
+  end
+end
