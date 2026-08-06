@@ -2,20 +2,26 @@
 
 # Reads a minitest run and says whether it noticed.
 #
-# Not `output.include?("0 failures, 0 errors")`, which is how this was written first and which is wrong in a
-# way that reads as flakiness: "10 failures, 0 errors" contains that substring, so every mutation the suite
-# caught with a count ending in zero was reported as having survived. A harness that cries wolf gets ignored,
-# and then a mutation that really does survive is ignored with it.
+# Two things this has been wrong about, both of which made the harness lie in the reassuring direction.
+#
+# It used to ask whether the output contained "0 failures, 0 errors", which "10 failures, 0 errors" also
+# contains — so every mutation the suite caught with a count ending in zero was reported as having survived.
+#
+# And it used to treat a run that never reported at all as caught, reasoning that a mutation which stops the
+# suite from booting fails just as loudly. That is true of a real mutation, and it is also exactly what a
+# mutation file with a mistake in it looks like — which is how one that tested nothing sat in the list
+# reporting success. A run that did not report is now its own answer, and the task stops on it.
 module Mutations
   SUMMARY = /(\d+) runs, (\d+) assertions, (\d+) failures, (\d+) errors/
 
-  # Returns [caught, summary]. A run that never reported at all counts as caught: the mutation stopped the
-  # suite from running, which fails just as loudly.
-  def self.caught?(output)
+  # Returns [status, summary], where status is :caught, :survived, or :broken.
+  def self.result(output)
     match = output.match(SUMMARY)
-    return [ true, "the suite did not report" ] if match.nil?
+    return [ :broken, "the suite never reported — look at the mutation itself" ] if match.nil?
 
     _runs, _assertions, failures, errors = match.captures.map(&:to_i)
-    [ failures.positive? || errors.positive?, match[0] ]
+    noticed = failures.positive? || errors.positive?
+
+    [ (noticed ? :caught : :survived), match[0] ]
   end
 end

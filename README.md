@@ -118,14 +118,17 @@ exposures `cap-drop ALL` makes impossible to close.
 Under construction. Nothing here is released.
 
 Working: the wire protocol, the supervisor and its scheduling, worker recycling, resource limits, the
-wall-clock deadline, the control channel, the client and its classification, the container image, and all five
-Active Storage operations converting real images, PDFs and video.
+wall-clock deadline, the control channel, the client and its classification, the container image, all five
+Active Storage operations converting real images, PDFs and video, and the transformer, analyzer and previewers
+Rails is configured with.
 
-Not yet: `activestorage-hotcell-client`, which depends on
-[rails/rails#58384](https://github.com/rails/rails/pull/58384) — unmerged, and without it a class value leaves
-`ActiveStorage.variant_transformer` at `nil` and the first variant dies with `NoMethodError` rather than a boot
-error. Also the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that
-give up mid-request, and the canary harness.
+`activestorage-hotcell-client` depends on [rails/rails#58384](https://github.com/rails/rails/pull/58384), which
+is unmerged — the Gemfile pins the branch. Without it a class value leaves `ActiveStorage.variant_transformer`
+at `nil` and the first variant dies with `NoMethodError` rather than a boot error, which is what
+`ActiveStorage::HotCell.verify_installation!` exists to catch.
+
+Not yet: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that give
+up mid-request, and the canary harness.
 
 ## Development
 
