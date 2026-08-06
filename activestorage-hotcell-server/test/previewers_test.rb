@@ -57,25 +57,27 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
-  def test_a_video_preview_comes_back_as_a_png
+  # JPEG rather than PNG, because Rails' own video previewer yields image/jpeg and this drops into its place.
+  def test_a_video_preview_comes_back_as_the_jpeg_rails_produces
     Cell.boot do |cell|
-      with_output(".png") do |destination|
+      with_output(".jpg") do |destination|
         response = cell.call "active_storage.preview_video",
                              inputs: [ fixture("sample.mp4") ], outputs: [ destination ]
 
         assert_ok response
-        assert_equal({ width: 64, height: 48, format: "PNG", frames: 1 }, identify(destination))
+        assert_equal({ width: 64, height: 48, format: "JPEG", frames: 1 }, identify(destination))
+        assert_equal "image/jpeg", response.result[:content_type]
       end
     end
   end
 
   def test_a_video_preview_can_be_taken_from_further_in
     Cell.boot do |cell|
-      with_output(".png") do |destination|
+      with_output(".jpg") do |destination|
         assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("sample.mp4") ],
                                                             outputs: [ destination ], payload: { seek: 0.5 })
 
-        assert_equal "PNG", identify(destination)[:format]
+        assert_equal "JPEG", identify(destination)[:format]
       end
     end
   end

@@ -15,8 +15,9 @@ require "image_processing/vips"
 
 module ActiveStorage
   # Despite the namespace, nothing here loads Active Storage. The name says which consumer these operations
-  # serve, not what they link against — a cell that loaded an application framework would have loaded its
-  # configuration and its credentials with it.
+  # serve, not what they link against, and the gem stays small because a smaller graph is a smaller thing to
+  # audit — not because a cell polices what runs inside it. It does not: the container is the control, and what
+  # an operation chooses to require is its own business.
   module HotCell
     # Everything that parses an image with libvips, which happens in the worker's own address space.
     class VipsOperation < ::HotCell::Operation

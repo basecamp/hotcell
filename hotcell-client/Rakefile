@@ -24,12 +24,12 @@ desc "Break each control in turn and confirm the suite notices"
 task :mutations do
   survivors = MUTATIONS.reject do |mutation, suite|
     output = `#{RbConfig.ruby} -Ilib -Itest -rmutations/#{mutation} test/#{suite} 2>&1`
-    caught, summary = Mutations.caught?(output)
-    puts format("  %-26s %-26s %-9s %s", mutation, suite, caught ? "caught" : "SURVIVED", summary)
-    caught
+    status, summary = Mutations.result(output)
+    puts format("  %-26s %-26s %-9s %s", mutation, suite, status.to_s, summary)
+    status == :caught
   end
 
-  abort "the suite does not hold: #{survivors.keys.join(", ")}" if survivors.any?
+  abort "not caught: #{survivors.keys.join(", ")}" if survivors.any?
 end
 
 task default: :test

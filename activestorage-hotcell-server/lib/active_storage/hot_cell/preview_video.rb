@@ -26,12 +26,15 @@ module ActiveStorage
 
         seek = seek!(payload)
 
+        # JPEG rather than PNG, because Rails' own video previewer yields image/jpeg and this is meant to drop
+        # into its place. A preview that changed the attached blob's content type would not be a replacement.
+        #
         # -ss before -i seeks by keyframe, which is orders of magnitude cheaper on a long file than decoding up
         # to the point. -nostdin because ffmpeg reads the terminal otherwise, and a worker has no terminal.
         run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s, "-i", source.path,
-             "-frames:v", "1", "-f", "image2", "-c:v", "png", "-y", destination.path
+             "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.path
 
-        { format: "png", content_type: "image/png", seek: seek,
+        { format: "jpg", content_type: "image/jpeg", seek: seek,
           bytes: produced!(destination.path, "ffmpeg") }
       end
 

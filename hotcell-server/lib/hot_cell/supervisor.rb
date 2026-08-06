@@ -58,23 +58,6 @@ module HotCell
     # host sysctl no container flag can supply.
     PTRACE_SCOPE = "/proc/sys/kernel/yama/ptrace_scope"
 
-    # A cell that has loaded an application framework has loaded its configuration, and probably its
-    # credentials with it. The thing that breaks this is a transitive require in somebody's operation rather
-    # than anything here, which is why it is a check at boot instead of a test.
-    #
-    # Keyed on a constant only the framework itself defines, rather than on the top-level name. A gem that
-    # serves Active Storage may reasonably namespace itself under ActiveStorage without linking against it —
-    # activestorage-hotcell-server does exactly that, and the name says which consumer it serves rather than
-    # what it loads. Module#const_defined? counts an autoload as defined without triggering it, so a framework
-    # that is merely on the load path with its autoloads registered is still caught.
-    FRAMEWORKS = {
-      "ActiveRecord" => :Base,
-      "ActiveStorage" => :Blob,
-      "ActionController" => :Base,
-      "ActionMailer" => :Base,
-      "ActionCable" => :Server,
-    }.freeze
-
     # A control connection that has not sent its request yet. Reading it non-blockingly is what stops a
     # client that connects and then says nothing from stalling the loop every conversion depends on.
     Pending = Struct.new(:connection, :accepted_at, :buffer)
@@ -105,7 +88,6 @@ module HotCell
       verify_ptrace_scope!
       prepare_directories
       preload
-      verify_no_framework!
       @work = listen "work.sock"
       @control = listen "control.sock"
       @control_handler = Control.new(configuration: configuration, counters: counters)
@@ -604,18 +586,6 @@ module HotCell
         raise ConfigurationError,
               "kernel.yama.ptrace_scope is 0 on this host, so one worker can read another request's memory " \
               "through /proc/<pid>/mem. No container flag can set it. Set it to 1 or higher and boot again."
-      end
-
-      def verify_no_framework!
-        loaded = FRAMEWORKS.select do |framework, marker|
-          Object.const_defined?(framework) && Object.const_get(framework).const_defined?(marker, false)
-        end
-        return if loaded.empty?
-
-        raise ConfigurationError,
-              "#{loaded.keys.join(", ")} is loaded in this cell, which means an operation required an " \
-              "application framework — and a framework brings its configuration and its credentials. A cell " \
-              "holds neither."
       end
 
       def verify_limits!

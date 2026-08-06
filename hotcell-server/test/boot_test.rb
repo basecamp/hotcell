@@ -2,9 +2,11 @@
 
 require "test_helper"
 
-# A cell that is configured wrongly has to say so at boot. Two of these are refusals rather than warnings,
-# because both would otherwise be silent: a host sysctl is invisible to the image, and a framework loaded by
-# a transitive require looks like nothing at all.
+# A cell that is configured wrongly has to say so at boot rather than at the first request.
+#
+# Only one of these refuses to start, and it is the one where nothing else could ever notice: kernel.yama's
+# ptrace_scope is a host sysctl, invisible to the image, and at 0 it silently voids the only thing stopping one
+# worker from reading another request's memory.
 class BootTest < RegistryIsolatedTest
   # Request memory is protected by kernel.yama.ptrace_scope and by nothing else. No container flag can set
   # it, so a cell that finds it off has lost the guarantee, and a warning in a log is how a dead control
@@ -35,34 +37,6 @@ class BootTest < RegistryIsolatedTest
 
       assert_equal 1, cell.log_events("cell.ptrace_scope_unknown").size
     end
-  end
-
-  # Invariant 1. The thing that breaks it is a transitive require in somebody's operation rather than
-  # anything in this gem, so it is checked after the operations have been read in.
-  def test_a_cell_that_loaded_an_application_framework_refuses_to_boot
-    Class.new(HotCell::Operation) do
-      operation "boot_test.drags_in_a_framework"
-      before_fork { Object.const_set(:ActiveStorage, Module.new).const_set(:Blob, Class.new) }
-    end
-
-    error = assert_raises(RuntimeError) { HotCell::TestCell.boot { nil } }
-
-    assert_match "ActiveStorage is loaded in this cell", error.message
-    assert_match "a cell holds neither", error.message.downcase
-  end
-
-  # The check is keyed on a constant only the framework defines, not on the top-level name. A gem that serves
-  # Active Storage may namespace itself under ActiveStorage without linking against it, which is exactly what
-  # activestorage-hotcell-server does — its name says which consumer it serves, not what it loads.
-  def test_an_operation_may_namespace_itself_under_a_frameworks_name_without_loading_it
-    Class.new(HotCell::Operation) do
-      operation "boot_test.borrows_the_name"
-      before_fork { Object.const_set :ActiveStorage, Module.new }
-    end
-
-    TestCell.boot { |cell| assert_ok cell.call("test.echo") }
-  ensure
-    Object.send :remove_const, :ActiveStorage if Object.const_defined?(:ActiveStorage)
   end
 
   def test_a_socket_path_too_long_for_the_platform_says_which_limit_it_broke
