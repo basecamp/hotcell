@@ -27,7 +27,7 @@ class TransformImage < HotCell::Operation
   untrusted_input :in_process
 
   before_fork        { require "image_processing/vips" }
-  before_worker_boot { Vips.block_untrusted true; Vips.concurrency_set 4 }
+  before_worker_boot { Vips.concurrency_set 4 }
 
   def perform(inputs, outputs, payload)
     # inputs and outputs are descriptors the caller opened, staged onto this worker's own scratch
@@ -50,9 +50,10 @@ The two are never both loaded. They are coupled only by an operation name on the
 They are in one repository because they are one system today: writing the Active Storage gems has already twice
 required changing `hotcell-server` first. Splitting them is cheap while nothing is published.
 
-`hotcell-server` depends on `hotcell-core` and nothing else. Not `activesupport`, on purpose: copy-on-write
-cost scales with the supervisor's resident heap, so every gem loaded in a cell is paid for on every request,
-forever.
+`hotcell-server` depends on `hotcell-core` and nothing else — not `activesupport` — because there is no reason
+for it to, and a smaller graph inside the blast radius is a smaller thing to audit. That is a budget, not a rule
+about what a cell may run: an operation is free to require whatever it needs, because the container is the
+control rather than the contents.
 
 **`activestorage-hotcell-server` does not load Active Storage either**, despite the name. The name says which
 consumer it serves, not what it links against.
@@ -77,9 +78,10 @@ the blob is marked analyzed with no dimensions at all.
 application image both answer false, `previewable?` goes false with them, and previews stop existing with no
 exception and no alert.
 
-**The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob` and `CreateVariantsJob` declare
-`retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob has no default retry — so `capacity`,
-the one verdict whose whole point is "try later", fails its job outright on the first attempt.
+**The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob`, `PreviewImageJob` and `CreateVariantsJob` each
+declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob has no default retry — so
+`capacity`, the one verdict whose whole point is "try later", fails its job outright on the first attempt.
+`ActiveStorage::HotCell.retry_transient_failures!` teaches them the transient class.
 
 ## How it works
 
