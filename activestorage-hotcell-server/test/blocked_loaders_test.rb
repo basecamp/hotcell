@@ -53,4 +53,28 @@ class BlockedLoadersTest < ActiveStorageHotCellTest
       end
     end
   end
+
+  # The variable's name reads like a switch that turns blocking off, and it is the opposite: libvips honours it
+  # itself, and image_processing skips its own call precisely because the library has already blocked them.
+  # Measured with the variable unset, set, and set to the empty string — blocked in all three. Worth pinning,
+  # because the obvious reading of the name is wrong and somebody will one day set it expecting a fallback.
+  def test_the_environment_variable_that_looks_like_an_escape_hatch_is_not_one
+    with_environment "VIPS_BLOCK_UNTRUSTED" => "" do
+      Cell.boot do |cell|
+        BLOCKED.each do |name|
+          assert_failed "unreadable", cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])
+        end
+      end
+    end
+  end
+
+  private
+    # The cell inherits this through the fork, which is how a real one gets its environment too.
+    def with_environment(values)
+      was = values.to_h { |name, _| [ name, ENV[name] ] }
+      values.each { |name, value| ENV[name] = value }
+      yield
+    ensure
+      was.each { |name, value| value.nil? ? ENV.delete(name) : ENV[name] = value }
+    end
 end

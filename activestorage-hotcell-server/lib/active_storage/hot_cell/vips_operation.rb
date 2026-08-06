@@ -45,20 +45,21 @@ module ActiveStorage
         end
       end
 
-      # image_processing 2.0 calls block_untrusted itself as it loads, and this runs after that require rather
-      # than before it — which is the order that matters. Rails carries the same note in active_storage/vips:
-      # doing it first lets the later require turn the loaders back on.
+      # There is no `Vips.block_untrusted true` here, and that is a decision rather than an omission.
       #
-      # **This call is redundant today, and deliberately kept.** Measured: removing it leaves the unfuzzed
-      # loaders blocked anyway, because the require already did it — so there is no mutation for the line
-      # itself, only for the property. What it insures against is image_processing dropping that call, and
-      # anything in a derived image re-enabling a loader between the require and the fork. Rails keeps its own
-      # explicit call for the same reason.
+      # The gemspec pins image_processing to 2.0 or later, which blocks libvips' unfuzzed loaders as it loads.
+      # It skips that call when `VIPS_BLOCK_UNTRUSTED` is in the environment, and measuring rather than reading
+      # is what settled this: libvips honours that variable itself, so the loaders are blocked with the variable
+      # unset, set, or set to the empty string. A call here would be a fourth road to a place already reached
+      # three ways.
+      #
+      # What none of them covers is somebody calling `Vips.block_untrusted false` afterwards — and a call at
+      # worker boot would not cover it either, since an operation could do it inside `perform`.
+      # blocked_loaders_test.rb holds the property, which is the thing worth holding.
       #
       # The operation cache is set to nothing on purpose. Above `reuse: 1` it would span requests inside one
       # worker, which is a place one request's image data can sit while the next one runs.
       before_worker_boot do
-        Vips.block_untrusted true
         Vips.concurrency_set Integer(ENV.fetch("VIPS_CONCURRENCY", "2"))
         Vips.cache_set_max 0
         Vips.cache_set_max_mem 0
