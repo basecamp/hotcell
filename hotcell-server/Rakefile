@@ -2,7 +2,7 @@
 
 require "rake/testtask"
 require "rbconfig"
-require_relative "../mutations"
+require_relative "../test/support/mutations"
 
 Rake::TestTask.new(:test) do |task|
   task.libs << "test"

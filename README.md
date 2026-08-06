@@ -44,13 +44,42 @@ The two are never both loaded. They are coupled only by an operation name on the
 | `hotcell-core` | both sides | The wire protocol, descriptor passing, payload validation, the error taxonomy. |
 | `hotcell-client` | the application | `HotCell::Client`, cell registration, routing, classification, instrumentation. |
 | `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, the container image. |
+| `activestorage-hotcell-client` | the application | The transformer, analyzer, and previewers Rails is configured with. |
+| `activestorage-hotcell-server` | the cell | `transform_image`, `analyze_image`, `preview_pdf`, `preview_video`, `probe_media`. |
 
-Two more, in [`basecamp/activestorage-hotcell`](https://github.com/basecamp/activestorage-hotcell), wire this
-into Active Storage's transformer, analyzer, and previewers.
+They are in one repository because they are one system today: writing the Active Storage gems has already twice
+required changing `hotcell-server` first. Splitting them is cheap while nothing is published.
 
 `hotcell-server` depends on `hotcell-core` and nothing else. Not `activesupport`, on purpose: copy-on-write
 cost scales with the supervisor's resident heap, so every gem loaded in a cell is paid for on every request,
 forever.
+
+**`activestorage-hotcell-server` does not load Active Storage either**, despite the name. The name says which
+consumer it serves, not what it links against.
+
+## Active Storage
+
+```ruby
+config.active_storage.variant_processor = ActiveStorage::HotCell::Transformer
+config.active_storage.analyzers.prepend ActiveStorage::HotCell::ImageAnalyzer
+config.active_storage.previewers = [ ActiveStorage::HotCell::PdfPreviewer, ActiveStorage::HotCell::VideoPreviewer ]
+```
+
+Three things break the moment `variant_processor` is a class rather than a symbol, and the client gem exists to
+close them.
+
+**The analyzers go silent.** The built-in image analyzers gate `accept?` on `variant_processor` being `:vips` or
+`:mini_magick`, so a class value makes them all decline, `analyzer_class` falls through to `NullAnalyzer`, and
+the blob is marked analyzed with no dimensions at all.
+
+**The previewers answer `accept?` by shelling out.** `MuPDFPreviewer.accept?` runs `mutool` and
+`VideoPreviewer.accept?` runs `ffmpeg`, with `system`, from inside a web request. Once those binaries leave the
+application image both answer false, `previewable?` goes false with them, and previews stop existing with no
+exception and no alert.
+
+**The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob` and `CreateVariantsJob` declare
+`retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob has no default retry — so `capacity`,
+the one verdict whose whole point is "try later", fails its job outright on the first attempt.
 
 ## How it works
 
@@ -89,22 +118,38 @@ exposures `cap-drop ALL` makes impossible to close.
 Under construction. Nothing here is released.
 
 Working: the wire protocol, the supervisor and its scheduling, worker recycling, resource limits, the
-wall-clock deadline, the control channel, the client and its classification, the container image.
+wall-clock deadline, the control channel, the client and its classification, the container image, and all five
+Active Storage operations converting real images, PDFs and video.
 
-Not yet: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that
+Not yet: `activestorage-hotcell-client`, which depends on
+[rails/rails#58384](https://github.com/rails/rails/pull/58384) — unmerged, and without it a class value leaves
+`ActiveStorage.variant_transformer` at `nil` and the first variant dies with `NoMethodError` rather than a boot
+error. Also the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that
 give up mid-request, and the canary harness.
 
 ## Development
 
 ```
 bundle install
-rake              # every gem's suite: no container, no converter, a few seconds
-rake mutations    # break each control in turn and confirm the suite notices
+rake              # every suite
+rake hotcell      # only the suites that need no converter installed
+rake mutations    # break each control in turn and confirm the suites notice
 docker/smoke      # the only check that covers network: none and cap-drop
 ```
 
-The suite needs no container and no converter installed. Fixture operations stand in for the work, so the
-protocol, the fork, the descriptor passing, the limits, and the reap are all exercised in milliseconds.
+**The three hotcell gems need no container and no converter**, and `rake hotcell` is what keeps that honest —
+CI runs it on a machine with nothing installed. Fixture operations stand in for the work, so the protocol, the
+fork, the descriptor passing, the limits and the reap are all exercised in milliseconds.
+
+The two Active Storage gems convert real files rather than pretending to, so they need libvips, mutool, ffmpeg
+and ffprobe.
+
+**Nothing loads libvips into a test process.** libvips creates its thread pool the first time it processes an
+image, and that pool does not survive `fork`: a child forked afterwards waits forever for a worker thread that
+does not exist. Those suites boot real cells by forking, so the operations load inside the cell, the fixtures
+are generated by CLI tools, and `Cell.boot` refuses to fork a process that has libvips loaded.
+`fork_safety_test.rb` holds both halves of that, because a test that only showed the good case would not
+establish that the hazard is real.
 
 **Cells run uncontainerized in development**, on every platform, so there is one thing to document and one
 thing to debug. The reason is macOS and it cannot be engineered around: Docker Desktop runs containers in a
@@ -122,5 +167,6 @@ suite does not notice. A control with no mutation test behind it is a comment.
 
 ## Design
 
-[docs/HOTCELL-SPEC.md](docs/HOTCELL-SPEC) is the authority on the wire contract, the threat model,
-and the measurements behind every limit.
+[docs/HOTCELL-SPEC.md](docs/HOTCELL-SPEC.md) is the authority on the wire contract, the threat model, and the
+measurements behind every limit. Where the code departs from it, the code says so and why — `unsupported` being
+transient is the one worth knowing about.
