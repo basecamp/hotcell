@@ -97,6 +97,18 @@ Five. What matters is which code **loads and runs** in a cell, not which files a
 Nothing is shared between a client and its operation. They are two classes in two gems, never both
 loaded, coupled only by an operation name on the wire.
 
+**All five live in one repository for now.** Writing the Active Storage gems twice required changing
+`hotcell-server` first, which is what a coupled seam feels like; splitting a system before its seams are stable
+costs more than merging it later, and while nothing is published splitting is a directory move. The tasks and
+the CI jobs keep the two halves apart, because the three hotcell gems claim to be testable with no converter and
+no container installed and a single job that installed libvips would stop that claim from ever being checked.
+
+**"Never both loaded" is not enough on its own, so the namespaces enforce it.** A cell is forked from a process
+that may well have loaded the client, and the child then meets those constants before defining its own — a
+superclass mismatch while the cell boots. Everything the application side defines lives under
+`ActiveStorage::HotCell::Client` and everything the cell side defines under `ActiveStorage::HotCell::Server`, so
+no future class in either gem can collide with one in the other.
+
 Paths use `hot_cell/`, so the default inflection yields `HotCell` without registering one. The
 constant is `HotCell` rather than `Hotcell` because an unrelated `hotcell` gem defines the latter.
 
@@ -171,11 +183,13 @@ to the operation". The transformations reaching an operation are **not** drawn f
 application currently declares — they are whatever a signed URL says, of any age — so the operation's
 own allowlist is the only one there is.
 
-**This is the one place application code deliberately runs inside a cell.** The invariant is not "no
-application code," it is that the code which runs there has no application credentials, no database, no
-network, and no application configuration. An operation receives descriptors and a payload, and nothing
-else. Invariants 1 and 2 below are what hold that line, and an extension is exactly what erodes them —
-which is why invariant 1 is worth a boot self-check in the worker rather than trust.
+**This is the one place application code deliberately runs inside a cell.** The point is not "no application
+code," it is that the code which runs there has no application credentials, no database, no network, and no
+application configuration. An operation receives descriptors and a payload, and nothing else.
+
+What holds that line is the container, not a check on what the container contains. Invariant 2 is about what is
+in the image and the environment; nothing inspects the loaded gem graph, and an earlier draft's boot self-check
+for invariant 1 has been withdrawn. An operation is free to require whatever it needs.
 
 ### Cells
 
@@ -251,7 +265,13 @@ Dispatching rather than letting workers accept is what makes the rest work. The 
 the accept anyway, for the queue, for `queued_ms`, and to answer `capacity`. It also means **the supervisor
 knows when every worker started its current request**, which is what the deadline needs.
 
-**The deadline is always enforced by the supervisor, with a signal.** Never by the worker on itself. A
+**The deadline is always enforced by the supervisor, with a signal.** Never by the worker on itself.
+
+The supervisor never reads a request, so it cannot know that an operation declared less than the cell's
+maximum. The worker tells it, on the control socket, before it touches an untrusted byte — and the supervisor
+**clamps what it is told**, because the worker is the one process here running untrusted code and may only ever
+narrow. That is invariant 6, enforced on the side that owns it.
+ A
 Ruby-level timer cannot interrupt a thread pinned in a C extension: `Timeout` works by raising in the
 target thread, and the exception is only delivered at an interrupt checkpoint, which a thread inside
 `vips_resize` with the GVL released will not reach until it returns. So self-enforcement fails in exactly
@@ -346,8 +366,12 @@ to boot on anything outside it. That is deferred, not rejected. It is a boot che
 time without touching anything else here, and it addresses an operator mistake rather than the threat this
 design is about.
 
-1. No application framework loads in a cell. Neither `ActiveRecord` nor `ActiveStorage` is defined after
-   boot.
+1. ~~No application framework loads in a cell.~~ **Withdrawn.** Nothing enforces this and nothing should. The
+   whole design is that the container provides the guarantee structurally, so policing what code runs inside it
+   both duplicates a control that already holds and implies it does not. Under `network: none` a loaded
+   `ActiveRecord` cannot reach a database, and untouched pages are not copied, so the copy-on-write argument for
+   warning about it was not real either. Keeping a cell's gem graph small is still worth doing — a smaller graph
+   is a smaller thing to audit — but that is a budget, not a rule about what an operation may require.
 2. A cell holds no application credentials, in its environment **or on its filesystem**.
 3. The supervisor never evaluates image data, and a worker forked from it produces correct output.
 4. Descriptor access modes are one-way: an input cannot be written, an output cannot be read.
@@ -602,9 +626,9 @@ it but will still handle its disposition correctly.
 | `unreadable` | worker | true | The input could not be decoded. |
 | `failed` | worker | true | The operation raised for some other reason. |
 | `invalid` | worker | true | Malformed request, or descriptors that failed their access-mode check. |
-| `unsupported` | worker | true | Unknown operation name. |
+| `unsupported` | worker | **false** | This cell does not carry that operation. |
 | `protocol` | worker | **false** | Version mismatch. |
-| `killed` | supervisor | see `limit` | The worker died. `limit` is one of `fsize`, `memory`, `deadline`, `signal`. |
+| `killed` | supervisor | see `limit` | The worker died. `limit` is one of `fsize`, `memory`, `deadline`, `signal`, `crashed`. |
 | `capacity` | supervisor | false | The queue is full. |
 | `unavailable` | **client** | false | No connection, or the connection closed with no response. |
 | `timeout` | **client** | false | The client's own deadline fired. |
@@ -622,10 +646,20 @@ error rather than a signal, so it is tempting to let the operation report it as 
 is the decompression-bomb case — the exact thing the limit exists for — and it belongs with the other
 resource verdicts so a caller can act on it without parsing a message.
 
-**`protocol` is split out of `unsupported` because it is transient and arrives at 100%.** During a
-rolling deploy where the app moves before the cell, every request mismatches until the accessory is
-rebooted. An unknown *operation* is a caller bug that never heals; an unknown *version* is a deployment
-window that heals by itself. Alarm the second on duration, not on first occurrence.
+**`protocol` is split out of `unsupported` because the two heal differently, and both are transient.**
+During a rolling deploy where the app moves before the cell, every version mismatches until the accessory is
+rebooted. Alarm on duration, not on first occurrence.
+
+**`unsupported` was terminal in an earlier draft, on the reasoning that an unknown operation is a caller bug
+that never heals. That is true of a typo and false of the case that actually happens.** An accessory is not
+updated by a deploy, so an application that ships a client for a new operation before anybody reboots the cell
+gets `unsupported` at one hundred percent for as long as that takes. The two mistakes are not symmetrical:
+retrying a typo costs some work and shows up in the `unsupported` rate and in the client's boot-time warning,
+where recording a deploy window as permanent condemns every blob uploaded during it and needs a hand-written
+backfill to undo.
+
+**`crashed` is a worker that died mid-request without a signal**, which a misconfigured cell does on every
+request. It is the cell's fault rather than the input's, so it is not terminal.
 
 **`unavailable` and `timeout` are synthesized by the client and belong to the same taxonomy**, even
 though no cell wrote them. They are the most likely failures in production — a cell restarting, an
@@ -805,6 +839,15 @@ forked worker blocks forever in `futex_do_wait`.** Not the first one — every o
 not survive `fork`, and the child waits on a pool with no threads. A later change that pre-warms the pool
 to save the fork cost is exactly what this forbids.
 
+**Do not call `Vips.block_untrusted` in `before_worker_boot`.** Pin `image_processing` to 2.0 or later
+instead, which makes the call as it loads. It skips its own call when `VIPS_BLOCK_UNTRUSTED` is in the
+environment, and measuring rather than reading is what settles that: libvips honours the variable itself, so the
+unfuzzed loaders are blocked with it unset, set, or set to the empty string. Nothing an operation adds reaches a
+state the require has not already reached. What no arrangement of that call covers is somebody calling
+`Vips.block_untrusted false` afterwards, and a call at worker boot would not cover it either — an operation
+could do it inside `perform`. Test the property instead: feed the cell an SVG, a BMP and an ICO and watch it
+refuse all three.
+
 **`before_fork` must also force loader-plugin registration, and `require "image_processing/vips"` is what
 does it.** Plain `require "vips"` leaves the libheif plugins un-`dlopen`ed. They are then loaded lazily in
 the worker — after its limits are on — and a tight `memory` limit makes `dlopen` fail with only a
@@ -945,14 +988,21 @@ is made silently by somebody adding an operation to an existing cell, which is w
 workers there give up nothing, keep their slot's converter profile warm, and never pay the settling cost at
 all. Using it in a cell with `:in_process` operations warns like any other value above `1`.
 
-**The declaration is a claim about the operation's own code, and it is easy to break later.** Two ways a
-nominally-subprocess operation quietly becomes an in-process one:
+**The declaration is a claim about the operation's own code, and it is easy to break later.** The question it
+answers is narrow: can a malicious input *execute* in this process? That is what decides whether recycling the
+worker is safe, so the line falls here:
 
-1. **It reads its own output with an in-process library** to build `result` — reading the converter's output
-   header for width and page height, which BC4's thumbnailer does. Those are bytes a converter just produced
-   from a hostile input, parsed in the worker.
-2. **It parses the converter's stdout or stderr.** Much lower risk on a bounded buffer, but it is
-   attacker-influenced data in the worker.
+1. **Reading its own output with an in-process media library makes it `:in_process`.** Building `result` from
+   the converter's output header — width and page height, which BC4's thumbnailer wants — runs a decoder over
+   bytes a converter just produced from a hostile input, in the worker. `preview_pdf` and `preview_video`
+   therefore return no dimensions at all, which is also what Rails' previewers return: a previewer yields
+   `io:`, `filename:` and `content_type:`, and the dimensions come later from analysing the attached blob.
+2. **Parsing the converter's structured stdout does not.** `probe_media` reads ffprobe's JSON, on a bounded
+   buffer, with the standard library. Treating that as equivalent to an image decoder would make `:in_process`
+   mean "touches any attacker-influenced byte", which is every operation — and a distinction that covers
+   everything guides nobody. What it must do instead is refuse to pass that data on: only numbers and codec
+   names matching a conservative pattern come back, because everything ffprobe reports is attacker-controlled,
+   including title tags that need not be valid UTF-8.
 
 Test the claim rather than trusting the comment. A one-line addition is enough to invalidate it.
 
@@ -1055,6 +1105,12 @@ connection closes.
 At `reuse: 1` steps 2 through 9 happen once and step 10 is immediate, which is the same shape as a worker
 that exists only for one request. Above `1` the worker loops over steps 2 to 9, and `before_worker_boot`
 still runs once — after the fork, before the first request.
+
+**Set the soft limit and leave the hard limit at the cell's ceiling.** An unprivileged process can raise a soft
+limit up to its hard limit and can never raise a hard one, so setting both to the operation's value would make
+the first request the tightest a reused worker could ever be — a later operation with a larger budget could not
+get it back, and `setrlimit` with a soft limit above the hard one is `EINVAL`, which kills the worker before it
+can answer.
 
 Limits are applied in two passes for a reason. The worker has to parse the request before it can know
 which operation's limits to use, and parsing is the first thing it does with attacker-influenced bytes.
@@ -1317,10 +1373,19 @@ says whether `memory` is sized right, since RSS understates the charge and `VmSi
 `cancelled` counts callers that gave up before the cell answered, which by definition appears on no
 response.
 
-**The counters live in the supervisor, and a forked worker can still report them.** A worker inherits the
-supervisor's memory at fork, so the child that answers `hotcell.metrics` reads a consistent snapshot of
-counters it did not have to be told. The supervisor still parses nothing. This is the one place
-fork-per-request is a convenience rather than a cost.
+**The supervisor answers these itself, rather than forking a worker for them.** An earlier draft forked, on
+the reasoning that a child inherits the counters at fork and can report them without being told — which works,
+and is beside the point. The whole value of this channel is being available when nothing else is, and a channel
+that needs a fork to answer goes quiet exactly when a fork is what is failing. Neither built-in takes a
+descriptor, touches a converter, or evaluates a byte of image data, so none of the reasons the supervisor stays
+out of a conversion applies here.
+
+It reads the control request to route it, which is the one thing the supervisor does parse. That is a bounded
+line from the trusted side and it starts no thread pool, so it cannot deadlock a later fork.
+
+**Read it without blocking.** The hazard is a half-sent line rather than silence: the socket becomes readable
+once and then never again, so a blocking read would park the loop every conversion depends on. Bound the number
+of connections waiting to speak, too.
 
 **The control channel has its own small concurrency allowance and its own short deadline**, independent of
 `work.sock`. A scrape must not queue behind conversions and must not be answered `capacity`, because a
@@ -1495,9 +1560,9 @@ job is to map codes onto them and to say what is served:
 | `unreadable` | permanent | placeholder | cacheable |
 | `killed` with `limit` `fsize`/`memory` | permanent | placeholder | cacheable |
 | `failed` | permanent by default, overridable | placeholder | cacheable |
-| `killed` with `limit: deadline`, `capacity`, `unavailable`, `timeout` | transient | placeholder | **`no-store`** |
+| `killed` with `limit: deadline`/`crashed`, `capacity`, `unavailable`, `timeout`, `unsupported` | transient | placeholder | **`no-store`** |
 | `protocol` | permanent, **and report contract skew** | placeholder | `no-store` |
-| `invalid`, `unsupported` | neither — a caller bug | raise | — |
+| `invalid` | neither — a caller bug | raise | — |
 
 **The cache header is half the mapping and is easy to omit.** A transient failure served with a normal
 cache header is a permanent failure with extra steps, at every intermediary. BC4 already does this
@@ -1520,6 +1585,12 @@ asked to keep animated, and its own saver quality.
 
 Where callers genuinely differ, they say so with intent rather than with library keywords. Preserving a
 GIF's frames is `animated: true` in the payload, and the operation turns that into `loader: { n: -1 }`.
+
+**Two saver options are exceptions, on purpose rather than by omission.** `quality` and `strip` are already
+signed into variant URLs minted years ago that never expire, so refusing them would break images in mail nobody
+can recall. They arrive as intent — "smaller", "no metadata" — with the operation still choosing what that means
+for the format it is writing. Worth knowing while reading those URLs: both raise on the vips path today, so they
+only ever worked on `mini_magick`, which is where they come from.
 
 **Upstream reached the same conclusion, for a narrower reason, and the gap it left is the argument here.**
 Rails commit `1ca278a6` removed `apply`, `loader`, and `saver` from
@@ -1747,8 +1818,7 @@ plausible refactor removes it.
 - **Invariant 9**, because `unsetenv_others: true` is one keyword whose removal changes nothing observable
   in normal operation.
 
-Invariant 1 is better served by a boot self-check in the worker than by a test, since the thing that would
-break it is a transitive `require` in somebody's operation, not our code.
+Invariant 1 is withdrawn — see the invariants above — so there is nothing to test or to check at boot.
 - End to end against a containerized cell running with the accessory's flags, covering each request
   shape (two inputs, no inputs, no outputs), each `error.code`, and concurrent requests.
 - A cell rejecting a read-write descriptor offered as an input.
@@ -1766,8 +1836,12 @@ break it is a transitive `require` in somebody's operation, not our code.
   reports a non-zero `queued_ms`, and a fourth is answered `capacity`. Two requests on the same slot
   see the same `$HOME`; two running concurrently see different ones.
 - The deadline, and **not with `sleep`**. A Ruby `sleep` is interruptible, so a deadline test built on one
-  passes against a self-enforcing implementation that cannot actually work. Block the worker inside a C
-  extension — a large libvips operation will do — and assert it is answered `killed`. Two things are being
+  passes against a self-enforcing implementation that cannot actually work. Block the worker where Ruby cannot
+  reach it and assert it is answered `killed`. Measured across the standard library: `sleep`, a Ruby spin loop
+  and `Zlib::Inflate` are all interruptible, and `Integer#**` is not — `3 ** 40_000_000` runs for about seven
+  seconds straight through a fifty-millisecond `Timeout`. That lets the cell's own suite hold this with no
+  converter installed. Assert the premise in the test, so a Ruby that adds an interrupt check to that path
+  reports it rather than quietly weakening the test. Two things are being
   tested: that the supervisor kills it at all, and that it does so **promptly**, with no other request needed
   to trigger the reap. The naive reap-at-top-of-accept-loop implementation fails the second.
 - The deadline is per request, not per worker life: a worker that has already served several quick requests
@@ -1831,6 +1905,18 @@ dropping an operation's argument allowlist, returning success without writing th
 cell.
 
 A control with no mutation test behind it is a comment.
+
+**Two things about the harness itself, both learned by it lying in the reassuring direction.** Decide whether a
+mutation was caught by parsing the numbers, not by matching a string: `"10 failures, 0 errors"` contains
+`"0 failures, 0 errors"`, so every mutation caught with a count ending in zero reported as having survived. And
+treat a run that never reported as its own answer rather than as caught — that is what a mutation file with a
+mistake in it looks like, and counting it as success hid one that had been testing nothing. Fixing the second
+immediately exposed a real survivor.
+
+**Some controls have no honest mutation, and should say so where they live rather than be quietly listed.** A
+mutation nothing can catch fails the task forever, so leaving it in the map is not an option; leaving the reader
+to assume coverage is worse. Two in the supervisor are marked this way: the buffered read of a worker's reports
+and the rescue around a control answer. Neither has a trigger anybody has reached.
 
 ### The canary harness
 
