@@ -11,6 +11,7 @@ require "hot_cell/operation"
 require "hot_cell/slot"
 require "hot_cell/log"
 require "hot_cell/counters"
+require "hot_cell/control"
 require "hot_cell/worker"
 require "hot_cell/supervisor"
 

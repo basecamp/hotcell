@@ -21,6 +21,9 @@ MUTATIONS = {
   "never_retire" => "scheduling_test.rb",
   "wide_open_descriptors" => "cell_test.rb",
   "no_scratch_removal" => "cell_test.rb",
+  "single_socket" => "control_test.rb",
+  "blocking_control_read" => "control_test.rb",
+  "no_control_expiry" => "control_test.rb",
 }.freeze
 
 desc "Break each control in turn and confirm the suite notices"

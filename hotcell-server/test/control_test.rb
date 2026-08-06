@@ -1,0 +1,175 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class ControlTest < HotCellServerTest
+  def test_describe_reports_what_the_cell_carries_and_how_long_it_may_take
+    TestCell.boot(concurrency: 3, queue_factor: 2, deadline: 45, queue_wait: 7) do |cell|
+      result = assert_ok(cell.control("hotcell.describe")).result
+
+      assert_equal HotCell::PROTOCOL_VERSION, result[:v]
+      assert_equal 3, result[:concurrency]
+      assert_equal 2, result[:queue_factor]
+      assert_equal 45, result[:deadline]
+      assert_equal 7, result[:queue_wait]
+      assert_includes result[:operations], "test.uppercase"
+    end
+  end
+
+  def test_metrics_count_the_outcomes
+    TestCell.boot do |cell|
+      2.times { assert_ok cell.call("test.echo") }
+      assert_failed "failed", cell.call("test.broken")
+      assert_failed "unsupported", cell.call("test.nothing_like_it")
+
+      requests = assert_ok(cell.control("hotcell.metrics")).result[:requests]
+
+      assert_equal 4, requests[:total]
+      assert_equal 2, requests[:ok]
+      assert_equal 1, requests[:failed]
+      assert_equal 1, requests[:unsupported]
+    end
+  end
+
+  def test_metrics_separate_a_decompression_bomb_from_a_slow_afternoon
+    TestCell.boot(file_size: 4 * 1024 * 1024) do |cell|
+      with_files do |source, destination|
+        assert_failed "killed", cell.call("test.overflowing", inputs: [ source ], outputs: [ destination ],
+                                                             payload: { megabytes: 8 }, timeout: 30),
+                      limit: "fsize"
+      end
+
+      result = assert_ok(cell.control("hotcell.metrics")).result
+
+      assert_equal 1, result[:killed_by][:fsize]
+      assert_equal 0, result[:killed_by].fetch(:deadline, 0)
+      assert_equal 1, result[:requests][:killed]
+    end
+  end
+
+  def test_metrics_report_what_no_single_caller_can_see
+    TestCell.boot(concurrency: 1, queue_factor: 4, deadline: 30) do |cell|
+      blocker = cell.connect
+
+      begin
+        blocker.send_message HotCell::Request.new(op: "test.blocking", payload: { seconds: 0.6 }).to_line
+        waiter = Thread.new { cell.call "test.echo", timeout: 20 }
+        wait_until(what: "the queue to have something in it") do
+          assert_ok(cell.control("hotcell.metrics")).result[:queue_high_water].positive?
+        end
+
+        result = assert_ok(cell.control("hotcell.metrics")).result
+        assert_equal 1, result[:running]
+        assert_operator result[:queue_high_water], :>=, 1
+
+        assert_ok waiter.value
+      ensure
+        cell.answer blocker, 20
+        blocker.close
+      end
+    end
+  end
+
+  # This is the test that justifies the second socket, and a single-socket implementation fails it: the work
+  # queue is full and every worker is busy, and the scrape still answers. A metrics channel that goes quiet
+  # under load reports the same thing as a dead cell.
+  def test_control_answers_while_the_work_socket_is_saturated_and_its_queue_is_full
+    TestCell.boot(concurrency: 1, queue_factor: 1, queue_wait: 20, deadline: 30) do |cell|
+      held = 2.times.map { cell.connect }
+
+      begin
+        held.each do |connection|
+          connection.send_message HotCell::Request.new(op: "test.blocking", payload: { seconds: 1.5 }).to_line
+        end
+        wait_until(what: "the cell to saturate") { assert_failed "capacity", cell.call("test.echo") }
+
+        assert_ok cell.control("hotcell.describe")
+        assert_ok cell.control("hotcell.metrics")
+      ensure
+        held.each { |connection| cell.answer connection, 25 }
+        held.each(&:close)
+      end
+    end
+  end
+
+  def test_the_work_socket_does_not_answer_control_operations
+    TestCell.boot do |cell|
+      assert_failed "unsupported", cell.call("hotcell.metrics")
+    end
+  end
+
+  def test_the_control_socket_does_not_answer_conversions
+    TestCell.boot do |cell|
+      failure = assert_failed "unsupported", cell.control("test.echo")
+
+      assert_match "control.sock answers", failure.message
+    end
+  end
+
+  def test_a_control_version_mismatch_is_transient
+    TestCell.boot do |cell|
+      response = cell.connect("control.sock") do |connection|
+        connection.send_message HotCell::Request.new(op: "hotcell.describe", version: 99).to_line
+        cell.answer connection
+      end
+
+      refute_predicate assert_failed("protocol", response), :terminal?
+    end
+  end
+
+  # The hazard is a half-sent line rather than silence: the socket becomes readable once and then never
+  # again, so a blocking read there would park the loop that every conversion depends on.
+  def test_a_half_sent_control_message_cannot_stall_the_cell
+    TestCell.boot do |cell|
+      partial = cell.connect("control.sock")
+
+      begin
+        partial.socket.write '{"v":1,"op":"hotcell.desc'
+        partial.socket.flush
+
+        assert_ok cell.call("test.echo")
+        assert_ok cell.control("hotcell.describe")
+      ensure
+        partial.close
+      end
+    end
+  end
+
+  def test_the_rest_of_a_half_sent_control_message_is_still_answered
+    TestCell.boot do |cell|
+      cell.connect("control.sock") do |connection|
+        connection.socket.write '{"v":1,"op":"hotcell.desc'
+        connection.socket.flush
+        assert_ok cell.control("hotcell.describe")
+
+        connection.socket.write %(ribe","inputs":0,"outputs":0,"payload":{}}\n)
+        assert_ok cell.answer(connection)
+      end
+    end
+  end
+
+  def test_a_control_client_that_never_speaks_is_dropped_rather_than_held_forever
+    TestCell.boot(control_deadline: 0.3) do |cell|
+      silent = cell.connect("control.sock")
+
+      begin
+        wait_until(what: "the silent connection to be dropped") { cell.log_events("control.abandoned").any? }
+
+        assert_ok cell.call("test.echo")
+      ensure
+        silent.close
+      end
+    end
+  end
+
+  def test_a_malformed_control_message
+    TestCell.boot do |cell|
+      response = cell.connect("control.sock") do |connection|
+        connection.write_line "not json\n"
+        cell.answer connection
+      end
+
+      assert_failed "invalid", response
+    end
+  end
+end

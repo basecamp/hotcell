@@ -14,10 +14,11 @@ module HotCell
   # it counts the tmpfs too, so size the two separately.
   class Configuration
     SCHEDULING = {
-      concurrency:  4,   # workers running at once, and therefore the number of slots
-      queue_factor: 2,   # accepted-but-not-running connections, as a multiple of concurrency
-      queue_wait:   10,  # seconds a queued connection may wait before it is answered `capacity`
-      reuse:        1,   # requests a worker serves before it is discarded
+      concurrency:      4,   # workers running at once, and therefore the number of slots
+      queue_factor:     2,   # accepted-but-not-running connections, as a multiple of concurrency
+      queue_wait:       10,  # seconds a queued connection may wait before it is answered `capacity`
+      reuse:            1,   # requests a worker serves before it is discarded
+      control_deadline: 5,   # seconds a control connection may take to send its request
     }.freeze
 
     LIMITS = {
@@ -80,6 +81,7 @@ module HotCell
         raise ConfigurationError, "concurrency: #{concurrency} must be positive" unless concurrency.is_a?(Integer) && concurrency.positive?
         raise ConfigurationError, "queue_factor: #{queue_factor} must not be negative" unless queue_factor.is_a?(Integer) && !queue_factor.negative?
         raise ConfigurationError, "queue_wait: #{queue_wait} must be positive" unless queue_wait.positive?
+        raise ConfigurationError, "control_deadline: #{control_deadline} must be positive" unless control_deadline.positive?
 
         unless unlimited_reuse? || (reuse.is_a?(Integer) && reuse.positive?)
           raise ConfigurationError, "reuse: #{reuse.inspect} must be a positive Integer or :unlimited"
