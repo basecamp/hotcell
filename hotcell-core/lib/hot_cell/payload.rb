@@ -1,0 +1,79 @@
+# frozen_string_literal: true
+
+require "json"
+
+module HotCell
+  # A payload is a JSON object, and the rules are stricter than JSON's in one direction and looser in
+  # another.
+  #
+  # Values must be JSON-native, because to_json is not a check. It serializes a Symbol to a String, a
+  # Time to a String, and an arbitrary object through whatever to_json that object happens to define,
+  # all silently and none of it faithfully. So validate the values, then serialize.
+  #
+  # Keys may be Strings or Symbols, because both serialize to the same JSON string and both arrive
+  # symbolized. `{ format: "png" }` is how a payload is naturally written and must not be rejected.
+  module Payload
+    # A payload sits one level inside the message envelope, so it gets one level less than the line.
+    MAX_DEPTH = MAX_NESTING - 1
+
+    class << self
+      def generate(object, name)
+        validate! object, name
+        JSON.generate object
+      end
+
+      # Keys are deep-symbolized here rather than in an operation, so an operation never has to know
+      # whether to reach for payload[:format] or payload["format"], and a nested hash can be splatted
+      # straight into a library's keyword arguments. Only keys: a Symbol value would not survive the
+      # round trip, which the JSON-native rule already forbids.
+      #
+      # JSON.parse only. Never JSON.load, and never create_additions, both of which instantiate
+      # arbitrary classes named by a json_class key in the document.
+      def parse(json)
+        JSON.parse json, symbolize_names: true, max_nesting: MAX_NESTING, allow_nan: false,
+                         create_additions: false
+      end
+
+      def validate!(object, name)
+        unless object.is_a?(Hash)
+          raise SerializationError, "#{name} is a #{object.class} and must be a Hash"
+        end
+
+        walk object, name, 1
+        object
+      end
+
+      private
+        def walk(value, path, depth)
+          case value
+          when Hash
+            too_deep! path, depth
+            value.each do |key, nested|
+              unless key.is_a?(String) || key.is_a?(Symbol)
+                raise SerializationError,
+                      "#{path} has a #{key.class} key #{key.inspect}; keys must be String or Symbol"
+              end
+
+              walk nested, "#{path}[#{key.inspect}]", depth + 1
+            end
+          when Array
+            too_deep! path, depth
+            value.each_with_index { |nested, index| walk nested, "#{path}[#{index}]", depth + 1 }
+          when Float
+            unless value.finite?
+              raise SerializationError, "#{path} is #{value}, which JSON cannot carry"
+            end
+          when String, Integer, true, false, nil
+            value
+          else
+            raise SerializationError, "#{path} is a #{value.class}, which JSON cannot carry faithfully"
+          end
+        end
+
+        def too_deep!(path, depth)
+          return if depth <= MAX_DEPTH
+          raise SerializationError, "#{path} nests deeper than #{MAX_DEPTH} levels"
+        end
+    end
+  end
+end

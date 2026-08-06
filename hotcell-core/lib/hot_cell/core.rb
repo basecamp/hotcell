@@ -1,0 +1,13 @@
+# frozen_string_literal: true
+
+require "hot_cell/core/version"
+require "hot_cell/protocol"
+require "hot_cell/errors"
+require "hot_cell/codes"
+require "hot_cell/clock"
+require "hot_cell/payload"
+require "hot_cell/descriptors"
+require "hot_cell/failure"
+require "hot_cell/request"
+require "hot_cell/response"
+require "hot_cell/connection"
