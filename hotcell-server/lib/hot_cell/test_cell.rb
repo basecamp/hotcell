@@ -19,6 +19,13 @@ module HotCell
   #     HotCell.root = File.dirname(cell.directory)
   #     ...
   #   end
+  #
+  # Some operations cannot be loaded in a test process at all, and libvips is the reason this matters: its
+  # thread pool does not survive a fork, so a suite that required it before booting a cell would make every
+  # worker deadlock. Pass `operations:` a callable and it runs inside the cell's own process, before it boots —
+  # which is the only place such a library may be loaded.
+  #
+  #   HotCell::TestCell.boot(operations: -> { require "active_storage/hot_cell/server" })
   class TestCell
     READY = "up"
 
@@ -38,9 +45,10 @@ module HotCell
     end
 
     # Anything in `supervisor:` goes to Supervisor.new; everything else is the cell's own limits.
-    def initialize(name: "test", supervisor: {}, **options)
+    def initialize(name: "test", supervisor: {}, operations: nil, **options)
       @name = name
       @supervisor_options = supervisor
+      @operations = operations
       @options = options
       @root = Dir.mktmpdir "hotcell-test"
       @directory = File.join(@root, name)
@@ -70,6 +78,7 @@ module HotCell
         supervisor = Supervisor.new(directory: directory, workspace: workspace,
                                     log: Log.new(File.open(log_path, "w")), **@supervisor_options)
         begin
+          @operations&.call
           supervisor.boot
           writer.write READY
           writer.close
