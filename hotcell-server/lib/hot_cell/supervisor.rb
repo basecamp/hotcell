@@ -54,6 +54,14 @@ module HotCell
 
     SOCKETS = [ "work.sock", "control.sock" ].freeze
 
+    # A control connection that has not sent its request yet. Reading it non-blockingly is what stops a
+    # client that connects and then says nothing from stalling the loop every conversion depends on.
+    Pending = Struct.new(:connection, :accepted_at, :buffer)
+
+    # Only to bound the list. The channel's whole value is answering when nothing else does, so this is set
+    # far above any real scrape rate rather than as a throttle.
+    CONTROL_BACKLOG = 64
+
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
     def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new)
@@ -63,6 +71,7 @@ module HotCell
       @log = log
       @children = {}
       @queue = []
+      @control_pending = []
       @counters = Counters.new
       @stopping = false
     end
@@ -73,6 +82,8 @@ module HotCell
       prepare_directories
       preload
       @work = listen "work.sock"
+      @control = listen "control.sock"
+      @control_handler = Control.new(configuration: configuration, counters: counters)
       trap_signals
 
       log.write "cell.boot", pid: Process.pid, directory: directory, operations: Registry.names,
@@ -88,6 +99,7 @@ module HotCell
 
         enforce_deadlines
         expire_queue
+        expire_control
         retire_idle if @stopping
         pump
       end
@@ -107,16 +119,18 @@ module HotCell
       def sources
         [ @signals ].tap do |list|
           list.concat @children.each_value.map { |child| child.control.socket }.reject(&:closed?)
-          list << @work unless @stopping
+          list.concat @control_pending.map { |pending| pending.connection.socket }.reject(&:closed?)
+          list.push @work, @control unless @stopping
         end
       end
 
-      # The nearest thing that needs doing without anybody knocking: a deadline, or a queued connection
-      # that has waited long enough to be told so.
+      # The nearest thing that needs doing without anybody knocking: a deadline, a queued connection that
+      # has waited long enough to be told so, or a control client that never said what it wanted.
       def wait_for
         now = Clock.now
         nearest = [ *@children.each_value.filter_map(&:expires_at),
-                    *@queue.map { |(_, queued_at)| queued_at + configuration.queue_wait } ].min
+                    *@queue.map { |(_, queued_at)| queued_at + configuration.queue_wait },
+                    *@control_pending.map { |pending| pending.accepted_at + configuration.control_deadline } ].min
         return nil if nearest.nil?
 
         [ nearest - now, 0 ].max
@@ -126,7 +140,9 @@ module HotCell
         case source
         when @signals then drain_signals
         when @work then accept_work
-        else child_reported source
+        when @control then accept_control
+        else
+          pending_control(source) ? read_control(source) : child_reported(source)
         end
       end
 
@@ -167,6 +183,69 @@ module HotCell
         else
           refuse connection, "the queue is full at #{@queue.size}"
         end
+      end
+
+      def accept_control
+        socket = @control.accept_nonblock(exception: false)
+        return if socket == :wait_readable
+
+        connection = Connection.new(socket)
+
+        if @control_pending.size >= CONTROL_BACKLOG
+          answer connection, Failure.new(code: "capacity", message: "#{CONTROL_BACKLOG} control connections are already waiting")
+        else
+          @control_pending << Pending.new(connection, Clock.now, "".b)
+        end
+      end
+
+      def pending_control(socket)
+        @control_pending.find { |pending| pending.connection.socket == socket }
+      end
+
+      # Keep whatever arrived and come back for the rest. A stream socket does not promise the whole line
+      # lands in one read, and a blocking read here would put the loop at the mercy of a control client.
+      def read_control(socket)
+        pending = pending_control(socket)
+        chunk = socket.read_nonblock(MAX_REQUEST_BYTES, exception: false)
+        return if chunk == :wait_readable
+
+        return drop_control(pending) if chunk.nil?
+
+        pending.buffer << chunk
+
+        if pending.buffer.include?("\n")
+          @control_pending.delete pending
+          answer_control pending.connection, pending.buffer.force_encoding(Encoding::UTF_8)
+        elsif pending.buffer.bytesize > MAX_REQUEST_BYTES
+          @control_pending.delete pending
+          answer pending.connection, Failure.new(code: "invalid", message: "control message with no newline")
+        end
+      end
+
+      def answer_control(connection, line)
+        connection.write_line @control_handler.answer(line, running: running, queued: @queue.size).to_line
+      rescue SystemCallError, IOError
+        counters.cancelled!
+      ensure
+        connection.close
+      end
+
+      def expire_control
+        return if @control_pending.empty?
+
+        now = Clock.now
+        @control_pending.reject! do |pending|
+          next false if now - pending.accepted_at < configuration.control_deadline
+
+          log.write "control.abandoned", waited_s: configuration.control_deadline
+          pending.connection.close
+          true
+        end
+      end
+
+      def drop_control(pending)
+        @control_pending.delete pending
+        pending.connection.close
       end
 
       def pump
@@ -222,12 +301,14 @@ module HotCell
         @signals.close
         @signal_writer.close
         @work.close
+        @control.close
 
         @children.each_value do |child|
           child.control.close
           child.connection&.close
         end
         @queue.each { |(connection, _)| connection.close }
+        @control_pending.each { |pending| pending.connection.close }
       end
 
       def child_reported(socket)
@@ -432,8 +513,10 @@ module HotCell
 
       def shutdown
         refuse_queue "the cell is stopping"
+        @control_pending.each { |pending| pending.connection.close }
         @children.each_value { |child| child.control.close unless child.control.socket.closed? }
         @work&.close
+        @control&.close
         SOCKETS.each { |name| File.unlink socket_path(name) if File.socket?(socket_path(name)) }
 
         log.write "cell.stopped", pid: Process.pid

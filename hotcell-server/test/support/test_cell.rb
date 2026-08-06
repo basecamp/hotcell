@@ -107,9 +107,17 @@ class TestCell
     end
   end
 
+  # Reaches the side-band channel, whose whole value is answering when the work socket cannot.
+  def control(op, timeout: 10)
+    connect("control.sock") do |connection|
+      connection.send_message HotCell::Request.new(op: op).to_line
+      answer connection, timeout
+    end
+  end
+
   # Opens a connection and hands it back without reading, so a test can hold several at once.
-  def connect
-    socket = UNIXSocket.new File.join(directory, "work.sock")
+  def connect(socket_name = "work.sock")
+    socket = UNIXSocket.new File.join(directory, socket_name)
     connection = HotCell::Connection.new(socket)
     return connection unless block_given?
 
