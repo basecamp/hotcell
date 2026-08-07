@@ -17,3 +17,11 @@ gem "activesupport", github: "flavorjones/rails", branch: "variant-transformer-s
 
 gem "minitest"
 gem "rake"
+
+group :development do
+  gem "rubocop", require: false
+  gem "rubocop-minitest", require: false
+  gem "rubocop-packaging", require: false
+  gem "rubocop-performance", require: false
+  gem "rubocop-rake", require: false
+end

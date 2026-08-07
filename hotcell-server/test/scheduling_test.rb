@@ -121,8 +121,8 @@ class SchedulingTest < HotCellServerTest
         responses = connections.map { |connection| cell.answer connection, 25 }
 
         assert responses.first(2).all?(&:ok?), "expected the first two to run"
-        assert responses[2].ok?, "expected the third to be queued and then run: #{responses[2].failure}"
-        assert responses[3].ok?, "expected the fourth to be queued and then run: #{responses[3].failure}"
+        assert_predicate responses[2], :ok?, "expected the third to be queued and then run: #{responses[2].failure}"
+        assert_predicate responses[3], :ok?, "expected the fourth to be queued and then run: #{responses[3].failure}"
         assert_failed "capacity", responses[4]
 
         assert_operator responses[2].timing[:queued_ms], :>, 0, "a queued request must report its wait"

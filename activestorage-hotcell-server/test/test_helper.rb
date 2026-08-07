@@ -33,7 +33,7 @@ class ActiveStorageHotCellTest < Minitest::Test
 
     def assert_ok(response)
       assert response, "expected a response and got none"
-      assert response.ok?, "expected ok and got #{response.failure&.to_s.inspect}"
+      assert_predicate response, :ok?, "expected ok and got #{response.failure&.to_s.inspect}"
       response
     end
 
