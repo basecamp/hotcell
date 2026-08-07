@@ -17,6 +17,8 @@ module ActiveStorage
       # hostile input, in this worker. So does parsing its stdout. Neither happens here, and the suite asserts the
       # declarations rather than trusting these paragraphs.
       class ConverterOperation < ::HotCell::Operation
+        abstract
+
         untrusted_input :subprocess
 
         # A converter that exits non-zero on a document it cannot read is the commonest failure on this path, and
