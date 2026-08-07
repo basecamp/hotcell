@@ -100,7 +100,7 @@ module ActiveStorage
 
           # EXIF says the pixels are stored rotated, so the dimensions a caller cares about are swapped. Rails'
           # own analyzer does the same thing for the same orientations.
-          SWAPPED_ORIENTATIONS = (5..8).freeze
+          SWAPPED_ORIENTATIONS = (5..8)
 
           def dimensions_of(image)
             if SWAPPED_ORIENTATIONS.cover?(orientation_of(image))

@@ -20,4 +20,10 @@ task test: GEMS
 desc "Run only the suites that need no converter installed"
 task hotcell: HOTCELL
 
-task default: :test
+# One configuration and one run for all five gems, because the style is one style.
+desc "Check style"
+task :rubocop do
+  sh "rubocop"
+end
+
+task default: [ :test, :rubocop ]

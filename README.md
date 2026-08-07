@@ -159,6 +159,7 @@ Also outstanding: the canary harness.
 bundle install
 rake              # every suite
 rake hotcell      # only the suites that need no converter installed
+rake rubocop      # style, one configuration for all five gems
 docker/smoke      # the only check that covers network: none and cap-drop
 ```
 
