@@ -47,6 +47,25 @@ class ControlTest < HotCellServerTest
     end
   end
 
+  # The one outcome that appears in no response, by definition: nobody is left to receive it. A cell quietly
+  # doing work for callers who have gone away can only be seen from here.
+  def test_metrics_count_a_caller_that_gave_up_before_the_cell_answered
+    TestCell.boot(deadline: 1) do |cell|
+      abandoned = cell.connect
+      abandoned.send_message HotCell::Request.new(op: "test.blocking", payload: { seconds: 30 }).to_line
+      wait_until(what: "the request to be running") do
+        assert_ok(cell.control("hotcell.metrics")).result[:running].positive?
+      end
+      abandoned.close
+
+      wait_until(what: "the deadline to kill the worker") do
+        assert_ok(cell.control("hotcell.metrics")).result[:requests].fetch(:killed, 0).positive?
+      end
+
+      assert_equal 1, assert_ok(cell.control("hotcell.metrics")).result[:cancelled]
+    end
+  end
+
   def test_metrics_report_what_no_single_caller_can_see
     TestCell.boot(concurrency: 1, queue_factor: 4, deadline: 30) do |cell|
       blocker = cell.connect

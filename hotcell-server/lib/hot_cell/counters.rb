@@ -10,6 +10,11 @@ module HotCell
   # queue_high_water is the leading saturation signal and no single caller sees it. killed_by separates a
   # decompression bomb from a slow afternoon in aggregate. cancelled counts callers that gave up before
   # the cell answered, which by definition appears on no response.
+  #
+  # cancelled is a floor rather than a total, and the reason is where each answer is written from. The
+  # supervisor writes refusals, kills and deadline breaches, so it sees the broken pipe and counts it. A
+  # successful conversion is written by the worker, which exits without telling anyone — so a caller that
+  # hangs up during one is not counted. Read it as "at least this many", and read a rise as real.
   class Counters
     def initialize
       @started_at = Clock.now
