@@ -60,7 +60,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   end
 
   # `page: 0` is what Rails passes and what stops a hundred-frame GIF being decoded in full to make one
-  # thumbnail. Keeping the frames is the caller's intent, expressed as intent rather than as `loader: { n: -1 }`.
+  # thumbnail.
   def test_an_animated_source_is_flattened_to_its_first_frame_by_default
     Cell.boot do |cell|
       with_output(".gif") do |destination|
@@ -72,44 +72,33 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
-  def test_asking_to_keep_the_animation_keeps_every_frame
+  # A caller's own loader merges over the `page: 0` above, which is how Rails composes them too.
+  def test_a_loader_asking_for_every_frame_keeps_every_frame
     Cell.boot do |cell|
       with_output(".gif") do |destination|
         assert_ok cell.call("active_storage.transform_image",
                             inputs: [ fixture("animated.gif") ], outputs: [ destination ],
-                            payload: { format: "gif", animated: true })
+                            payload: { format: "gif", operations: { loader: { n: -1 } } })
 
         assert_equal 3, identify(destination)[:frames]
       end
     end
   end
 
-  # Saver options belong to the operation, and these two arrive as intent because they are already signed into
-  # variant URLs that were minted years ago and never expire.
-  def test_asking_for_lower_quality_produces_fewer_bytes
+  # Saver options reach ImageProcessing as Rails passes them. Bounding what may appear inside them is a planned
+  # feature; until then this is Rails' behaviour, inside the sandbox.
+  def test_a_saver_reaches_the_encoder
     Cell.boot do |cell|
       sizes = [ 90, 10 ].map do |quality|
         with_output do |destination|
           assert_ok cell.call("active_storage.transform_image",
                               inputs: [ fixture("big.png") ], outputs: [ destination ],
-                              payload: { format: "jpg", quality: quality })
+                              payload: { format: "jpg", operations: { saver: { Q: quality } } })
           File.size(destination)
         end
       end
 
       assert_operator sizes.last, :<, sizes.first
-    end
-  end
-
-  def test_a_quality_outside_the_range_is_a_caller_bug_rather_than_a_bad_document
-    Cell.boot do |cell|
-      with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
-                                                     inputs: [ fixture("colour.png") ], outputs: [ destination ],
-                                                     payload: { format: "jpg", quality: 0 })
-
-        assert_match "quality 0 is not an integer between 1 and 100", failure.message
-      end
     end
   end
 

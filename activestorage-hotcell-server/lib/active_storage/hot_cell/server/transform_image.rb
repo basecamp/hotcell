@@ -32,14 +32,17 @@ module ActiveStorage
           crop rotate autorot flip flatten smartcrop sharpen gaussblur colourspace invert
         ].freeze
 
-        # Loader and saver options are this operation's, never the caller's. They are not in the payload as
-        # library keywords and not in the allowlist above.
+        # `loader` and `saver` are pipeline configuration rather than transformations, and they are passed to
+        # ImageProcessing exactly as Rails passes them.
         #
-        # Two exceptions, and they are exceptions on purpose rather than by omission. `quality` and `strip` are
-        # already signed into variant URLs that were minted years ago and never expire, so refusing them would
-        # break every image in every email ever sent. They arrive as intent — "smaller" and "no metadata" — with
-        # the operation still choosing what that means for the format it is writing.
-        QUALITY = (1..100).freeze
+        # That means a caller can currently set libvips loader and saver options directly, including
+        # `loader: { unlimited: true }`, which removes libvips' own denial-of-service limits. This is the same
+        # capability Rails gives a caller today. It is acceptable here and not there because the cell's limits
+        # are outside the library: RLIMIT_DATA, RLIMIT_FSIZE and the supervisor's wall-clock deadline still
+        # apply, so a decode libvips has been told not to bound costs the caller a killed worker.
+        #
+        # Bounding what may appear inside them is a planned feature — see the allowlist note in the README.
+        PIPELINE = %w[ loader saver ].freeze
 
         def perform(inputs, outputs, payload)
           source, = inputs
@@ -58,31 +61,16 @@ module ActiveStorage
         end
 
         private
+          # `loader(page: 0)` first is what Rails does, and it is what stops a multi-page TIFF or a
+          # hundred-frame GIF being decoded in full to produce one thumbnail. A caller's own `loader` arrives
+          # through `apply` and merges over it, which is also what Rails does — asking for every frame is
+          # `loader: { n: -1 }`.
           def pipeline(path, format, payload)
             ImageProcessing::Vips
               .source(path)
-              .loader(**loader_for(payload))
+              .loader(page: 0)
               .convert(format)
-              .saver(**saver_for(payload))
               .apply(operations_for(payload))
-          end
-
-          # `page: 0` is what Rails passes, and it is what stops a multi-page TIFF or a hundred-frame GIF from
-          # being decoded in full to produce one thumbnail. `n: -1` is the opposite request, and the only way a
-          # caller can ask for it is the `animated` intent flag.
-          def loader_for(payload)
-            payload[:animated] ? { n: -1 } : { page: 0 }
-          end
-
-          def saver_for(payload)
-            {}.tap do |saver|
-              saver[:strip] = true if payload[:strip]
-
-              if (quality = payload[:quality])
-                refuse! "quality #{quality.inspect} is not an integer between 1 and 100" unless QUALITY.cover?(quality)
-                saver[:Q] = quality
-              end
-            end
           end
 
           def operations_for(payload)
@@ -90,10 +78,14 @@ module ActiveStorage
             refuse! "operations must be an object, and this is a #{declared.class}" unless declared.is_a?(Hash)
 
             declared.filter_map do |name, argument|
-              refuse! "#{name} is not one of #{OPERATIONS.join(", ")}" unless OPERATIONS.include?(name.to_s)
+              refuse! "#{name} is not one of #{allowed.join(", ")}" unless allowed.include?(name.to_s)
 
               [ name, argument ] unless argument.nil? || argument == false
             end
+          end
+
+          def allowed
+            @allowed ||= (OPERATIONS + PIPELINE).freeze
           end
 
           # Read back what was just written. Several callers need it: an analyzer returns metadata and no bytes at

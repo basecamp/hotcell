@@ -48,11 +48,25 @@ class TransformerTest < ActiveStorageHotCellClientTest
     end
   end
 
-  def test_the_historical_animated_shape_still_produces_an_animation
+  def test_a_loader_reaches_the_cell_and_keeps_every_frame
     with_cell do
-      transform({ loader: { page: nil }, coalesce: true }, "animated.gif", format: "gif") do |output|
+      transform({ loader: { n: -1 } }, "animated.gif", format: "gif") do |output|
         assert_equal 3, identify(output.path)[:frames]
       end
+    end
+  end
+
+  # The shape HEY has signed into variant URLs, minted on mini_magick. It is refused here for the same reason
+  # it raises Vips::Error under Rails on vips: `coalesce` is not a libvips operation. Making these URLs work is
+  # an ImageMagick-compatible transformer, which is a planned addition — until then an application that moves
+  # from mini_magick to vips rewrites them at its own boundary, the way BC4 does.
+  def test_the_imagemagick_shape_is_refused_rather_than_silently_reinterpreted
+    with_cell do
+      error = assert_raises Unprocessable do
+        transform({ loader: { page: nil }, coalesce: true }, "animated.gif", format: "gif") { flunk "no" }
+      end
+
+      assert_match "coalesce", error.message
     end
   end
 

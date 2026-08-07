@@ -5,7 +5,6 @@ require "active_storage"
 require "active_storage/transformers/transformer"
 
 require "active_storage/hot_cell/client/operations"
-require "active_storage/hot_cell/client/transformations"
 
 module ActiveStorage
   module HotCell
@@ -25,11 +24,16 @@ module ActiveStorage
       class Transformer < ActiveStorage::Transformers::Transformer
         private
           # Returns an open, rewound Tempfile, which is the contract.
+          #
+          # The transformations travel to the cell as they arrived. Rails hands this a symbol-keyed hash with
+          # :format already removed — Variation deep-symbolizes on the way in and builds the transformer with
+          # `transformations.except(:format)` — so there is nothing to normalize here, and deciding which keys
+          # are allowed belongs to the operation rather than to this side of the socket.
           def process(file, format:)
             output = Tempfile.new([ "hotcell", ".#{format}" ], binmode: true)
 
             begin
-              convert file, output, Transformations.call(transformations, format: format)
+              convert file, output, format: format.to_s, operations: transformations
               output.tap(&:rewind)
             rescue Exception # rubocop:disable Lint/RescueException
               output.close!
@@ -41,7 +45,7 @@ module ActiveStorage
           # hands out Tempfiles, which are read-write; an input descriptor must be read-only and an output
           # write-only. An access mode is fixed at open, so a cell handed the wrong one cannot narrow it — it can
           # only decline the request.
-          def convert(file, output, payload)
+          def convert(file, output, **payload)
             File.open(file.path, "rb") do |readable|
               File.open(output.path, "wb") do |writable|
                 TransformImage.perform_in_hotcell [ readable ], [ writable ], payload
