@@ -156,6 +156,9 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # The exact set rather than one of them. This gem defines two abstract base classes, VipsOperation and
+  # ConverterOperation, and an operation registers by existing — so an assertion that only looked for what
+  # should be here would not notice two more that should not.
   def test_the_cell_carries_the_operations_and_says_so
     Cell.boot do |cell|
       described = cell.connect("control.sock") do |connection|
@@ -163,7 +166,9 @@ class TransformImageTest < ActiveStorageHotCellTest
         cell.answer connection
       end
 
-      assert_includes assert_ok(described).result[:operations], "active_storage.transform_image"
+      assert_equal %w[ active_storage.analyze_image active_storage.preview_pdf active_storage.preview_video
+                       active_storage.probe_media active_storage.transform_image ],
+                   assert_ok(described).result[:operations]
     end
   end
 end

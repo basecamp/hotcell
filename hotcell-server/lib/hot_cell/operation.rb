@@ -20,6 +20,24 @@ module HotCell
         Registry.register subclass
       end
 
+      # Declares a class that exists to be inherited from, not to be dispatched to.
+      #
+      # Every subclass registers, because that is what makes an operation reachable by writing it. An
+      # intermediate that gathers shared setup registers too, and a cell then advertises it in `describe` and
+      # accepts it on the wire — where it reaches a `perform` that raises NotImplementedError and answers
+      # `failed`, as though the caller's document were the problem.
+      #
+      # Deliberately not inherited: a subclass of an abstract operation is concrete unless it says otherwise,
+      # and a class-level instance variable is not visible to a subclass, so that falls out for free.
+      def abstract
+        @abstract = true
+        Registry.reload!
+      end
+
+      def abstract?
+        @abstract == true
+      end
+
       # Writes the name the wire uses, defaulting to the underscored class name with namespaces as dots.
       def operation(name = nil)
         return operation_name if name.nil?
