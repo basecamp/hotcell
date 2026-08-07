@@ -135,8 +135,24 @@ is unmerged — the Gemfile pins the branch. Without it a class value matches no
 assigns `ActiveStorage.variant_transformer` from, so it is left at `nil` and the first variant dies with
 `NoMethodError`. The PR adds a `Class` arm, and an `else` that raises at boot.
 
-Not yet: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that give
-up mid-request, and the canary harness.
+Not yet, in the order they matter:
+
+**A library-option allowlist.** `loader` and `saver` reach ImageProcessing exactly as Rails passes them, so a
+caller can set `loader: { unlimited: true }` and remove libvips' own denial-of-service limits. That is the
+capability Rails gives a caller today, and it is tolerable here only because the cell's limits are outside the
+library — `RLIMIT_DATA`, `RLIMIT_FSIZE` and the wall-clock deadline still apply, so the caller buys a killed
+worker. The fix is an explicit allowlist of the keys permitted inside each: `page`, `n`, `quality`, `strip`
+yes; `unlimited`, `access`, `fail-on`, `revalidate` no. Deriving that list is the work, and it must be one
+visible list rather than a filter hidden in a translation step.
+
+**An ImageMagick-compatible transformer and analyzer.** `Transformers::Vips` and
+`Analyzers::ImageAnalyzer::Vips` are named for their toolchain so these can sit beside them. Until they exist,
+URLs minted on `mini_magick` — carrying `coalesce`, or top-level `quality` and `strip` — are refused, exactly
+as they raise under Rails on vips. An application moving between the two rewrites them at its own boundary in
+the meantime, the way BC4 does.
+
+Also outstanding: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers
+that give up mid-request, and the canary harness.
 
 ## Development
 
