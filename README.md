@@ -67,8 +67,8 @@ rather than avoided.
 ## Active Storage
 
 ```ruby
-config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformer
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::ImageAnalyzer
+config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Vips
+config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips
 config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
                                      ActiveStorage::HotCell::Client::VideoPreviewer ]
 ```

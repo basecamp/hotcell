@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-class TransformerTest < ActiveStorageHotCellClientTest
+class TransformersVipsTest < ActiveStorageHotCellClientTest
   # The contract Rails relies on: transform yields an open Tempfile positioned at the start, and closes and
   # unlinks it afterwards.
   def test_it_yields_an_open_rewound_tempfile_of_the_converted_image
@@ -101,7 +101,7 @@ class TransformerTest < ActiveStorageHotCellClientTest
 
   private
     def transformer(transformations)
-      ActiveStorage::HotCell::Client::Transformer.new transformations
+      ActiveStorage::HotCell::Client::Transformers::Vips.new transformations
     end
 
     def transform(transformations, name, format: "png", &block)

@@ -1471,9 +1471,10 @@ the two together.
 Three classes an application configures Rails with, each a `HotCell::Client`.
 
 ```ruby
-config.active_storage.variant_processor = ActiveStorage::HotCell::Transformer
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::ImageAnalyzer
-config.active_storage.previewers = [ ActiveStorage::HotCell::PdfPreviewer, ActiveStorage::HotCell::VideoPreviewer ]
+config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Vips
+config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips
+config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
+                                     ActiveStorage::HotCell::Client::VideoPreviewer ]
 ```
 
 `variant_processor` accepting a class is [rails/rails#58384](https://github.com/rails/rails/pull/58384),
@@ -1504,7 +1505,7 @@ before any configuration is read. The engine builds its default analyzers array 
 `ruby-vips` from the bundle, which then breaks that default array. Whether that is worth doing is the
 application's call; what is not available is doing it by configuration alone.
 
-`Transformer#process` must return an open `Tempfile`, per `ActiveStorage::Transformers::Transformer`.
+`Transformers::Vips#process` must return an open `Tempfile`, per `ActiveStorage::Transformers::Transformer`.
 
 ### Rails supplies no degradation, and three gaps to close
 
