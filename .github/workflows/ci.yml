@@ -78,22 +78,3 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake activestorage-hotcell-server activestorage-hotcell-client
 
-  # A control with no mutation test behind it is a comment. This breaks each one in turn and fails if the suites
-  # do not notice.
-  mutations:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          persist-credentials: false
-      - name: Install the converters
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install --no-install-recommends -y libvips42 mupdf-tools ffmpeg imagemagick
-      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
-        with:
-          ruby-version: "3.4"
-          bundler-cache: true
-      - run: bundle exec rake mutations

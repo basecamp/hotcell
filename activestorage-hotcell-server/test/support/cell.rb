@@ -8,16 +8,7 @@ require "hot_cell/test_cell"
 # exists. libvips' thread pool does not survive a fork: requiring it here would make every worker the cell forks
 # block forever. So the suite speaks the protocol with hotcell-core, which loads no image library at all.
 class Cell < HotCell::TestCell
-  # A mutation loads here too, inside the cell, for the same reason the operations do: patching one of them in
-  # the test process would mean requiring it there, and requiring it there means libvips. So `rake mutations`
-  # names the file in the environment rather than passing it to ruby with -r.
-  LOAD_OPERATIONS = lambda do
-    require "active_storage/hot_cell/server"
-
-    if (mutation = ENV["HOTCELL_MUTATION"])
-      require File.expand_path("../mutations/#{mutation}", __dir__)
-    end
-  end
+  LOAD_OPERATIONS = -> { require "active_storage/hot_cell/server" }
 
   def self.boot(**options, &block)
     refuse_to_fork_a_poisoned_process

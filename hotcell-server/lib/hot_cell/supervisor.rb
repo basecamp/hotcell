@@ -233,10 +233,11 @@ module HotCell
       # be available when nothing else is, and it runs inside the loop every conversion depends on — so
       # anything raised while answering a scrape would stop the cell serving.
       #
-      # **Unproven, on purpose.** `reuse: :unlimited` used to reach this, because a Symbol is not JSON-native
-      # and a cell configured that way could not describe itself. Configuration#to_h now reports it as a
-      # String, so nothing left in describe or metrics can raise here and no test can catch this rescue being
-      # removed. There is no mutation for it, and it stays for the same reason as the buffered read above.
+      # **No test, because nothing can currently raise here.** `reuse: :unlimited` used to: a Symbol is not
+      # JSON-native, so a cell configured that way could not describe itself. Configuration#to_h reports it as
+      # a String now, and nothing else describe or metrics returns is unserializable. The rescue stays for the
+      # next field added to either — one unserializable value would otherwise stop the cell serving
+      # conversions, and this channel exists to answer when nothing else does.
       def answer_control(connection, line)
         response = begin
           @control_handler.answer(line, running: running, queued: @queue.size).to_line
@@ -360,10 +361,13 @@ module HotCell
       # carries two reports cannot strand the second in this process's own IO buffer, where the kernel buffer
       # is empty and select will never fire again.
       #
-      # **Unproven, on purpose.** Neither hazard has a reachable trigger: a report is one small write, well
-      # under PIPE_BUF, and 160 requests across four concurrent callers at reuse 8 never coalesced two of them
-      # into one read. So there is no mutation for this — one that nothing catches would fail the mutation
-      # task forever. It stays because it closes a whole class of cell death for a few lines.
+      # **No test, because neither hazard can be triggered as the code stands.** A report is one small write,
+      # well under PIPE_BUF, so a worker cannot write half of one; and 160 requests across four concurrent
+      # callers at reuse 8 never coalesced two reports into a single read. Both defences are here for the
+      # change that makes them reachable — a longer report, or a worker that writes in more than one call —
+      # after which a blocking read parks the loop enforcing every deadline, and a stranded second report
+      # leaves the supervisor waiting on a worker that already answered. Both kill the cell, and both cost
+      # about four lines to prevent.
       def child_reported(socket)
         child = @children.each_value.find { |candidate| candidate.control.socket == socket }
         return if child.nil?
