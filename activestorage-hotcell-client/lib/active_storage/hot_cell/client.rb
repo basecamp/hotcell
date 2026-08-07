@@ -8,6 +8,7 @@ require "active_storage/hot_cell/client/transformations"
 require "active_storage/hot_cell/client/transformer"
 require "active_storage/hot_cell/client/image_analyzer"
 require "active_storage/hot_cell/client/previewers"
+require "active_storage/hot_cell/client/railtie" if defined?(::Rails::Railtie)
 
 module ActiveStorage
   module HotCell
@@ -16,53 +17,30 @@ module ActiveStorage
     # and a cell is forked from a process that may well have loaded this one — after which a shared name is a
     # superclass mismatch while the cell boots. Two namespaces make that impossible rather than avoided.
     module Client
-      # The jobs that carry this work retry nothing a cell can transiently answer.
+      # These four jobs declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob does
+      # not retry by default. They should retry the transient class too: `capacity` most obviously, and every
+      # other transient verdict. The policy matches the one they already declare, so a cell failure and an
+      # integrity failure back off the same way.
       #
-      # TransformJob, AnalyzeJob, PreviewImageJob and CreateVariantsJob each declare `retry_on ActiveStorage::IntegrityError` and
-      # nothing else, and ActiveJob has no default retry — so `capacity`, the one verdict whose entire purpose is
-      # "try later", fails its job outright on the first attempt.
-      #
-      # This is opt-in rather than a railtie, because it reaches into an application's job classes and an
-      # application should be able to see that happening in its own initializer.
-      #
-      #   ActiveStorage::HotCell::Client.retry_transient_failures!
-      #
-      # `:polynomially_longer` is deliberately not the default here. Its first retry lands around three seconds
-      # later, and three seconds after a cell answered `capacity` it is still saturated — that is a thundering
-      # herd rather than a backoff.
+      # Which of these classes exists depends on the Rails version, so a name that is not loaded is skipped.
       JOBS = %w[
-        ActiveStorage::TransformJob ActiveStorage::AnalyzeJob
-        ActiveStorage::PreviewImageJob ActiveStorage::CreateVariantsJob
+        ActiveStorage::AnalyzeJob
+        ActiveStorage::CreateVariantsJob
+        ActiveStorage::PreviewImageJob
+        ActiveStorage::TransformJob
       ].freeze
 
+      RETRY = { wait: :polynomially_longer, attempts: 10 }.freeze
+
       class << self
-        def retry_transient_failures!(wait: 30.seconds, attempts: 5, jobs: JOBS)
+        # The railtie calls this from a to_prepare block. Applied once at boot it would not survive a code
+        # reload: a gem engine's app/jobs is in the reloadable autoloader, so these classes are discarded and
+        # redefined, and the retry would silently disappear after the first file save in development.
+        def retry_transient_failures!(jobs: JOBS)
           transient = TransformImage.cell.transient
 
           jobs.filter_map { |name| Object.const_get(name) if Object.const_defined?(name) }
-              .each { |job| job.retry_on transient, wait: wait, attempts: attempts }
-        end
-
-        # Assert this rather than trusting that a configuration assignment took effect, because two obvious ways
-        # of installing a transformer do not work and neither says so.
-        #
-        # Assigning ActiveStorage.variant_transformer from an initializer is silently overwritten during boot: the
-        # engine assigns it from a config.after_initialize hook that runs later, and so does an application's own
-        # after_initialize, since application railtie hooks run before the engine's. Prepending onto whatever
-        # ActiveStorage.variant_transformer resolves to from a to_prepare block raises instead, because to_prepare
-        # runs earlier still and the value is nil.
-        #
-        # So the only thing worth checking is the end state.
-        def verify_installation!
-          installed = ActiveStorage.variant_transformer
-
-          return true if installed && (installed <= Transformer || installed.ancestors.include?(Transformer))
-
-          raise ::HotCell::ConfigurationError,
-                "ActiveStorage.variant_transformer is #{installed.inspect}, so variants are not going through a " \
-                "cell. Set `config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformer`, and " \
-                "note that assigning ActiveStorage.variant_transformer directly from an initializer is silently " \
-                "overwritten by the engine later in boot."
+              .each { |job| job.retry_on transient, **RETRY }
         end
       end
     end

@@ -86,9 +86,8 @@ application image both answer false, `previewable?` goes false with them, and pr
 exception and no alert.
 
 **The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob`, `PreviewImageJob` and `CreateVariantsJob` each
-declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob has no default retry — so
-`capacity`, the one verdict whose whole point is "try later", fails its job outright on the first attempt.
-`ActiveStorage::HotCell::Client.retry_transient_failures!` teaches them the transient class.
+declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob does not retry by default. The
+railtie adds the transient class to all four, on the same policy they already use.
 
 ## How it works
 
@@ -132,9 +131,9 @@ Active Storage operations converting real images, PDFs and video, and the transf
 Rails is configured with.
 
 `activestorage-hotcell-client` depends on [rails/rails#58384](https://github.com/rails/rails/pull/58384), which
-is unmerged — the Gemfile pins the branch. Without it a class value leaves `ActiveStorage.variant_transformer`
-at `nil` and the first variant dies with `NoMethodError` rather than a boot error, which is what
-`ActiveStorage::HotCell::Client.verify_installation!` exists to catch.
+is unmerged — the Gemfile pins the branch. Without it a class value matches none of the arms the engine
+assigns `ActiveStorage.variant_transformer` from, so it is left at `nil` and the first variant dies with
+`NoMethodError`. The PR adds a `Class` arm, and an `else` that raises at boot.
 
 Not yet: the `inline` transport for an application's own unit tests, a `cancelled` counter for callers that give
 up mid-request, and the canary harness.
