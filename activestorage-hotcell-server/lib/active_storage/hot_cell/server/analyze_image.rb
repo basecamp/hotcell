@@ -31,8 +31,8 @@ module ActiveStorage
         end
 
         private
-          # `pages` is what tells a caller whether asking for `animated: true` would mean anything, and it is one
-          # of the things BC4's own analyzer produces that Rails' does not.
+          # `pages` is what tells a caller whether asking for `loader: { n: -1 }` would mean anything, and it is
+          # one of the things BC4's own analyzer produces that Rails' does not.
           def frames_of(image)
             pages = image.get("n-pages").to_i
             { pages: pages, animated: pages > 1 }

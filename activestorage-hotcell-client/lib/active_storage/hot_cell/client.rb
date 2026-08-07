@@ -4,7 +4,6 @@ require "active_storage"
 
 require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
-require "active_storage/hot_cell/client/transformations"
 require "active_storage/hot_cell/client/transformer"
 require "active_storage/hot_cell/client/image_analyzer"
 require "active_storage/hot_cell/client/previewers"

@@ -1578,19 +1578,19 @@ The specific trap: `ActiveStorage::Representations::ProxyController#show` wraps 
 Operation implementations, and the gem BC4 extends. At minimum `transform_image`, `analyze_image`,
 `preview_pdf`, `preview_video`, `probe_media`.
 
-**Loader and saver options are the operation's, never the caller's.** They do not appear in the payload
-and are not in the operation allowlist. `transform_image` chooses them from the detected input format
-and the requested output format: `page: 0` normally, every frame for an animated source that the caller
-asked to keep animated, and its own saver quality.
+**`loader` and `saver` reach the library, and that is a deferred decision rather than a settled one.**
+`transform_image` builds `loader(page: 0)` first, so a hundred-frame GIF is not decoded in full to make one
+thumbnail, and a caller's own `loader` merges over it through `apply` — which is exactly how Rails composes the
+two. Every other key is checked against the operation's allowlist of transformation names.
 
-Where callers genuinely differ, they say so with intent rather than with library keywords. Preserving a
-GIF's frames is `animated: true` in the payload, and the operation turns that into `loader: { n: -1 }`.
+The intended end state is an explicit allowlist of what may appear *inside* `loader` and `saver`: `page`, `n`,
+`quality`, `strip` yes; `unlimited`, `access`, `fail-on`, `revalidate` no. Deriving that list is non-trivial and
+it is a feature on its own. Until it exists, pass-through is Rails' behaviour inside a sandbox, which is
+strictly better than Rails' behaviour outside one.
 
-**Two saver options are exceptions, on purpose rather than by omission.** `quality` and `strip` are already
-signed into variant URLs minted years ago that never expire, so refusing them would break images in mail nobody
-can recall. They arrive as intent — "smaller", "no metadata" — with the operation still choosing what that means
-for the format it is writing. Worth knowing while reading those URLs: both raise on the vips path today, so they
-only ever worked on `mini_magick`, which is where they come from.
+Worth knowing while reading old URLs: top-level `quality` and `strip`, and `coalesce`, all raise on the vips
+path. They only ever worked on `mini_magick`, which is where they come from, and making them work again is the
+ImageMagick-compatible transformer rather than a translation table.
 
 **Upstream reached the same conclusion, for a narrower reason, and the gap it left is the argument here.**
 Rails commit `1ca278a6` removed `apply`, `loader`, and `saver` from
@@ -1607,29 +1607,39 @@ of defence, it is the only one.
 
 The compatibility squeeze is nonetheless live, on the `mini_magick` side. HEY runs `:mini_magick`, so the
 allowlist binds, and it has three live URL-minting call sites passing `loader: { page: nil }` — so it
-**re-adds `loader` to the allowlist in an initializer** to keep animated GIFs working. An intent flag is
-what lets an application keep the CVE closed and keep animated GIFs, rather than choosing.
+**re-adds `loader` to the allowlist in an initializer** to keep animated GIFs working. Moving that
+application into a cell does not by itself resolve the squeeze; what resolves it is that a cell running
+`mini_magick` cannot reach a shell worth injecting into.
 
-**But the mapping happens at the client boundary, not by changing what callers pass.** This is the part
-that is easy to get fatally wrong. A variant's address is a signed serialization of the whole
-transformations hash, carried inside the URL itself rather than looked up server-side, and it never
-expires. So an email sent last year carries `loader: { page: nil }, coalesce: true` and will still decode
-to that hash in five years, and the app hands it straight to the transformer. Three consequences:
+**The client passes the transformations hash through, and this was tried the other way first.** A variant's
+address is a signed serialization of the whole transformations hash, carried inside the URL itself rather than
+looked up server-side, and it never expires. So an email sent last year carries
+`loader: { page: nil }, coalesce: true` and will still decode to that hash in five years, and the app hands it
+straight to the transformer. The client therefore held a mapping table from every historical shape onto a closed
+payload — `loader: { page: nil }` plus `coalesce: true` became `animated: true`, and so on.
 
-1. **The transformer must accept the retired shapes permanently.** Removing `loader` from what the client
-   understands is what would break every image in every email ever sent. Not changing what new callers
-   pass — that breaks nothing.
-2. **So `activestorage-hotcell-client` owns a mapping table** from every historical transformation shape
-   onto the closed payload: `loader: { page: nil }` plus `coalesce: true` becomes `animated: true`, and so
-   on. It maps incoming transformations; it does not ask callers to change. BC4's `RewriteTransformations`
-   is the same fix one layer out and is worth citing as precedent, but the spec should be explicit that
-   HotCell puts it in the client.
-3. **Changing the hash for new callers is not free either.** It mints a new URL segment and a new
-   `variation_digest`, so every `variant_records` row for the old shape is orphaned — still attached to the
-   blob, reaped only when the blob is deleted. With `track_variants` off, the stored object key is
-   variation-derived too and those objects are orphaned as well. Budget for a doubled variant footprint on
-   touched blobs rather than pricing the change at zero. Hash insertion order counts as well: reordering
-   the same three pairs mints a different key.
+**That table was withdrawn, because it was two unbuilt features wearing one coat.** Dropping `loader` and
+`saver` was a partial, implicit allowlist. Translating `coalesce` was partial, implicit ImageMagick
+compatibility. Neither was complete, and together they meant an unrecognised library keyword was silently
+dropped and the variant came back subtly wrong rather than refused. Both belong in the open: an explicit
+allowlist of what may appear inside `loader` and `saver`, and an ImageMagick-compatible transformer and
+analyzer alongside the vips ones. Until those exist the client passes the hash through, which is what Rails
+does, and an application that has mini_magick-shaped URLs rewrites them at its own boundary the way BC4's
+`RewriteTransformations` already does.
+
+**Pass-through is acceptable here and not in a plain Rails application, and the reason is the sandbox.** A
+caller can set `loader: { unlimited: true }`, which removes libvips' own denial-of-service limits — the same
+capability Rails gives a caller today. The cell's limits are outside the library: `RLIMIT_DATA`,
+`RLIMIT_FSIZE` and the supervisor's wall-clock deadline still apply, so a decode libvips has been told not to
+bound costs the caller a killed worker and a transient verdict. The operation's own allowlist of transformation
+names still stands, and it remains the only one on the vips path.
+
+**Changing the hash for new callers is not free either.** It mints a new URL segment and a new
+`variation_digest`, so every `variant_records` row for the old shape is orphaned — still attached to the blob,
+reaped only when the blob is deleted. With `track_variants` off, the stored object key is variation-derived too
+and those objects are orphaned as well. Budget for a doubled variant footprint on touched blobs rather than
+pricing the change at zero. Hash insertion order counts as well: reordering the same three pairs mints a
+different key.
 
 Three details of the mechanism, each of which has bitten someone:
 
