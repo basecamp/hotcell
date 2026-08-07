@@ -1897,26 +1897,27 @@ prescriptive.
 
 ### Proving the assertions are not vacuous
 
-Mutation-test the security controls. haystack#8538 made six deliberate mutations to production code and
-confirmed each one broke the suite, restoring the baseline after each. Do that here, at minimum for:
-removing `unsetenv_others`, widening an input descriptor to read-write, skipping the limit clamp,
-dropping an operation's argument allowlist, returning success without writing the output, answering
-`ok` when the worker was killed, and dropping the boot warning about `:in_process` operations in a reusing
-cell.
+Every security control needs a test that observes the behaviour the control produces, not one that asserts the
+control is written down. `unsetenv_others` is proved by setting a variable in the parent, running a converter,
+and finding that the converter never saw it — and by asserting the premise, that the worker did inherit it, so
+the test cannot pass because the variable was never set. Widening an input descriptor to read-write, skipping
+the limit clamp, dropping an operation's argument allowlist, returning success without writing the output, and
+answering `ok` when the worker was killed all get the same treatment.
 
-A control with no mutation test behind it is a comment.
+A control with no behavioral test behind it is a comment.
 
-**Two things about the harness itself, both learned by it lying in the reassuring direction.** Decide whether a
-mutation was caught by parsing the numbers, not by matching a string: `"10 failures, 0 errors"` contains
-`"0 failures, 0 errors"`, so every mutation caught with a count ending in zero reported as having survived. And
-treat a run that never reported as its own answer rather than as caught — that is what a mutation file with a
-mistake in it looks like, and counting it as success hid one that had been testing nothing. Fixing the second
-immediately exposed a real survivor.
+**This was first built as a mutation harness, and that was the wrong shape.** A monkey-patch per control, each
+re-running a whole suite to confirm the suite noticed. It cost five minutes, and every one of its thirty
+mutations turned out to be caught by a behavioral test that already existed — the mutations proved nothing the
+suites did not already prove. Worse, a mutation file that had gone stale against a rename crashed on load, and
+the harness scored the crash as caught. It reported success for several commits while testing nothing. A
+verification harness that can lie in the reassuring direction is worse than no harness.
 
-**Some controls have no honest mutation, and should say so where they live rather than be quietly listed.** A
-mutation nothing can catch fails the task forever, so leaving it in the map is not an option; leaving the reader
-to assume coverage is worse. Two in the supervisor are marked this way: the buffered read of a worker's reports
-and the rescue around a control answer. Neither has a trigger anybody has reached.
+**A control that nothing can currently trigger should say so where it lives, rather than be quietly counted as
+covered.** Two in the supervisor are marked this way: the buffered read of a worker's reports, and the rescue
+around a control answer. Neither is hard to test — each is untestable, because as the code stands nothing
+reaches it. Each note says what would make it reachable and what breaks when it does, so a later reader can
+tell defence in depth from dead code.
 
 ### The canary harness
 

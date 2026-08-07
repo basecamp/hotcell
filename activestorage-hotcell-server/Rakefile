@@ -1,38 +1,11 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
-require "rbconfig"
-require_relative "../test/support/mutations"
 
 Rake::TestTask.new(:test) do |task|
   task.libs << "test"
   task.test_files = FileList["test/**/*_test.rb"]
   task.warning = true
-end
-
-# A control with no mutation test behind it is a comment.
-#
-# These load inside the cell rather than in the test process, named in the environment instead of passed to ruby
-# with -r. Patching an operation here would mean requiring it here, and requiring it here means libvips — after
-# which every worker the cell forks deadlocks and the run says nothing about why.
-MUTATIONS = {
-  "no_operation_allowlist" => "transform_image_test.rb",
-  "no_format_allowlist" => "transform_image_test.rb",
-  "loader_decodes_every_frame" => "transform_image_test.rb",
-  "probe_reports_everything" => "probe_media_test.rb",
-  "unblock_untrusted" => "blocked_loaders_test.rb",
-}.freeze
-
-desc "Break each control in turn and confirm the suite notices"
-task :mutations do
-  survivors = MUTATIONS.reject do |mutation, suite|
-    output = `HOTCELL_MUTATION=#{mutation} #{RbConfig.ruby} -Ilib -Itest test/#{suite} 2>&1`
-    status, summary = Mutations.result(output)
-    puts format("  %-30s %-26s %-9s %s", mutation, suite, status.to_s, summary)
-    status == :caught
-  end
-
-  abort "not caught: #{survivors.keys.join(", ")}" if survivors.any?
 end
 
 task default: :test

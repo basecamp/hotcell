@@ -144,7 +144,6 @@ up mid-request, and the canary harness.
 bundle install
 rake              # every suite
 rake hotcell      # only the suites that need no converter installed
-rake mutations    # break each control in turn and confirm the suites notice
 docker/smoke      # the only check that covers network: none and cap-drop
 ```
 
@@ -170,11 +169,13 @@ cannot carry a descriptor.
 
 What that leaves out is the isolation, which is verified on Linux by `docker/smoke` and in CI.
 
-### Mutation testing
+### Testing a control
 
 Security controls here fail silently, so a test that would still pass with the control removed is worse than
-no test: it reads as assurance. `rake mutations` monkey patches one control away at a time and fails if the
-suite does not notice. A control with no mutation test behind it is a comment.
+no test: it reads as assurance. Every control is covered by a test that observes the behaviour the control
+produces, rather than by an assertion that the control is written down — `unsetenv_others: true` is proved by
+setting a variable, running a converter, and finding that the converter never saw it. Where a control has no
+reachable trigger and so cannot be tested, it says so where it lives.
 
 ## Design
 

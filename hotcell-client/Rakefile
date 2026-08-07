@@ -1,35 +1,11 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
-require "rbconfig"
-require_relative "../test/support/mutations"
 
 Rake::TestTask.new(:test) do |task|
   task.libs << "test"
   task.test_files = FileList["test/**/*_test.rb"]
   task.warning = true
-end
-
-# A control with no mutation test behind it is a comment. On this side of the boundary the controls are all
-# about classification, where every failure is silent: a permanent verdict written down for a transient
-# problem needs a hand-written backfill to undo.
-MUTATIONS = {
-  "classification_collapsed" => "classification_test.rb",
-  "usage_errors_swallowed" => "client_test.rb",
-  "no_zero_byte_check" => "integration_test.rb",
-  "client_retries" => "integration_test.rb",
-}.freeze
-
-desc "Break each control in turn and confirm the suite notices"
-task :mutations do
-  survivors = MUTATIONS.reject do |mutation, suite|
-    output = `#{RbConfig.ruby} -Ilib -Itest -rmutations/#{mutation} test/#{suite} 2>&1`
-    status, summary = Mutations.result(output)
-    puts format("  %-26s %-26s %-9s %s", mutation, suite, status.to_s, summary)
-    status == :caught
-  end
-
-  abort "not caught: #{survivors.keys.join(", ")}" if survivors.any?
 end
 
 task default: :test

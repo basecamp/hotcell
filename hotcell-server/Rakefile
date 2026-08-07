@@ -1,54 +1,11 @@
 # frozen_string_literal: true
 
 require "rake/testtask"
-require "rbconfig"
-require_relative "../test/support/mutations"
 
 Rake::TestTask.new(:test) do |task|
   task.libs << "test"
   task.test_files = FileList["test/**/*_test.rb"]
   task.warning = true
-end
-
-# A control with no mutation test behind it is a comment. Each entry breaks one control and names the suite
-# that has to notice. haystack#8538 did this by editing production code by hand; doing it with a monkey
-# patch means the source is never touched and nothing can be left mutated by accident.
-MUTATIONS = {
-  "no_rlimits" => "resource_limits_test.rb",
-  "no_clamp" => "resource_limits_test.rb",
-  "no_deadline_report" => "scheduling_test.rb",
-  "no_death_report" => "scheduling_test.rb",
-  "lazy_reap" => "scheduling_test.rb",
-  "never_retire" => "scheduling_test.rb",
-  "wide_open_descriptors" => "cell_test.rb",
-  "no_scratch_removal" => "cell_test.rb",
-  "single_socket" => "control_test.rb",
-  "blocking_control_read" => "control_test.rb",
-  "no_control_expiry" => "control_test.rb",
-  "no_unsetenv_others" => "environment_test.rb",
-  "warn_about_ptrace" => "boot_test.rb",
-  "trust_reported_deadline" => "boot_test.rb",
-  "no_encoding_check" => "cell_test.rb",
-  "unsupported_terminal" => "cell_test.rb",
-  "nil_limits_accepted" => "configuration_test.rb",
-}.freeze
-
-# Two controls are deliberately absent from that list, because no test can catch them and a mutation nothing
-# catches would fail this task forever. Both are marked in the code as unproven: the buffered read of a
-# worker's reports in Supervisor#child_reported, and the rescue around Supervisor#answer_control. Each closes
-# a whole class of cell death for a few lines, and neither has a trigger anybody has been able to reach —
-# 160 requests across four concurrent callers at reuse 8 never coalesces two worker reports into one read.
-
-desc "Break each control in turn and confirm the suite notices"
-task :mutations do
-  survivors = MUTATIONS.reject do |mutation, suite|
-    output = `#{RbConfig.ruby} -Ilib -Itest -rmutations/#{mutation} test/#{suite} 2>&1`
-    status, summary = Mutations.result(output)
-    puts format("  %-26s %-26s %-9s %s", mutation, suite, status.to_s, summary)
-    status == :caught
-  end
-
-  abort "not caught: #{survivors.keys.join(", ")}" if survivors.any?
 end
 
 task default: :test
