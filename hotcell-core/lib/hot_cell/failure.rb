@@ -57,8 +57,11 @@ module HotCell
       # A code this client has never heard of is not terminal. An old client will meet a code added
       # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
       # some work, while writing down a verdict that was temporary is irreversible.
+      # A `terminal` that is present but not a boolean is derived rather than believed. Truthiness would make
+      # any non-nil value permanent, and permanent is the answer that cannot be taken back — so a garbled
+      # field must not be able to say it.
       def from_wire(wire)
-        terminal = if wire.key?(:terminal)
+        terminal = if [ true, false ].include?(wire[:terminal])
           wire[:terminal]
         else
           Codes.known?(wire[:code]) && Codes.terminal?(wire[:code], limit: wire[:limit])

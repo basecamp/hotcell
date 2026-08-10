@@ -26,11 +26,19 @@ module HotCell
         new failure: failure, timing: timing
       end
 
+      # `ok` has to be the boolean it says it is rather than anything truthy. This is the field the whole
+      # taxonomy turns on, and Ruby's truthiness would read `"false"`, `0` and `[]` as success — so a
+      # malformed or hostile response could turn a failure into an `ok` carrying no result at all.
       def parse(line)
         parse_message(line) do |parsed|
+          ok = parsed[:ok]
+          unless ok == true || ok == false
+            raise MessageError, "response ok is #{ok.inspect} and must be true or false"
+          end
+
           timing = parsed[:timing].is_a?(Hash) ? parsed[:timing] : {}
 
-          if parsed[:ok]
+          if ok
             new version: parsed[:v], result: object(parsed, :result), timing: timing
           else
             new version: parsed[:v], failure: Failure.from_wire(object(parsed, :error)), timing: timing
