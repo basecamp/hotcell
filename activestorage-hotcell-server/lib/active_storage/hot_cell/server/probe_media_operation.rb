@@ -23,7 +23,7 @@ module ActiveStorage
       # tool's *output file* with an in-process media library is in-process decoding, because that is a decoder
       # running on bytes a tool just produced from a hostile document. Parsing a tool's structured stdout with
       # the standard library is not.
-      class ProbeMedia < ToolOperation
+      class ProbeMediaOperation < ToolOperation
         operation "active_storage.probe_media"
 
         limits deadline: 30, memory: 1024 * 1024**2, file_size: 48 * 1024**2, open_files: 128

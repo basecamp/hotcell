@@ -19,7 +19,7 @@ module ActiveStorage
       # It is also what keeps the `:subprocess` claim true. Reading the produced PNG here would mean parsing bytes
       # mutool just made out of a hostile PDF, in this worker, which is exactly what turns a subprocess operation
       # into an in-process one.
-      class PreviewPdf < ToolOperation
+      class PreviewPdfOperation < ToolOperation
         operation "active_storage.preview_pdf"
 
         limits deadline: 30, memory: 1024 * 1024**2, file_size: 48 * 1024**2, open_files: 128
