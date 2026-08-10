@@ -289,9 +289,9 @@ class CellTest < HotCellServerTest
     refute Dir.exist?(slot.scratch), "the scratch path is free for the next request"
     assert_equal 1, Dir.glob("#{slot.scratch}.discarded-*").size, "the tree is still there, out of the way"
 
-    slot.make_scratch
+    slot.sweep
 
-    assert_empty Dir.glob("#{slot.scratch}.discarded-*"), "the next worker on this slot sweeps it"
+    assert_empty Dir.glob("#{slot.scratch}.discarded-*"), "a worker sweeps it once nobody is waiting"
   end
 
   def test_scratch_is_gone_once_the_request_is_answered

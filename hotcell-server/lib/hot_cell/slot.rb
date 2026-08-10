@@ -27,9 +27,7 @@ module HotCell
       new number, File.join(workspace, number.to_s, "home"), File.join(workspace, number.to_s, "scratch")
     end
 
-    # Sweeps first, because the supervisor only renames. See discard_scratch.
     def make_scratch
-      sweep
       FileUtils.mkdir_p scratch, mode: 0o700
       scratch
     end
@@ -49,8 +47,9 @@ module HotCell
     # converter write an enormous tree and then hang buys a deletion the supervisor performs synchronously,
     # after the kill, inside the loop enforcing every other request's deadline.
     #
-    # A rename within one filesystem is O(1) and takes the tree out of the way. The unlinking is charged to
-    # the next worker on this slot, which is a process with a deadline and a SIGKILL waiting for it.
+    # A rename within one filesystem is O(1) and takes the tree out of the way. A worker sweeps it later,
+    # after it has answered and before it reports itself idle — see Worker#serve, which is the one window
+    # where the unlinking costs nobody's latency.
     def discard_scratch
       return unless Dir.exist?(scratch)
 
@@ -67,11 +66,12 @@ module HotCell
       sweep
     end
 
-    private
-      def sweep
-        Dir.glob("#{scratch}.discarded-*").each { |path| FileUtils.remove_entry path }
-      rescue SystemCallError
-        nil
-      end
+    # Unlinks whatever discard_scratch renamed out of the way. Partial progress is fine: a sweep killed
+    # part-way leaves fewer entries for the next one, so this converges rather than repeating.
+    def sweep
+      Dir.glob("#{scratch}.discarded-*").each { |path| FileUtils.remove_entry path }
+    rescue SystemCallError
+      nil
+    end
   end
 end
