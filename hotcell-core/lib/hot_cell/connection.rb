@@ -30,12 +30,23 @@ module HotCell
       socket
     end
 
+    # The descriptors ride the first sendmsg and the rest of the line follows as ordinary writes, because a
+    # stream socket does not promise that one sendmsg sends all of it. The return value used to be ignored:
+    # a short send that carried the ancillary data left the receiver holding the descriptors and waiting for
+    # a newline that never came, while this side moved on to waiting for a response. Both ends then sat
+    # until something else timed them out — and the caller's descriptors were installed in the cell either
+    # way, so it is not a case that fails safe.
+    #
+    # Ancillary data goes exactly once. Sending it again with a later chunk would install a second copy of
+    # every descriptor in the receiver.
     def send_message(line, descriptors: [])
-      if descriptors.empty?
+      sent = if descriptors.empty?
         socket.sendmsg line
       else
         socket.sendmsg line, 0, nil, Socket::AncillaryData.unix_rights(*descriptors.map(&:to_io))
       end
+
+      write_all line.byteslice(sent..) if sent < line.bytesize
     end
 
     # Returns [line, descriptors]. The line is nil when the peer closed without sending anything.
@@ -63,8 +74,9 @@ module HotCell
       raise
     end
 
+    # IO#write already loops until everything is written or it raises, which sendmsg does not.
     def write_line(line)
-      socket.write line
+      write_all line
     end
 
     # UTF-8 for the same reason receive_message forces it: a socket read comes back ASCII-8BIT, where every
@@ -100,6 +112,10 @@ module HotCell
     end
 
     private
+      def write_all(bytes)
+        socket.write bytes
+      end
+
       # Returns nil at end of stream. With no deadline this blocks, which is what the cell's own side wants —
       # it is bounded by the supervisor rather than by a clock here.
       def read_chunk(deadline)
