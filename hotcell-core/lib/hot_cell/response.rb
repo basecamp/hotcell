@@ -12,6 +12,12 @@ module HotCell
     attr_reader :version, :result, :failure, :timing
 
     class << self
+      include Fields
+
+      def noun
+        "response"
+      end
+
       def ok(result: {}, timing: {})
         new result: result, timing: timing
       end
@@ -21,27 +27,16 @@ module HotCell
       end
 
       def parse(line)
-        parsed = Payload.parse(line)
-        raise MessageError, "response is not a JSON object" unless parsed.is_a?(Hash)
+        parse_message(line) do |parsed|
+          timing = parsed[:timing].is_a?(Hash) ? parsed[:timing] : {}
 
-        timing = parsed[:timing].is_a?(Hash) ? parsed[:timing] : {}
-
-        if parsed[:ok]
-          new version: parsed[:v], result: object(parsed, :result), timing: timing
-        else
-          new version: parsed[:v], failure: Failure.from_wire(object(parsed, :error)), timing: timing
+          if parsed[:ok]
+            new version: parsed[:v], result: object(parsed, :result), timing: timing
+          else
+            new version: parsed[:v], failure: Failure.from_wire(object(parsed, :error)), timing: timing
+          end
         end
-      rescue JSON::ParserError => error
-        raise MessageError, "response is not valid JSON: #{error.message}"
       end
-
-      private
-        def object(parsed, key)
-          value = parsed[key]
-          return value if value.is_a?(Hash)
-
-          raise MessageError, "response #{key} is #{value.inspect} and must be a JSON object"
-        end
     end
 
     def initialize(result: nil, failure: nil, timing: {}, version: PROTOCOL_VERSION)

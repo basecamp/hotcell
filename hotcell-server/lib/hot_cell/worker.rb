@@ -99,8 +99,7 @@ module HotCell
         request = Request.parse(line)
 
         unless request.current_version?
-          return refuse("protocol", "this cell speaks v#{PROTOCOL_VERSION} and the request is " \
-                                    "v#{request.version}", timing)
+          return refuse("protocol", request.version_mismatch, timing)
         end
 
         operation = Registry.lookup(request.op)
@@ -194,7 +193,7 @@ module HotCell
       def line_for(response)
         response.to_line
       rescue SerializationError, MessageError => error
-        Response.failed(verdict("failed", error), timing: response.timing).to_line
+        Response.failed(Failure.for("failed", error), timing: response.timing).to_line
       end
 
       def record(response, timing)
@@ -206,15 +205,7 @@ module HotCell
       end
 
       def refuse(code, detail, timing, limit: nil)
-        Response.failed verdict(code, detail, limit: limit), timing: timing.to_h
-      end
-
-      def verdict(code, detail, limit: nil)
-        if detail.is_a?(Exception)
-          Failure.new code: code, limit: limit, error_class: detail.class.name, message: detail.message
-        else
-          Failure.new code: code, limit: limit, message: detail
-        end
+        Response.failed Failure.for(code, detail, limit: limit), timing: timing.to_h
       end
   end
 end
