@@ -33,15 +33,6 @@ class OperationTest < RegistryIsolatedTest
     assert_equal 300, Fixtures::Patient.limits.deadline
   end
 
-  def test_staging_defaults_to_paths_because_every_subprocess_tool_wants_a_filename
-    assert_equal :paths, TransformImage.stage
-    assert_equal :descriptors, Fixtures::Reverse.stage
-  end
-
-  def test_a_nonsense_staging_mode_is_refused
-    assert_raises(HotCell::ConfigurationError) { Class.new(HotCell::Operation) { stage :bytes } }
-  end
-
   def test_callbacks_collect_rather_than_replace
     assert_equal [ :required, :also_required ], Callbacks.new.tap { Callbacks.before_fork.each(&:call) }.log
   end

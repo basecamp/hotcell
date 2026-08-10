@@ -11,7 +11,7 @@ module HotCell
   # here, when `performing` is called.
   #
   # Phases accumulate as they complete, so a refusal reports the ones that finished before the failure. An
-  # `unreadable` verdict that arrives with `staging_ms` and no `convert_ms` says exactly where it got to.
+  # `unreadable` verdict that arrives with no `convert_ms` says exactly where it got to.
   class Timing
     attr_reader :queued_ms, :started
 
@@ -38,7 +38,7 @@ module HotCell
       { queued_ms: queued_ms, **@phases, perform_ms: Clock.ms_since(@base) }
     end
 
-    # The whole request as the cell saw it, including reading the message and staging. For the log line rather
+    # The whole request as the cell saw it, including reading the message. For the log line rather
     # than for the caller, who is told what performing cost.
     def elapsed_ms
       Clock.ms_since started

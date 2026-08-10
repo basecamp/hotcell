@@ -73,16 +73,15 @@ module HotCell
         end
     end
 
-    # An operation that reads what a caller gave it without a copy onto scratch, which is what an operation
-    # reading only a container header wants rather than a multi-gigabyte copy.
+    # An operation that reads what a caller gave it without a copy onto scratch: it never asks for a path,
+    # which is what an operation reading only a container header wants rather than a multi-gigabyte copy.
     class Reverse < HotCell::Operation
       operation "test.reverse"
-      stage :descriptors
 
       def perform(inputs, outputs, _payload)
         outputs.first.to_io.write inputs.first.to_io.read.reverse
 
-        { staged: !inputs.first.staged? }
+        { copied: inputs.first.staged? }
       end
     end
 

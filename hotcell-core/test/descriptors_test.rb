@@ -60,17 +60,45 @@ class DescriptorsTest < HotCellTest
     end
   end
 
-  def test_staging_an_input_copies_its_bytes_to_a_path_the_cold_side_never_named
+  def test_asking_an_input_for_its_path_copies_its_bytes_to_a_filename_the_cold_side_never_named
     with_file("source bytes") do |source|
       Dir.mktmpdir do |scratch|
         reading(source) do |io|
-          input = HotCell::Input.new(io)
-          staged = input.stage(File.join(scratch, "input"))
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
 
-          assert_equal "source bytes", File.binread(staged)
-          assert_equal staged, input.path
+          refute_predicate input, :staged?
+          assert_equal "source bytes", File.binread(input.path)
           assert_predicate input, :staged?
         end
+      end
+    end
+  end
+
+  def test_an_input_copies_once_and_answers_the_same_path_after_that
+    with_file("source bytes") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          named = 0
+          locate = lambda do
+            named += 1
+            File.join(scratch, "input")
+          end
+
+          input = HotCell::Input.new(io, scratch: locate)
+
+          assert_equal input.path, input.path
+          assert_equal 1, named
+        end
+      end
+    end
+  end
+
+  def test_a_descriptor_with_no_scratch_has_no_path
+    with_file("bytes") do |source|
+      reading(source) do |io|
+        error = assert_raises(HotCell::Error) { HotCell::Input.new(io).path }
+
+        assert_match "has no scratch", error.message
       end
     end
   end
@@ -85,8 +113,7 @@ class DescriptorsTest < HotCellTest
     with_file do |destination|
       Dir.mktmpdir do |scratch|
         writing(destination) do |io|
-          output = HotCell::Output.new(io)
-          output.stage File.join(scratch, "output")
+          output = HotCell::Output.new(io, scratch: -> { File.join(scratch, "output") })
           File.binwrite output.path, "converted"
 
           assert_equal 9, output.post
@@ -102,8 +129,8 @@ class DescriptorsTest < HotCellTest
     with_file do |destination|
       Dir.mktmpdir do |scratch|
         writing(destination) do |io|
-          output = HotCell::Output.new(io)
-          output.stage File.join(scratch, "never-written")
+          output = HotCell::Output.new(io, scratch: -> { File.join(scratch, "never-written") })
+          output.path
 
           assert_equal 0, output.post
         end

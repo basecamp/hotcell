@@ -124,7 +124,6 @@ module HotCell
       def convert(operation, inputs, outputs, payload, timing)
         timing.performing
 
-        timing.measure(:staging_ms) { stage inputs, outputs } if operation.stage == :paths
         result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, payload) }
         written = timing.measure(:writeback_ms) { outputs.map(&:post) }
 
@@ -165,14 +164,14 @@ module HotCell
                               "#{received.size} arrived"
         end
 
-        [ received.first(request.inputs).map { |io| Input.new(io) },
-          received.last(request.outputs).map { |io| Output.new(io) } ]
+        [ received.first(request.inputs).map.with_index { |io, index| Input.new(io, scratch: scratch("input-#{index}")) },
+          received.last(request.outputs).map.with_index { |io, index| Output.new(io, scratch: scratch("output-#{index}")) } ]
       end
 
-      def stage(inputs, outputs)
-        scratch = slot.make_scratch
-        inputs.each_with_index { |input, index| input.stage File.join(scratch, "input-#{index}") }
-        outputs.each_with_index { |output, index| output.stage File.join(scratch, "output-#{index}") }
+      # A descriptor stages itself when the operation first asks for its path, so a request whose
+      # operation reads the descriptors directly never creates the directory at all.
+      def scratch(name)
+        -> { File.join(slot.make_scratch, name) }
       end
 
       # Tracks the last operation configured for rather than every one ever seen. Above `max_requests_per_worker: 1`

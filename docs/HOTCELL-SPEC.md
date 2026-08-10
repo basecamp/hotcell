@@ -239,8 +239,8 @@ app process                                supervisor                       pid 
                                              reads the request, resolves the operation
                                              runs before_worker_boot
                                              applies limits
-                                             posts inputs to its slot's scratch
                                              runs perform
+                                               an input copies itself to scratch when asked for a path
                                              posts outputs, flushes
                        ◄─────────────────     one JSON line, then exits or waits
 ```
@@ -579,10 +579,10 @@ slow. See "Instrumentation".
 collector, so anything it knows about its own internals has to travel back in the response or not at all:
 
 ```json
-"timing":{"queued_ms":0,"staging_ms":3,"convert_ms":41,"writeback_ms":2,"perform_ms":47}
+"timing":{"queued_ms":0,"convert_ms":44,"writeback_ms":2,"perform_ms":47}
 ```
 
-Those three sum to roughly `perform_ms` and cost nothing to collect. The client turns them into child spans
+Those phases sum to roughly `perform_ms` and cost nothing to collect. The client turns them into child spans
 in the application's own tracer, so a trace shows where time went inside the cell without the cell speaking
 any tracing protocol. An operation may add its own keys; the client should treat the map as open.
 
@@ -1078,14 +1078,14 @@ connection closes.
    received descriptor either way, including any it will not use.
 4. Run `before_worker_boot` for the resolved operation.
 5. Narrow to the **operation's** limits, clamped to the cell's, **before reading any untrusted byte.**
-6. Post the inputs to the scratch directory in its slot.
-7. Run `perform`, timing it.
-8. Post the outputs and flush.
-9. Write the response with the timing, remove the scratch directory, and report itself idle.
-10. At `max_requests_per_worker: 1`, or once `max_requests_per_worker` requests are served, exit without running finalizers.
+6. Run `perform`, timing it. An input copies itself to the scratch directory in the worker's slot when
+   the operation first asks for its path, and never otherwise.
+7. Post the outputs and flush.
+8. Write the response with the timing, remove the scratch directory, and report itself idle.
+9. At `max_requests_per_worker: 1`, or once `max_requests_per_worker` requests are served, exit without running finalizers.
 
-At `max_requests_per_worker: 1` steps 2 through 9 happen once and step 10 is immediate, which is the same shape as a worker
-that exists only for one request. Above `1` the worker loops over steps 2 to 9, and `before_worker_boot`
+At `max_requests_per_worker: 1` steps 2 through 8 happen once and step 9 is immediate, which is the same shape as a worker
+that exists only for one request. Above `1` the worker loops over steps 2 to 8, and `before_worker_boot`
 still runs once — after the fork, before the first request.
 
 **Set the soft limit and leave the hard limit at the cell's ceiling.** An unprivileged process can raise a soft
@@ -1106,17 +1106,17 @@ forked, so its `/proc/self/environ` is fixed and `ENV.delete` does not change wh
 `exec`ed child is different, and writing its environment in full is the only point where we control
 what a converter's `/proc/<pid>/environ` shows.
 
-Posting inputs to scratch is the general model, not a workaround. Every subprocess tool wants a path:
+Staging inputs to scratch is the general model, not a workaround. Every subprocess tool wants a path:
 `image_processing` is filename-in and filename-out, and mutool, ffmpeg, and ffprobe take paths. Copying
 gives the tool a path the cold side never named.
 
-**Step 6 is skippable, and for large inputs it has to be.** An operation that can consume a descriptor
-directly — `ffprobe` reads only a container header — should not be made to copy a multi-gigabyte input
-onto a 512MB tmpfs first. That is not a corner case: it is the reason thimble's video role abandoned
-descriptors for a read-only shared volume, having measured the alternative at roughly 300× I/O
-amplification on its commonest call. So an operation declares whether it needs paths, and one that does
-not gets the descriptors as they arrived. An operation that does need paths is bounded by the cell's
-tmpfs, and that bound has to be sized against `concurrency`, not against one request.
+**The copy happens on demand, and for large inputs it has to be avoidable.** An input stages itself
+when the operation first asks for its path, so an operation that can consume a descriptor directly —
+`ffprobe` reads only a container header — never copies a multi-gigabyte input onto a 512MB tmpfs first.
+That is not a corner case: it is the reason thimble's video role abandoned descriptors for a read-only
+shared volume, having measured the alternative at roughly 300× I/O amplification on its commonest call.
+An operation that does ask for paths is bounded by the cell's tmpfs, and that bound has to be sized
+against `concurrency`, not against one request.
 
 Limits are per-operation because one set does not fit. Thirty CPU seconds suits a JPEG, is far too
 generous for analysis, and is hopeless for video. The cell clamps every declaration against its own
@@ -1987,9 +1987,9 @@ posted in at all. thimble's video role hit this and switched: a 3GB blob will no
 tmpfs at any body limit, and `ffprobe` reads only a container header, so store-and-forward measured at
 roughly 300× I/O amplification on its commonest call. Note carefully what this is *not* an argument
 against — descriptor passing has no such problem, because the descriptor already refers to a file on the
-application's own filesystem. The amplification comes from the **copy** in worker step 6, not from the
-transport. So the fix is per-operation and stays inside this design: an operation that can consume a
-descriptor directly should not be made to stage its input. See section 4.
+application's own filesystem. The amplification comes from the **copy** an input performs when asked
+for its path, not from the transport. So the fix is per-operation and stays inside this design: an
+operation that can consume a descriptor directly never asks, and never pays. See section 4.
 
 ## Appendix B. What the overhead measures at
 

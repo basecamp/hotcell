@@ -29,7 +29,8 @@ class TransformImage < HotCell::Operation
   before_worker_boot { Vips.concurrency_set 4 }
 
   def perform(inputs, outputs, payload)
-    # inputs and outputs are descriptors the caller opened, staged onto this worker's own scratch
+    # inputs and outputs are descriptors the caller opened; asking one for its path stages it onto
+    # this worker's own scratch, and reading the descriptor directly never pays for the copy
   end
 end
 ```
