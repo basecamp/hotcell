@@ -155,6 +155,36 @@ class ConnectionTest < HotCellTest
     assert_raises(HotCell::MessageError) { cold.read_line }
   end
 
+  # The deadline covers the whole line, not the wait for its first byte. A peer that sends one byte inside
+  # the timeout and then stops used to hold the caller until the cell's own deadline — and forever against a
+  # peer that never closed, on a path an application may be calling from a web request.
+  def test_a_peer_that_stalls_after_one_byte_still_hits_the_deadline
+    hot.write_line "{"
+
+    elapsed = elapsed do
+      assert_raises(HotCell::ReadTimeout) { cold.read_line(deadline: HotCell::Clock.now + 0.2) }
+    end
+
+    assert_operator elapsed, :<, 2, "the deadline should have fired, not the peer"
+  end
+
+  # A stream socket does not promise one write arrives as one read, so the deadline loop has to keep going
+  # until the newline rather than treating the first chunk as the message.
+  def test_a_line_that_arrives_in_pieces_is_read_whole
+    whole = HotCell::Response.ok(result: { width: 800 }).to_line
+    split = whole.bytesize / 2
+
+    Thread.new do
+      hot.write_line whole.byteslice(0, split)
+      sleep 0.05
+      hot.write_line whole.byteslice(split..)
+    end
+
+    line = cold.read_line(deadline: HotCell::Clock.now + 5)
+
+    assert_equal({ width: 800 }, HotCell::Response.parse(line).result)
+  end
+
   private
     def cold
       @cold_connection ||= HotCell::Connection.new(@cold)

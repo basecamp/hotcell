@@ -70,12 +70,29 @@ module HotCell
     # UTF-8 for the same reason receive_message forces it: a socket read comes back ASCII-8BIT, where every
     # byte is "valid" and nothing downstream can tell a mis-encoded message from a good one. Both directions
     # should behave the same way, and the one that scrubs is Failure.
-    def read_line(limit: MAX_RESPONSE_BYTES)
-      line = socket.gets("\n", limit)
-      return nil if line.nil?
-      raise MessageError, "message passed #{limit} bytes with no newline" unless line.end_with?("\n")
+    #
+    # `deadline` is an absolute instant covering the whole line rather than a per-read timeout, because a
+    # per-read one bounds nothing. Waiting for the socket to be readable and then calling a blocking `gets`
+    # meant a peer that sent a single byte inside the timeout and then stopped held the caller until the
+    # cell's own deadline, or forever against a peer that never closed. Returns nil at end of stream, and
+    # raises Timeout when the deadline passes with the line incomplete.
+    def read_line(limit: MAX_RESPONSE_BYTES, deadline: nil)
+      buffer = "".b
 
-      line.force_encoding Encoding::UTF_8
+      until buffer.end_with?("\n")
+        chunk = read_chunk(deadline)
+
+        if chunk.nil?
+          return nil if buffer.empty?
+
+          raise MessageError, "message ended after #{buffer.bytesize} bytes with no newline"
+        end
+
+        buffer << chunk
+        raise MessageError, "message passed #{limit} bytes with no newline" if buffer.bytesize > limit
+      end
+
+      buffer.force_encoding Encoding::UTF_8
     end
 
     def close
@@ -83,6 +100,22 @@ module HotCell
     end
 
     private
+      # Returns nil at end of stream. With no deadline this blocks, which is what the cell's own side wants —
+      # it is bounded by the supervisor rather than by a clock here.
+      def read_chunk(deadline)
+        if deadline
+          remaining = deadline - Clock.now
+
+          unless remaining.positive? && socket.wait_readable(remaining)
+            raise ReadTimeout, "the peer stopped mid-message and the deadline passed"
+          end
+        end
+
+        socket.readpartial CHUNK_BYTES
+      rescue EOFError
+        nil
+      end
+
       def line_from(buffer, limit)
         return nil if buffer.empty?
 
