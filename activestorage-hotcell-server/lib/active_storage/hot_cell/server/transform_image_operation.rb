@@ -16,7 +16,7 @@ module ActiveStorage
       # ImageProcessing does refuse a name that is not one of its own operations or a Vips::Image method, which
       # rules out `:system` and friends. What it leaves open is every one of libvips' several hundred image
       # operations, with caller-chosen arguments.
-      class TransformImage < VipsOperation
+      class TransformImageOperation < VipsOperation
         operation "active_storage.transform_image"
 
         limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256

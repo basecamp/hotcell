@@ -11,7 +11,7 @@ module ActiveStorage
       # with a string it splits with Shellwords. This does not take arguments from anybody: the caller says how
       # many seconds in to seek and nothing else, because `video_preview_arguments` is a shell string and a cell
       # exists so that a caller cannot choose what a tool runs.
-      class PreviewVideo < ToolOperation
+      class PreviewVideoOperation < ToolOperation
         operation "active_storage.preview_video"
 
         # Video is the reason a cell exists as a separate accessory. A preview measured in minutes and a thumbnail

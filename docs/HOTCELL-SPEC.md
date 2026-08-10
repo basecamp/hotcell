@@ -230,7 +230,7 @@ the tool with a working prototype already: see haystack#8538.
 cold side (privileged)                     hot side (unprivileged), one per cell
 ──────────────────────                     ─────────────────────────────────────
 app process                                supervisor                       pid 1
-  MyOperation < HotCell::Client              reads in operations, runs before_fork
+  TransformImage < HotCell::Client            reads in operations, runs before_fork
     wraps IOs as Input/Output                never evaluates image data
     validates the payload                    accepts, queues, dispatches with a slot
     connects to its cell's socket            times the deadline, kills, reaps, cleans up
@@ -712,8 +712,8 @@ otherwise regex, or accept that the wording is now versioned. Choosing by accide
 The operation declares only what is not an argument.
 
 ```ruby
-class TransformImage < HotCell::Operation
-  operation "active_storage.transform_image"     # defaults to the underscored class name
+class TransformImageOperation < HotCell::Operation
+  operation "active_storage.transform_image"     # defaults to the underscored class name, minus the suffix
 
   limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256
 
@@ -1204,7 +1204,9 @@ ArchiveFolder.perform_in_hotcell(inputs, outputs, payload)
 
 Routing is a class-level declaration rather than a call-site argument, so call sites stay free of
 deployment detail and several clients may name the same cell. The operation name defaults to the
-underscored class name and can be overridden. An unregistered server name raises at call time.
+underscored class name, minus a trailing `Operation`, and can be overridden — so a client named
+`ArchiveFolder` and a cell-side `ArchiveFolderOperation` derive the same wire name. An unregistered
+server name raises at call time.
 
 `HotCell::Client#perform_in_hotcell` wraps each IO as `Input` or `Output`, validates the payload,
 connects to its cell's socket, sends one request, reads one response, and translates `error.code` into

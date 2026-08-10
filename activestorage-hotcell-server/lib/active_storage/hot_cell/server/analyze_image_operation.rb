@@ -16,7 +16,7 @@ module ActiveStorage
       # `analyzed: true`. An undecodable image is recorded as successfully analyzed, forever, and nothing
       # re-enqueues AnalyzeJob. Here an undecodable input raises Vips::Error, the cell answers `unreadable`, and
       # the client decides — because only the client knows whether that verdict is safe to write down.
-      class AnalyzeImage < VipsOperation
+      class AnalyzeImageOperation < VipsOperation
         operation "active_storage.analyze_image"
 
         # Analysis reads a header rather than decoding a whole image, so it gets far less room than a transform.
