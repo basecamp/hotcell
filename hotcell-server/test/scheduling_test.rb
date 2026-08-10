@@ -45,6 +45,26 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
+  # The deadline has to reach what the request started, not only the Ruby process that started it. A
+  # converter is a grandchild — the worker spawns it — and killing the worker alone left it running, adopted
+  # by the supervisor as pid 1, with no deadline and nothing watching it.
+  def test_a_deadline_kills_what_the_worker_started_too
+    with_file do |path|
+      ENV["HOTCELL_SPAWNED_PID_PATH"] = path
+
+      TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
+        assert_failed "killed", cell.call("test.spawns", timeout: 20), limit: "deadline"
+
+        wait_until(what: "the worker to report what it spawned") { File.size(path).positive? }
+        spawned = Integer(File.read(path))
+
+        wait_until(what: "the spawned process to be gone") { !alive?(spawned) }
+      end
+    end
+  ensure
+    ENV.delete "HOTCELL_SPAWNED_PID_PATH"
+  end
+
   def test_a_deadline_breach_is_not_terminal
     TestCell.boot(deadline: 1) do |cell|
       refute_predicate assert_failed("killed", cell.call("test.uninterruptible", timeout: 20)), :terminal?
@@ -191,5 +211,12 @@ class SchedulingTest < HotCellServerTest
 
     def in_parallel(count, &block)
       count.times.map { Thread.new(&block) }.map(&:value)
+    end
+
+    def alive?(pid)
+      Process.kill 0, pid
+      true
+    rescue Errno::ESRCH
+      false
     end
 end

@@ -75,16 +75,20 @@ module HotCell
     # bytes than Linux, and control.sock is the longer of the two names, so it overflows first.
     SUN_PATH_MAX = RUBY_PLATFORM.include?("darwin") ? 104 : 108
 
-    # A cgroup kill and a deadline kill both arrive as SIGKILL, and a worker that dies on its own
-    # out-of-memory path takes SIGSEGV or SIGABRT — libvips dereferences null there after printing the
-    # correct diagnostic, and GLib's non-nullable g_malloc aborts. So all of these mean memory, and the
-    # deadline is told apart by the supervisor knowing it sent that signal itself.
+    # SIGKILL is deliberately absent, and its absence is the point. The supervisor's own deadline kill is
+    # already named by `killed_for`, so a SIGKILL arriving here came from somewhere this process cannot see —
+    # a cgroup OOM kill made on aggregate pressure, or a sibling worker, which shares a uid and is not
+    # prevented from signalling. Reading it as this request's memory condemned an input for someone else's
+    # pressure. It falls through to `signal`, which is not terminal.
+    #
+    # The three that remain are causally attributable: XFSZ is this worker passing RLIMIT_FSIZE, and SEGV,
+    # ABRT and TRAP are how libvips and GLib die on their own allocation failures — libvips dereferences null
+    # after printing the correct diagnostic, and g_malloc aborts.
     SIGNAL_LIMITS = {
       "XFSZ" => Codes::FSIZE,
       "SEGV" => Codes::MEMORY,
       "ABRT" => Codes::MEMORY,
       "TRAP" => Codes::MEMORY,
-      "KILL" => Codes::MEMORY,
     }.freeze
 
     SOCKETS = [ "work.sock", "control.sock" ].freeze
@@ -218,7 +222,7 @@ module HotCell
 
         connection = Connection.new(socket)
 
-        if running < configuration.concurrency || @queue.size < configuration.queue_size
+        if admit?(@queue.size)
           @queue << [ connection, Clock.now ]
           counters.observe_queue @queue.size
         else
@@ -237,6 +241,15 @@ module HotCell
         else
           @control_pending << Pending.new(connection, Clock.now, "".b)
         end
+      end
+
+      # Everything accepted and not yet answered, against everything this cell can hold. `running <
+      # concurrency ||` used to short-circuit this, which sounds like a fast path and is a hole: when fork
+      # fails with EAGAIN nothing runs, `running` stays 0, the left side is always true, and the queue grows
+      # without bound — under exactly the host pressure the fork rescue exists to survive, until this process
+      # runs out of descriptors in an accept nobody rescues.
+      def admit?(queued)
+        running + queued < configuration.concurrency + configuration.queue_size
       end
 
       def pending_control(socket)
@@ -372,6 +385,13 @@ module HotCell
       def become_worker(supervisor_side)
         [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
 
+        # Its own process group, so the deadline can kill everything this request started rather than only
+        # the Ruby process that started it. A converter is a grandchild — the worker spawns it — and killing
+        # the worker alone left it running, reparented to this supervisor as pid 1, with no deadline, no slot
+        # and nothing watching it. A document that hangs ffmpeg would have accumulated one orphan per
+        # request until the cgroup ended the cell.
+        Process.setpgid 0, 0
+
         supervisor_side.close
         @signals.close
         @signal_writer.close
@@ -427,15 +447,33 @@ module HotCell
         child.buffer.clear
       end
 
+      # The peer here is the one process in this design that runs untrusted code, so nothing it writes may be
+      # taken on trust — including its shape. `Payload.parse` answers with whatever the JSON held, and a
+      # worker writing `[]` used to reach `message[:deadline]` as `Array#[]`, raise TypeError, and take the
+      # cell down: the rescue below named MessageError and JSON::ParserError, and nothing above `run` catches
+      # anything. A compromised worker had a one-line denial of service against every other request.
+      #
+      # `idle` is only believed from a worker that is actually serving something. A premature one used to
+      # clear `dispatched_at`, which is what `overdue?` reads — so a worker could answer "I am done" and buy
+      # itself an unbounded deadline on a request it was still holding.
       def apply_report(child, line)
         message = Payload.parse(line)
+        return unreadable_report child, "report is a #{message.class} and must be an object" unless message.is_a?(Hash)
+
         if message[:deadline]
           child.deadline = narrowed_deadline(message[:deadline])
         elsif message[:idle]
+          return unreadable_report child, "idle report from a worker with no request" unless child.busy?
+
           finish child, message[:code]
         end
       rescue MessageError, JSON::ParserError => error
-        log.write "worker.unreadable_report", pid: child.pid, message: Failure.sanitize(error.message)
+        unreadable_report child, Failure.sanitize(error.message)
+      end
+
+      def unreadable_report(child, message)
+        log.write "worker.unreadable_report", pid: child.pid, message: message
+        nil
       end
 
       def finish(child, code)
@@ -462,13 +500,26 @@ module HotCell
 
         @children.each_value.select { |child| child.overdue?(now) }.each do |child|
           child.killed_for = Codes::DEADLINE
-          log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline: child.deadline
 
-          begin
-            Process.kill :KILL, child.pid
-          rescue Errno::ESRCH
-            nil
-          end
+          # Kill first, log second. Log#write is synchronous on purpose, so a container log pipe nobody is
+          # draining blocks it — and with the write first, a stalled pipe meant the overdue worker was never
+          # killed and no other request's deadline was enforced either.
+          kill_group child
+
+          log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline: child.deadline
+        end
+      end
+
+      # The whole process group, which is the worker and everything it started. Negative pid is the group.
+      # Falls back to the worker alone if the group is already gone, so a worker that died between the check
+      # and the signal is not an error.
+      def kill_group(child)
+        Process.kill :KILL, -child.pid
+      rescue Errno::ESRCH
+        begin
+          Process.kill :KILL, child.pid
+        rescue Errno::ESRCH
+          nil
         end
       end
 

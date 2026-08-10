@@ -187,6 +187,24 @@ module HotCell
       end
     end
 
+    # Starts a grandchild that outlives the worker, and reports its pid so a test can ask whether the
+    # deadline reached it. `spawn` rather than a converter, so this needs no toolchain installed.
+    class Spawns < HotCell::Operation
+      operation "test.spawns"
+
+      def perform(_inputs, _outputs, _payload)
+        pid = spawn("sleep", "60")
+        tell_and_wait pid
+      end
+
+      private
+        def tell_and_wait(pid)
+          File.write ENV.fetch("HOTCELL_SPAWNED_PID_PATH"), pid.to_s
+          sleep 60
+          { pid: pid }
+        end
+    end
+
     # Declares less than the cell allows, so the supervisor has to learn the narrower number from the worker
     # rather than from the request it never reads.
     class Impatient < Uninterruptible
