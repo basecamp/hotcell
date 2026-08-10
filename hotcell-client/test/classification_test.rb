@@ -56,13 +56,13 @@ class ClassificationTest < HotCellClientTest
   def test_the_two_lists_between_them_cover_every_code_the_taxonomy_defines
     covered = (PERMANENT + TRANSIENT).map { |failure| failure[:code] }.uniq.sort
 
-    assert_equal HotCell::Codes::TERMINAL.keys.push(HotCell::Codes::KILLED).sort, covered
+    assert_equal HotCell::Codes::PERMANENT.keys.push(HotCell::Codes::KILLED).sort, covered
   end
 
   def test_every_killed_limit_is_covered
     covered = (PERMANENT + TRANSIENT).filter_map { |failure| failure[:limit] }.sort
 
-    assert_equal HotCell::Codes::TERMINAL_BY_LIMIT.keys.sort, covered
+    assert_equal HotCell::Codes::PERMANENT_BY_LIMIT.keys.sort, covered
   end
 
   def test_the_raised_message_carries_enough_to_re_decide_on_later

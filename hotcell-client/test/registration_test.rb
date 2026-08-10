@@ -64,7 +64,7 @@ class RegistrationTest < HotCellClientTest
     refute HotCell::PermanentFailure <= HotCell::TransientFailure
   end
 
-  def test_terminal_chooses_the_permanent_class_and_anything_else_the_transient_one
+  def test_permanent_chooses_the_applications_permanent_class_and_anything_else_the_transient_one
     cell = HotCell.register "active_storage", permanent: Unprocessable, transient: TemporarilyUnavailable
 
     assert_equal Unprocessable, cell.exception_for(HotCell::Failure.new(code: "unreadable"))

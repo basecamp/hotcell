@@ -10,7 +10,7 @@ module HotCell
   #
   # So a gem that raised PreviewError for a capacity refusal would, on HEY, permanently destroy the
   # thumbnail of every blob viewed during a cell restart, with no recovery short of a hand-written backfill.
-  # `terminal` on the wire says which class to raise; injection is what stops the gem from guessing.
+  # `permanent` on the wire says which class to raise; injection is what stops the gem from guessing.
   #
   # These two are the fallback for a registration that injected neither. They are deliberately classes no
   # application already rescues, so an unclassified failure surfaces as a loud 500 rather than as a silent

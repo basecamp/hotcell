@@ -100,7 +100,7 @@ app process                                supervisor                       pid 
     validates the payload                    accepts, queues, dispatches with a slot
     connects to its cell's socket            times the deadline, kills, reaps, cleans up
     sendmsg: JSON + N fds  ─────────────►
-                                           worker            serves `reuse` requests
+                                           worker            serves `max_requests_per_worker` requests
                                              reads the request, resolves the operation
                                              applies limits, posts inputs to its scratch
                                              runs perform

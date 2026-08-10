@@ -143,7 +143,7 @@ class ControlTest < HotCellServerTest
         cell.answer connection
       end
 
-      refute_predicate assert_failed("protocol", response), :terminal?
+      refute_predicate assert_failed("protocol", response), :permanent?
     end
   end
 
@@ -207,8 +207,8 @@ class ControlTest < HotCellServerTest
   # would stop the cell serving. :unlimited was the case that reached it: a Symbol is not JSON-native, so a
   # cell configured with it could not describe itself, and the attempt took the cell down.
   def test_a_cell_configured_for_persistent_workers_can_still_describe_itself
-    TestCell.boot(reuse: :unlimited) do |cell|
-      assert_equal "unlimited", assert_ok(cell.control("hotcell.describe")).result[:reuse]
+    TestCell.boot(max_requests_per_worker: :unlimited) do |cell|
+      assert_equal "unlimited", assert_ok(cell.control("hotcell.describe")).result[:max_requests_per_worker]
 
       assert_ok cell.call("test.echo")
     end

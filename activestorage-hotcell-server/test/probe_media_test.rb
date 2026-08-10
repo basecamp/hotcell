@@ -29,7 +29,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
       failure = assert_failed "unreadable", cell.call("active_storage.probe_media",
                                                       inputs: [ fixture("broken.mp4") ])
 
-      assert_predicate failure, :terminal?
+      assert_predicate failure, :permanent?
     end
   end
 

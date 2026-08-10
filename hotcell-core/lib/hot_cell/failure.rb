@@ -17,24 +17,24 @@ module HotCell
 
     attr_reader :code, :message, :error_class, :limit, :signal
 
-    def initialize(code:, terminal: nil, message: nil, error_class: nil, limit: nil, signal: nil)
+    def initialize(code:, permanent: nil, message: nil, error_class: nil, limit: nil, signal: nil)
       @code = code.to_s
       @limit = limit&.to_s
       @signal = signal&.to_s
       @error_class = error_class&.to_s
       @message = self.class.sanitize(message)
-      @terminal = terminal.nil? ? Codes.terminal?(@code, limit: @limit) : terminal
+      @permanent = permanent.nil? ? Codes.permanent?(@code, limit: @limit) : permanent
     end
 
-    def terminal?
-      @terminal
+    def permanent?
+      @permanent
     end
 
     # compact rather than four guards: the constructor puts every one of these through `&.to_s` or
     # `sanitize`, so each is a String or nil and there is no falsey-but-meaningful value to protect.
-    # `terminal` is the exception and survives, because compact drops only nil.
+    # `permanent` is the exception and survives, because compact drops only nil.
     def to_h
-      { code: code, terminal: terminal? }
+      { code: code, permanent: permanent? }
         .merge(limit: limit, signal: signal, class: error_class, message: message).compact
     end
 
@@ -54,20 +54,20 @@ module HotCell
         end
       end
 
-      # A code this client has never heard of is not terminal. An old client will meet a code added
+      # A code this client has never heard of is not permanent. An old client will meet a code added
       # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
       # some work, while writing down a verdict that was temporary is irreversible.
-      # A `terminal` that is present but not a boolean is derived rather than believed. Truthiness would make
+      # A `permanent` that is present but not a boolean is derived rather than believed. Truthiness would make
       # any non-nil value permanent, and permanent is the answer that cannot be taken back — so a garbled
       # field must not be able to say it.
       def from_wire(wire)
-        terminal = if [ true, false ].include?(wire[:terminal])
-          wire[:terminal]
+        permanent = if [ true, false ].include?(wire[:permanent])
+          wire[:permanent]
         else
-          Codes.known?(wire[:code]) && Codes.terminal?(wire[:code], limit: wire[:limit])
+          Codes.known?(wire[:code]) && Codes.permanent?(wire[:code], limit: wire[:limit])
         end
 
-        new code: wire[:code], terminal: terminal, limit: wire[:limit], signal: wire[:signal],
+        new code: wire[:code], permanent: permanent, limit: wire[:limit], signal: wire[:signal],
             error_class: wire[:class], message: wire[:message]
       end
 

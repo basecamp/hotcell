@@ -47,7 +47,7 @@ class ResourceLimitsTest < HotCellServerTest
   # A reused worker meets a tight operation and then a generous one. The second must get its own budget
   # back, which only works because the hard limit was never lowered.
   def test_a_reused_worker_widens_back_for_the_next_operation
-    boot(reuse: 2, concurrency: 1) do |cell|
+    boot(max_requests_per_worker: 2, concurrency: 1) do |cell|
       frugal = assert_ok(cell.call("test.frugal")).result
       roomy = assert_ok(cell.call("test.rlimits")).result
 
@@ -70,7 +70,7 @@ class ResourceLimitsTest < HotCellServerTest
                                                  payload: { megabytes: 16 }, timeout: 30
 
         failure = assert_failed "killed", response, limit: "fsize"
-        assert_predicate failure, :terminal?
+        assert_predicate failure, :permanent?
         assert_equal "XFSZ", failure.signal
       end
     end
@@ -98,7 +98,7 @@ class ResourceLimitsTest < HotCellServerTest
       failure = assert_failed "killed", cell.call("test.greedy", payload: { megabytes: 900 }, timeout: 30),
                               limit: "memory"
 
-      assert_predicate failure, :terminal?
+      assert_predicate failure, :permanent?
     end
   end
 

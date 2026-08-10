@@ -7,7 +7,7 @@ class ConfigurationTest < RegistryIsolatedTest
     configuration = HotCell::Configuration.new
 
     assert_equal 4, configuration.concurrency
-    assert_equal 1, configuration.reuse
+    assert_equal 1, configuration.max_requests_per_worker
     assert_equal 60, configuration.limits.deadline
   end
 
@@ -31,7 +31,7 @@ class ConfigurationTest < RegistryIsolatedTest
   end
 
   def test_reuse_counts_requests_before_a_worker_is_discarded
-    configuration = HotCell::Configuration.new(reuse: 3)
+    configuration = HotCell::Configuration.new(max_requests_per_worker: 3)
 
     refute configuration.retire?(2)
     assert configuration.retire?(3)
@@ -41,9 +41,9 @@ class ConfigurationTest < RegistryIsolatedTest
   # Intended for cells whose operations are all subprocess ones: persistent workers there give up nothing,
   # keep their slot's converter profile warm, and never pay the settling cost at all.
   def test_unlimited_reuse_never_retires
-    configuration = HotCell::Configuration.new(reuse: :unlimited)
+    configuration = HotCell::Configuration.new(max_requests_per_worker: :unlimited)
 
-    assert_predicate configuration, :unlimited_reuse?
+    assert_predicate configuration, :unlimited_requests?
     refute configuration.retire?(10_000)
   end
 
@@ -51,22 +51,22 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(concurrency: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_factor: -1) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_wait: 0) }
-    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(reuse: 0) }
-    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(reuse: :forever) }
+    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: 0) }
+    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: :forever) }
   end
 
   # The trade is supported and often right. What must not happen is that somebody makes it silently by
   # adding an operation to an existing cell.
   def test_reuse_above_one_warns_and_names_the_operations_that_parse_in_process
-    warning = HotCell::Configuration.new(reuse: 3).in_process_warning([ Fixtures::Uppercase ])
+    warning = HotCell::Configuration.new(max_requests_per_worker: 3).in_process_warning([ Fixtures::Uppercase ])
 
-    assert_match "reuse: 3", warning
+    assert_match "max_requests_per_worker: 3", warning
     assert_match "test.uppercase", warning
     assert_match "up to 2 later request", warning
   end
 
   def test_reuse_of_one_has_nothing_to_warn_about
-    assert_nil HotCell::Configuration.new(reuse: 1).in_process_warning([ Fixtures::Uppercase ])
+    assert_nil HotCell::Configuration.new(max_requests_per_worker: 1).in_process_warning([ Fixtures::Uppercase ])
   end
 
   def test_a_cell_of_subprocess_operations_has_nothing_to_warn_about
@@ -75,7 +75,7 @@ class ConfigurationTest < RegistryIsolatedTest
       untrusted_input :subprocess
     end
 
-    assert_nil HotCell::Configuration.new(reuse: 5).in_process_warning([ subprocess ])
+    assert_nil HotCell::Configuration.new(max_requests_per_worker: 5).in_process_warning([ subprocess ])
   end
 
   # This goes on the wire as the answer to hotcell.describe, so "reportable" has to mean serializable and not
@@ -90,9 +90,9 @@ class ConfigurationTest < RegistryIsolatedTest
   end
 
   def test_unlimited_reuse_is_reportable_too
-    reported = HotCell::Configuration.new(reuse: :unlimited).to_h
+    reported = HotCell::Configuration.new(max_requests_per_worker: :unlimited).to_h
 
-    assert_equal "unlimited", reported[:reuse]
+    assert_equal "unlimited", reported[:max_requests_per_worker]
     assert_equal reported, HotCell::Payload.validate!(reported, "result")
   end
 

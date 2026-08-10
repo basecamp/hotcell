@@ -51,7 +51,7 @@ class PreviewersTest < ActiveStorageHotCellTest
                                                         inputs: [ fixture("broken.pdf") ],
                                                         outputs: [ destination ])
 
-        assert_predicate failure, :terminal?
+        assert_predicate failure, :permanent?
         assert_match "mutool", failure.message
       end
     end
@@ -104,7 +104,7 @@ class PreviewersTest < ActiveStorageHotCellTest
                                                         inputs: [ fixture("broken.mp4") ],
                                                         outputs: [ destination ])
 
-        assert_predicate failure, :terminal?
+        assert_predicate failure, :permanent?
       end
     end
   end
