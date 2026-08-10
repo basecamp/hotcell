@@ -92,6 +92,14 @@ module HotCell
         received.each(&:close)
         connection.close
         slot.remove_scratch
+
+        # After the answer and before reporting idle, which is the only window where this costs nobody. How
+        # long it takes is chosen by whatever filled the directory, so it must not run where somebody is
+        # waiting: not in the supervisor, whose loop enforces every other request's deadline, and not during
+        # staging, where it would spend the next request's deadline on the previous request's mess. Here the
+        # caller already has its response, and `report_idle` is what makes this worker available — so the
+        # supervisor will not dispatch into a worker that is still sweeping.
+        slot.sweep
         report_idle response&.failure&.code
       end
 
