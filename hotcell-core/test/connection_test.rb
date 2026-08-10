@@ -155,6 +155,33 @@ class ConnectionTest < HotCellTest
     assert_raises(HotCell::MessageError) { cold.read_line }
   end
 
+  # A stream socket may send less than it was given. When the short send is the one carrying the ancillary
+  # data, the receiver has the descriptors and no newline, and the sender is already waiting for a reply —
+  # so the caller's descriptors are installed in the cell and both ends sit until something else times out.
+  def test_a_short_sendmsg_still_delivers_the_whole_line_and_the_descriptors_once
+    with_files do |source, destination|
+      reading(source) do |readable|
+        writing(destination) do |writable|
+          request = HotCell::Request.new(op: "test.copy", inputs: 1, outputs: 1)
+          descriptors = [ HotCell::Input.new(readable), HotCell::Output.new(writable) ]
+
+          # Every sendmsg reports one byte sent, whatever it actually wrote.
+          cold.socket.singleton_class.define_method(:sendmsg) do |bytes, *rest|
+            super(bytes.byteslice(0, 1), *rest)
+          end
+
+          cold.send_message request.to_line, descriptors: descriptors
+
+          line, received = hot.receive_message
+          assert_equal "test.copy", HotCell::Request.parse(line).op
+          assert_equal 2, received.size, "the descriptors must arrive exactly once"
+        ensure
+          received&.each(&:close)
+        end
+      end
+    end
+  end
+
   # The deadline covers the whole line, not the wait for its first byte. A peer that sends one byte inside
   # the timeout and then stops used to hold the caller until the cell's own deadline — and forever against a
   # peer that never closed, on a path an application may be calling from a web request.
