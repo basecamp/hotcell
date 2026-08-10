@@ -152,8 +152,6 @@ URLs minted on `mini_magick` — carrying `coalesce`, or top-level `quality` and
 as they raise under Rails on vips. An application moving between the two rewrites them at its own boundary in
 the meantime, the way BC4 does.
 
-Also outstanding: the canary harness.
-
 ## Development
 
 ```
