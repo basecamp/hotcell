@@ -16,11 +16,19 @@ class ControlTest < HotCellServerTest
     end
   end
 
+  # Counts lag responses, and the wait is the assertion rather than a workaround. The worker writes the
+  # response and the supervisor increments the counter when it later reads that worker's idle report — two
+  # processes — so a caller can be holding its answer before the count exists. Anything reading these for
+  # alarms should expect the same skew.
   def test_metrics_count_the_outcomes
     TestCell.boot do |cell|
       2.times { assert_ok cell.call("test.echo") }
       assert_failed "failed", cell.call("test.broken")
       assert_failed "unsupported", cell.call("test.nothing_like_it")
+
+      wait_until(what: "the supervisor to count every request") do
+        assert_ok(cell.control("hotcell.metrics")).result[:requests][:total] == 4
+      end
 
       requests = assert_ok(cell.control("hotcell.metrics")).result[:requests]
 
