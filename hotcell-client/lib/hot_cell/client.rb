@@ -104,9 +104,12 @@ module HotCell
       # handled rather than assumed away. A full tmpfs on the cell arrives this way, as ENOSPC from the copy
       # rather than from the socket, and a full filesystem must never be recorded as "this document is
       # unprocessable". So it is transient, not a valid empty image.
+      # Only a measured zero, never a stat that failed. `byte_count` used to answer 0 for both, which turned
+      # a descriptor this process could no longer stat into "the cell wrote nothing" — a transient failure
+      # manufactured on a request that had succeeded, and a variant thrown away for it.
       def verify_output(response, outputs)
         return response if !response.ok? || outputs.empty?
-        return response unless byte_count(outputs).zero?
+        return response unless byte_count(outputs)&.zero?
 
         Response.failed Failure.new(code: "unavailable",
                                     message: "the cell reported success and wrote no bytes"),
@@ -131,10 +134,11 @@ module HotCell
         event[:timing] = response.timing
       end
 
+      # nil means "could not measure", which is not the same fact as zero and must not be confused with it.
       def byte_count(ios)
         ios.sum { |io| io.stat.size }
       rescue SystemCallError, IOError
-        0
+        nil
       end
 
       def raise_for(response, cell)

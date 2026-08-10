@@ -103,4 +103,13 @@ class ConfigurationTest < RegistryIsolatedTest
 
     assert_match "deadline cannot be nil", error.message
   end
+
+  # The client compares its own timeout against this rather than adding up the parts, so the cell is the one
+  # side that has to know what its stages cost.
+  def test_it_reports_the_longest_it_may_take_to_answer
+    configuration = HotCell::Configuration.new(queue_wait: 10, deadline: 60)
+
+    assert_equal 71, configuration.answer_within
+    assert_equal 71, configuration.to_h[:answer_within]
+  end
 end
