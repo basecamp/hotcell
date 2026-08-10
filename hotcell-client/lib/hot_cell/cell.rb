@@ -2,7 +2,7 @@
 
 module HotCell
   # One registered cell: where its sockets are, how long this application will wait, and which of its own
-  # exception classes to raise for each side of the terminal split.
+  # exception classes to raise for each side of the permanent split.
   #
   # Both socket paths are derived from one directory, so the volume mounts are mechanical rather than
   # something to remember and the two sockets cannot end up apart.
@@ -45,7 +45,7 @@ module HotCell
     end
 
     def exception_for(failure)
-      failure.terminal? ? permanent : transient
+      failure.permanent? ? permanent : transient
     end
 
     # Contract skew needs its own reporting hook because applications rescue broadly around

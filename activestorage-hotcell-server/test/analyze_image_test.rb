@@ -61,7 +61,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
                                                       inputs: [ fixture("broken.png") ])
 
       assert_equal "Vips::Error", failure.error_class
-      assert_predicate failure, :terminal?
+      assert_predicate failure, :permanent?
     end
   end
 end

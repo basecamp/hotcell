@@ -125,7 +125,7 @@ Files in `/hotcell/operations` load in sorted order at boot, so a leading one co
 
 ```ruby
 # operations/00_cell.rb
-HotCell.limits concurrency: 4, queue_factor: 2, deadline: 30, queue_wait: 10, reuse: 1,
+HotCell.limits concurrency: 4, queue_factor: 2, deadline: 30, queue_wait: 10, max_requests_per_worker: 1,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 

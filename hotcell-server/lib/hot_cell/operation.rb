@@ -61,14 +61,14 @@ module HotCell
         @limits = Limits.new(**values)
       end
 
-      # Where a malicious input gets to execute, which is what decides whether `reuse` is a security
-      # setting for this operation or only a performance one.
+      # Where a malicious input gets to execute, which is what decides whether `max_requests_per_worker` is a
+      # security setting for this operation or only a performance one.
       #
       # A subprocess converter parses in an exec'd child that dies at the end of the conversion, and the
       # worker only copies bytes, spawns, and reads an exit status — so recycling that worker buys
       # nothing. An in-process library parses in the worker's own address space, so recycling buys
-      # isolation between requests. in_process is the default because it is the answer that makes `reuse`
-      # mean something, and a wrong default should be the cautious one.
+      # isolation between requests. in_process is the default because it is the answer that makes
+      # `max_requests_per_worker` mean something, and a wrong default should be the cautious one.
       #
       # This is a claim about the operation's own code and it is easy to break later. Reading the
       # converter's output with an in-process library to build `result`, or parsing its stderr, both turn
@@ -123,9 +123,9 @@ module HotCell
       # registered winning.
       #
       # A worker is not one operation, which is what makes this the right place rather than a safe one. Above
-      # `reuse: 1` it can serve A, then B, then A, and these hooks re-run whenever the operation changes —
-      # so what the library is set up for always matches what is about to run. Write them to be re-entrant:
-      # they are setters against shared state, not one-time initialization.
+      # `max_requests_per_worker: 1` it can serve A, then B, then A, and these hooks re-run whenever the operation
+      # changes — so what the library is set up for always matches what is about to run. Write them to be
+      # re-entrant: they are setters against shared state, not one-time initialization.
       def before_worker_boot(&block)
         return collected(:@before_worker_boot) if block.nil?
 
@@ -182,7 +182,7 @@ module HotCell
     # streams in full and hands them over at exit, so slicing afterwards bounded the Strings this method
     # returns and nothing else: an input that makes a converter print gigabytes of diagnostics had already
     # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
-    # verdict, which is terminal, for a document whose only crime was being noisy.
+    # verdict, which is permanent, for a document whose only crime was being noisy.
     def convert(*command, env: {}, capture: 64 * 1024)
       require "open3"
 

@@ -72,12 +72,12 @@ class BootTest < RegistryIsolatedTest
   # Supported, often right, and it must not be made silently by somebody adding an operation to an existing
   # cell. So it is a line in the log naming what is given up, not a refusal.
   def test_reuse_above_one_with_in_process_parsing_warns_and_serves_anyway
-    TestCell.boot(reuse: 3) do |cell|
+    TestCell.boot(max_requests_per_worker: 3) do |cell|
       assert_ok cell.call("test.echo")
       cell.stop
 
       warning = cell.log_events("cell.reuse_warning").first
-      assert_match "reuse: 3", warning[:warning]
+      assert_match "max_requests_per_worker: 3", warning[:warning]
       assert_match "test.uppercase", warning[:warning]
     end
   end

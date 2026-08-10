@@ -28,7 +28,7 @@ module ActiveStorage
       class VipsOperation < ::HotCell::Operation
         abstract_operation
 
-        # libvips parses here, in this process, so `reuse` is a security setting for these operations and not
+        # libvips parses here, in this process, so `max_requests_per_worker` is a security setting for these operations and not
         # only a performance one.
         untrusted_input :in_process
 
@@ -65,7 +65,7 @@ module ActiveStorage
         # worker boot would not cover it either, since an operation could do it inside `perform`.
         # blocked_loaders_test.rb holds the property, which is the thing worth holding.
         #
-        # The operation cache is set to nothing on purpose. Above `reuse: 1` it would span requests inside one
+        # The operation cache is set to nothing on purpose. Above `max_requests_per_worker: 1` it would span requests inside one
         # worker, which is a place one request's image data can sit while the next one runs.
         before_worker_boot do
           Vips.concurrency_set Integer(ENV.fetch("VIPS_CONCURRENCY", "2"))
@@ -87,7 +87,7 @@ module ActiveStorage
 
         private
           # A caller asking for something outside the allowlist is a caller bug, not a bad document. Raising
-          # MessageError is what makes the cell answer `invalid`, which is terminal and which the client raises
+          # MessageError is what makes the cell answer `invalid`, which is permanent and which the client raises
           # rather than turning into a placeholder.
           def refuse!(message)
             raise ::HotCell::MessageError, message

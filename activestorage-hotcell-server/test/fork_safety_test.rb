@@ -25,7 +25,7 @@ class ForkSafetyTest < ActiveStorageHotCellTest
   # And the arrangement holds end to end: a real cell converts, request after request, because the supervisor
   # only ever requires and configures.
   def test_a_real_cell_converts_request_after_request
-    Cell.boot(reuse: 1, concurrency: 1) do |cell|
+    Cell.boot(max_requests_per_worker: 1, concurrency: 1) do |cell|
       3.times do
         with_output do |destination|
           assert_ok cell.call("active_storage.transform_image",

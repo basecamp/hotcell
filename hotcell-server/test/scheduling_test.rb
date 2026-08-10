@@ -29,7 +29,7 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
-  # A deadline breach is as much a property of the load as of the input. Treating it as terminal would mean
+  # A deadline breach is as much a property of the load as of the input. Treating it as permanent would mean
   # a busy afternoon permanently condemns whatever was uploaded during it.
   # One kill per breach. Killing leaves the child busy, because the supervisor still holds the connection it
   # has to answer on, so a child that stayed a timer source would be re-killed and re-logged on every pass of
@@ -68,16 +68,16 @@ class SchedulingTest < HotCellServerTest
   # A reused worker is not one operation. Serving A, then B, then A left the shared library configured by B
   # while A ran, because the memo asked "has this ever booted" rather than "is this what it is set up for".
   def test_a_reused_worker_reconfigures_when_the_operation_changes
-    TestCell.boot(reuse: 3, concurrency: 1) do |cell|
+    TestCell.boot(max_requests_per_worker: 3, concurrency: 1) do |cell|
       assert_equal "alpha", assert_ok(cell.call("test.configures_alpha")).result[:configured_for]
       assert_equal "beta", assert_ok(cell.call("test.configures_beta")).result[:configured_for]
       assert_equal "alpha", assert_ok(cell.call("test.configures_alpha")).result[:configured_for]
     end
   end
 
-  def test_a_deadline_breach_is_not_terminal
+  def test_a_deadline_breach_is_not_permanent
     TestCell.boot(deadline: 1) do |cell|
-      refute_predicate assert_failed("killed", cell.call("test.uninterruptible", timeout: 20)), :terminal?
+      refute_predicate assert_failed("killed", cell.call("test.uninterruptible", timeout: 20)), :permanent?
     end
   end
 
@@ -104,7 +104,7 @@ class SchedulingTest < HotCellServerTest
   # The deadline is per request rather than per worker life. Three requests of six tenths of a second each
   # all fit inside a one second deadline, and none of them fits inside what is left of a cumulative one.
   def test_a_reused_worker_gets_the_whole_deadline_again_on_its_next_request
-    TestCell.boot(deadline: 1, reuse: 3, concurrency: 1) do |cell|
+    TestCell.boot(deadline: 1, max_requests_per_worker: 3, concurrency: 1) do |cell|
       pids = 3.times.map do
         assert_ok(cell.call("test.blocking", payload: { seconds: 0.6 }, timeout: 20)).result[:pid]
       end
@@ -114,7 +114,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   def test_at_reuse_three_a_worker_serves_three_requests_and_the_fourth_lands_on_a_new_one
-    TestCell.boot(reuse: 3, concurrency: 1) do |cell|
+    TestCell.boot(max_requests_per_worker: 3, concurrency: 1) do |cell|
       pids = 4.times.map { assert_ok(cell.call("test.whoami")).result[:pid] }
 
       assert_equal 1, pids.first(3).uniq.size, "expected one worker for the first three: #{pids.inspect}"
@@ -122,9 +122,9 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
-  # reuse: 1 is the only value where a request cannot reach another request.
+  # max_requests_per_worker: 1 is the only value where a request cannot reach another request.
   def test_at_reuse_one_every_request_gets_a_fresh_worker
-    TestCell.boot(reuse: 1, concurrency: 1) do |cell|
+    TestCell.boot(max_requests_per_worker: 1, concurrency: 1) do |cell|
       pids = 3.times.map { assert_ok(cell.call("test.whoami")).result[:pid] }
 
       assert_equal 3, pids.uniq.size, "expected three distinct workers: #{pids.inspect}"
@@ -132,7 +132,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   def test_a_reused_worker_keeps_its_slot_and_therefore_its_home
-    TestCell.boot(reuse: 2, concurrency: 1) do |cell|
+    TestCell.boot(max_requests_per_worker: 2, concurrency: 1) do |cell|
       homes = 2.times.map { assert_ok(cell.call("test.whoami")).result[:home] }
 
       assert_equal 1, homes.uniq.size
@@ -184,7 +184,7 @@ class SchedulingTest < HotCellServerTest
         connection.send_message request_line("test.blocking", seconds: 0.4)
         wait_until(what: "the first worker to start") { cell.log_events("worker.forked").any? }
 
-        refute_predicate assert_failed("capacity", cell.call("test.echo")), :terminal?
+        refute_predicate assert_failed("capacity", cell.call("test.echo")), :permanent?
       ensure
         cell.answer connection, 20
         connection.close

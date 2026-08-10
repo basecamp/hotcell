@@ -26,7 +26,7 @@ class ResponseTest < HotCellTest
     assert_equal "unreadable", parsed.failure.code
     assert_equal "Vips::Error", parsed.failure.error_class
     assert_equal "bad header", parsed.failure.message
-    assert_predicate parsed.failure, :terminal?
+    assert_predicate parsed.failure, :permanent?
   end
 
   def test_timing_is_present_on_a_failure_too
@@ -37,28 +37,28 @@ class ResponseTest < HotCellTest
 
   # The flag is set by the side that knows and read back as data, not re-derived. That is what makes a
   # code added later safe: an old client will not recognise it but will still dispose of it correctly.
-  def test_terminal_comes_off_the_wire_rather_than_being_re_derived
-    line = '{"v":1,"ok":false,"error":{"code":"unreadable","terminal":false},"timing":{}}'
+  def test_permanent_comes_off_the_wire_rather_than_being_re_derived
+    line = '{"v":1,"ok":false,"error":{"code":"unreadable","permanent":false},"timing":{}}'
 
-    refute_predicate HotCell::Response.parse(line).failure, :terminal?
+    refute_predicate HotCell::Response.parse(line).failure, :permanent?
   end
 
-  def test_an_unrecognised_code_with_no_terminal_flag_is_not_terminal
+  def test_an_unrecognised_code_with_no_permanent_flag_is_not_permanent
     line = '{"v":1,"ok":false,"error":{"code":"something_added_later"},"timing":{}}'
 
-    refute_predicate HotCell::Response.parse(line).failure, :terminal?
+    refute_predicate HotCell::Response.parse(line).failure, :permanent?
   end
 
   def test_killed_splits_on_the_limit_the_worker_hit
-    assert_predicate HotCell::Failure.new(code: "killed", limit: "memory"), :terminal?
-    assert_predicate HotCell::Failure.new(code: "killed", limit: "fsize"), :terminal?
-    refute_predicate HotCell::Failure.new(code: "killed", limit: "deadline"), :terminal?
+    assert_predicate HotCell::Failure.new(code: "killed", limit: "memory"), :permanent?
+    assert_predicate HotCell::Failure.new(code: "killed", limit: "fsize"), :permanent?
+    refute_predicate HotCell::Failure.new(code: "killed", limit: "deadline"), :permanent?
   end
 
   def test_the_wire_carries_only_the_fields_a_failure_has
     wire = HotCell::Failure.new(code: "capacity").to_h
 
-    assert_equal({ code: "capacity", terminal: false }, wire)
+    assert_equal({ code: "capacity", permanent: false }, wire)
   end
 
   def test_a_message_is_capped_in_bytes_at_the_cell
@@ -89,7 +89,7 @@ class ResponseTest < HotCellTest
   # UTF-8 and hands the invalid bytes through without complaint, so parsing is not a filter and the
   # client has to scrub for itself.
   def test_a_client_scrubs_again_because_json_parse_passes_invalid_utf8_straight_through
-    line = %({"v":1,"ok":false,"error":{"code":"unreadable","terminal":true,"message":"bad \xFF name"},"timing":{}})
+    line = %({"v":1,"ok":false,"error":{"code":"unreadable","permanent":true,"message":"bad \xFF name"},"timing":{}})
       .dup.force_encoding(Encoding::UTF_8)
 
     refute_predicate JSON.parse(line, symbolize_names: true).dig(:error, :message), :valid_encoding?
@@ -119,9 +119,9 @@ class ResponseTest < HotCellTest
 
   # Permanent is the answer that cannot be taken back, so a garbled flag must not be able to say it. The
   # code decides instead, which is what an older peer that never sent the field already gets.
-  def test_a_terminal_flag_that_is_not_a_boolean_is_derived_rather_than_believed
-    line = %({"v":1,"ok":false,"error":{"code":"capacity","terminal":"yes"}}\n)
+  def test_a_permanent_flag_that_is_not_a_boolean_is_derived_rather_than_believed
+    line = %({"v":1,"ok":false,"error":{"code":"capacity","permanent":"yes"}}\n)
 
-    refute_predicate HotCell::Response.parse(line).failure, :terminal?
+    refute_predicate HotCell::Response.parse(line).failure, :permanent?
   end
 end

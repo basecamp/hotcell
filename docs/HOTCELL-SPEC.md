@@ -235,7 +235,7 @@ app process                                supervisor                       pid 
     validates the payload                    accepts, queues, dispatches with a slot
     connects to its cell's socket            times the deadline, kills, reaps, cleans up
     sendmsg: JSON + N fds  ─────────────►
-                                           worker            serves `reuse` requests
+                                           worker            serves `max_requests_per_worker` requests
                                              reads the request, resolves the operation
                                              runs before_worker_boot
                                              applies limits
@@ -379,7 +379,7 @@ design is about.
 6. An operation cannot exceed its cell's limits, whatever it declares.
 7. A cell cannot reach another cell's socket.
 8. A worker cannot read another **request's** memory. Conditional on two things: `kernel.yama.ptrace_scope
-   >= 1`, a host setting no container flag can supply, and `reuse: 1`. Not files — see "Worker isolation".
+   >= 1`, a host setting no container flag can supply, and `max_requests_per_worker: 1`. Not files — see "Worker isolation".
 9. A converter subprocess sees only the environment its operation wrote for it.
 
 ### Worker isolation
@@ -401,10 +401,10 @@ cell should therefore **refuse to boot** rather than log a warning and serve any
 invisible to the image, it silently voids the guarantee, and a warning in a log is how a dead control stays
 dead. This is the one boot check worth having now.
 
-**Above `reuse: 1` this invariant is about workers, not requests.** A worker serving several requests in
+**Above `max_requests_per_worker: 1` this invariant is about workers, not requests.** A worker serving several requests in
 turn holds each of them in the same address space, so an input that achieves code execution can read and
 tamper with every later request that worker handles — no race to win, and covering requests that were never
-concurrent with it. That is a deliberate setting with a measured payoff, described under "Worker reuse", and
+concurrent with it. That is a deliberate setting with a measured payoff, described under "Worker max_requests_per_worker", and
 it is the only place in this design where the isolation between two requests is a configuration value.
 
 **Files are not isolated between concurrent workers, and cannot be.** Every worker runs as the same uid
@@ -603,17 +603,17 @@ into the caller.
 
 ### The error taxonomy, and the one distinction that matters
 
-Every error carries a code and a **`terminal`** flag.
+Every error carries a code and a **`permanent`** flag.
 
 ```json
-{"v":1,"ok":false,"error":{"code":"unreadable","terminal":true,"class":"Vips::Error","message":"…"},"timing":{"queued_ms":0,"perform_ms":5}}
-{"v":1,"ok":false,"error":{"code":"killed","terminal":true,"limit":"cpu"},"timing":{"queued_ms":0,"perform_ms":30011}}
-{"v":1,"ok":false,"error":{"code":"killed","terminal":false,"limit":"deadline"},"timing":{"queued_ms":0,"perform_ms":60002}}
+{"v":1,"ok":false,"error":{"code":"unreadable","permanent":true,"class":"Vips::Error","message":"…"},"timing":{"queued_ms":0,"perform_ms":5}}
+{"v":1,"ok":false,"error":{"code":"killed","permanent":true,"limit":"cpu"},"timing":{"queued_ms":0,"perform_ms":30011}}
+{"v":1,"ok":false,"error":{"code":"killed","permanent":false,"limit":"deadline"},"timing":{"queued_ms":0,"perform_ms":60002}}
 ```
 
-**`terminal` means the same request will fail the same way until the input or the code changes — not
-until the load or the deployment changes.** So a terminal error may be recorded against the blob and
-served from a cache. A non-terminal error must be retried and **must never be written down**.
+**`permanent` means the same request will fail the same way until the input or the code changes — not
+until the load or the deployment changes.** So a permanent error may be recorded against the blob and
+served from a cache. A non-permanent error must be retried and **must never be written down**.
 
 The flag is on the wire and set by the side that knows, rather than derived by each caller from the
 code. This is not tidiness. A caller cannot tell from `killed` alone whether a worker burned thirty CPU
@@ -621,7 +621,7 @@ seconds on a decompression bomb or merely sat behind a queue past a sixty-second
 demand opposite responses. It also makes a new code safe to add later: an old client will not recognise
 it but will still handle its disposition correctly.
 
-| Code | Written by | `terminal` | Meaning |
+| Code | Written by | `permanent` | Meaning |
 | --- | --- | --- | --- |
 | `unreadable` | worker | true | The input could not be decoded. |
 | `failed` | worker | true | The operation raised for some other reason. |
@@ -635,10 +635,10 @@ it but will still handle its disposition correctly.
 
 Four of these need their reasons stated, because getting any of them wrong is a production incident.
 
-**`killed` splits on `limit`, and only some of its values are terminal.** `fsize` and `memory` are
-properties of the input: the same bytes will do it again on an idle cell, so they are terminal. `deadline`
+**`killed` splits on `limit`, and only some of its values are permanent.** `fsize` and `memory` are
+properties of the input: the same bytes will do it again on an idle cell, so they are permanent. `deadline`
 is a property of the load as much as of the input — a worker can exhaust wall-clock time while barely
-touching the CPU, because it was waiting. Treating a deadline breach as terminal means a slow afternoon
+touching the CPU, because it was waiting. Treating a deadline breach as permanent means a slow afternoon
 permanently condemns whatever was uploaded during it.
 
 **`memory` belongs on `killed`, not in `failed`.** An `RLIMIT_DATA` failure is a catchable allocation
@@ -650,7 +650,7 @@ resource verdicts so a caller can act on it without parsing a message.
 During a rolling deploy where the app moves before the cell, every version mismatches until the accessory is
 rebooted. Alarm on duration, not on first occurrence.
 
-**`unsupported` was terminal in an earlier draft, on the reasoning that an unknown operation is a caller bug
+**`unsupported` was permanent in an earlier draft, on the reasoning that an unknown operation is a caller bug
 that never heals. That is true of a typo and false of the case that actually happens.** An accessory is not
 updated by a deploy, so an application that ships a client for a new operation before anybody reboots the cell
 gets `unsupported` at one hundred percent for as long as that takes. The two mistakes are not symmetrical:
@@ -659,7 +659,7 @@ where recording a deploy window as permanent condemns every blob uploaded during
 backfill to undo.
 
 **`crashed` is a worker that died mid-request without a signal**, which a misconfigured cell does on every
-request. It is the cell's fault rather than the input's, so it is not terminal.
+request. It is the cell's fault rather than the input's, so it is not permanent.
 
 **`unavailable` and `timeout` are synthesized by the client and belong to the same taxonomy**, even
 though no cell wrote them. They are the most likely failures in production — a cell restarting, an
@@ -878,7 +878,7 @@ A cell is configured once, and everything about scheduling lives there rather th
 
 ```ruby
 # the cell's own config, read at boot
-HotCell.limits concurrency: 4, queue_factor: 2, deadline: 60, queue_wait: 10, reuse: 1,
+HotCell.limits concurrency: 4, queue_factor: 2, deadline: 60, queue_wait: 10, max_requests_per_worker: 1,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 
@@ -888,7 +888,7 @@ HotCell.limits concurrency: 4, queue_factor: 2, deadline: 60, queue_wait: 10, re
 | `queue_factor` | Accepted-but-not-running connections, as a multiple of `concurrency`. Above `concurrency * queue_factor` the answer is `capacity`. |
 | `queue_wait` | Seconds a queued connection may wait before it is answered `capacity` instead. |
 | `deadline` | Maximum wall-clock seconds a **request** may run. An operation may declare a shorter one; this clamps it. The supervisor kills the worker and answers `killed`. |
-| `reuse` | Requests a worker serves before it is discarded. `1` is fork-per-request; `:unlimited` is a persistent pool. Small values already recover most of the cost. See "Worker reuse". |
+| `max_requests_per_worker` | Requests a worker serves before it is discarded. `1` is fork-per-request; `:unlimited` is a persistent pool. Small values already recover most of the cost. See "Worker max_requests_per_worker". |
 | everything else | Maximums for the same keys an operation declares. An operation's `limits` are clamped to these. This is invariant 6. |
 
 **Those numbers are arithmetic against the container's flags, not defaults to copy.** Against the
@@ -939,34 +939,34 @@ at boot and **failing the boot if any slot fails to warm** is the other half of 
 reason is not latency — it is that a broken profile would otherwise silently corrupt every conversion
 that slot ever serves.
 
-### Worker reuse
+### Worker max_requests_per_worker
 
-`reuse` is how many requests a worker serves before the supervisor discards it. **The point of it is
+`max_requests_per_worker` is how many requests a worker serves before the supervisor discards it. **The point of it is
 amortization**, and the amount is measured: a worker's first request pays a copy-on-write settling cost that
 later requests in the same process do not, worth about a third of the request. It has effectively decayed by
 the third request, so small values get almost all of the benefit and large ones buy nothing. See Appendix B.
 
-The two things `reuse` trades between are both real, and neither is a formality:
+The two things `max_requests_per_worker` trades between are both real, and neither is a formality:
 
 - **Recycling bounds what a compromised worker can reach.** An input that achieves code execution can read
   and tamper with every later request its worker handles, with no race to win and covering requests that were
-  never concurrent with it. `reuse: 1` is the only value where a request cannot reach another request.
+  never concurrent with it. `max_requests_per_worker: 1` is the only value where a request cannot reach another request.
 - **Recycling costs a third of every request.** Paid on every single one, forever.
 
-So `reuse` is a dial, `1` is one end of it, and the right value depends on the operation.
+So `max_requests_per_worker` is a dial, `1` is one end of it, and the right value depends on the operation.
 
 **What makes the difference is where the untrusted bytes are parsed.**
 
 | | Where a malicious input executes | What recycling buys |
 | --- | --- | --- |
 | **Subprocess converter** — `soffice`, `mutool`, `ffmpeg`, ImageMagick's CLI | In an `exec`'d child that dies at the end of the conversion. The worker only copies bytes, spawns, and reads an exit status. | **Nothing.** The worker was never exposed. These cells can run persistent workers. |
-| **In-process library** — libvips through `ruby-vips`, RMagick | In the worker's own address space. | **Isolation between requests.** So `reuse` here is a genuine security dial, and its value is a judgement about how much isolation a third of a request is worth. |
+| **In-process library** — libvips through `ruby-vips`, RMagick | In the worker's own address space. | **Isolation between requests.** So `max_requests_per_worker` here is a genuine security dial, and its value is a judgement about how much isolation a third of a request is worth. |
 
 An operation declares which it is:
 
 ```ruby
 class TransformImage < HotCell::Operation
-  untrusted_input :in_process     # libvips parses here, so `reuse` is a security setting
+  untrusted_input :in_process     # libvips parses here, so `max_requests_per_worker` is a security setting
 end
 
 class ConvertDocument < HotCell::Operation
@@ -974,17 +974,17 @@ class ConvertDocument < HotCell::Operation
 end
 ```
 
-`:in_process` is the default, because it is the answer that makes `reuse` mean something and a wrong default
+`:in_process` is the default, because it is the answer that makes `max_requests_per_worker` mean something and a wrong default
 should be the cautious one.
 
-**This is a warning at boot, not a refusal.** A cell with `reuse` above `1` hosting `:in_process` operations
+**This is a warning at boot, not a refusal.** A cell with `max_requests_per_worker` above `1` hosting `:in_process` operations
 logs one line naming them and naming what is given up: an input that compromises a worker reaches up to
-`reuse - 1` later requests. That configuration is supported and is often the right call — a cell doing avatar
+`max_requests_per_worker - 1` later requests. That configuration is supported and is often the right call — a cell doing avatar
 thumbnails for one tenant is a very different risk from one converting arbitrary uploads across tenants — and
 the decision belongs to whoever runs the cell, not to this document. What must not happen is that the trade
 is made silently by somebody adding an operation to an existing cell, which is what the warning is for.
 
-`reuse: :unlimited` is available and is intended for cells whose operations are all `:subprocess`. Persistent
+`max_requests_per_worker: :unlimited` is available and is intended for cells whose operations are all `:subprocess`. Persistent
 workers there give up nothing, keep their slot's converter profile warm, and never pay the settling cost at
 all. Using it in a cell with `:in_process` operations warns like any other value above `1`.
 
@@ -1007,9 +1007,9 @@ worker is safe, so the line falls here:
 Test the claim rather than trusting the comment. A one-line addition is enough to invalidate it.
 
 **Reuse is simple here only because there is no `RLIMIT_CPU`.** A cumulative CPU limit would stop meaning
-"per request" the moment `reuse` went above `1`, and would need a different answer for `:subprocess` and
+"per request" the moment `max_requests_per_worker` went above `1`, and would need a different answer for `:subprocess` and
 `:in_process` operations. Since time is bounded by the supervisor's deadline instead, and the deadline is
-measured per request from dispatch, `reuse` changes nothing about it. See "Time is bounded by the deadline"
+measured per request from dispatch, `max_requests_per_worker` changes nothing about it. See "Time is bounded by the deadline"
 in the operation limits above.
 
 The limits that do survive a reused worker survive cleanly: `file_size` is per file, and `memory` is a
@@ -1018,7 +1018,7 @@ high-water bound on address space rather than a running total. A worker that lea
 
 Two smaller consequences. A deadline kill destroys a warm worker, which is correct — the supervisor replaces
 it, and a hostile input therefore costs the pool one warm worker rather than anything durable. And the libvips
-operation cache now spans requests inside one worker, so a cell with `reuse` above `1` should set it to zero
+operation cache now spans requests inside one worker, so a cell with `max_requests_per_worker` above `1` should set it to zero
 unless it has a measured reason not to: it is a place one request's image data can sit while the next runs.
 
 ### Queueing
@@ -1067,7 +1067,7 @@ applications carrying different policies.
    against that worker, and retain a copy of every connection it dispatched.
    On a control connection: dispatch against the control allowance instead, which is separate and small, so
    control never queues behind work and is never answered `capacity`.
-5. On a worker reporting itself idle: dispatch anything queued, or retire it if it has served `reuse`
+5. On a worker reporting itself idle: dispatch anything queued, or retire it if it has served `max_requests_per_worker`
    requests.
 6. On a dead child: free its slot, remove its scratch, and if it did not exit zero write `killed` on the
    retained connection with the elapsed time. Then dispatch anything waiting.
@@ -1100,9 +1100,9 @@ connection closes.
 7. Run `perform`, timing it.
 8. Post the outputs and flush.
 9. Write the response with the timing, remove the scratch directory, and report itself idle.
-10. At `reuse: 1`, or once `reuse` requests are served, exit without running finalizers.
+10. At `max_requests_per_worker: 1`, or once `max_requests_per_worker` requests are served, exit without running finalizers.
 
-At `reuse: 1` steps 2 through 9 happen once and step 10 is immediate, which is the same shape as a worker
+At `max_requests_per_worker: 1` steps 2 through 9 happen once and step 10 is immediate, which is the same shape as a worker
 that exists only for one request. Above `1` the worker loops over steps 2 to 9, and `before_worker_boot`
 still runs once — after the fork, before the first request.
 
@@ -1150,8 +1150,8 @@ does not come back by reflex:
 - **Two numbers, related by a factor nobody can predict.** CPU time over wall time measures 1.0× at libvips
   concurrency 1 and about 1.5–1.6× at 4 and 8, varying with the image. So a CPU limit cannot be derived from a
   latency budget; it has to be tuned separately, against a moving multiplier, and it will be tuned wrong.
-- **`RLIMIT_CPU` is cumulative over a process's life**, so it stops meaning "per request" the moment `reuse`
-  goes above `1`. Removing it is most of what makes worker reuse simple.
+- **`RLIMIT_CPU` is cumulative over a process's life**, so it stops meaning "per request" the moment `max_requests_per_worker`
+  goes above `1`. Removing it is most of what makes worker max_requests_per_worker simple.
 - **Aggregate CPU is already bounded** by the container's `cpus`, which is the resource-exhaustion concern.
 
 What is given up is real and worth naming: `RLIMIT_CPU` was kernel-enforced and would still fire if the
@@ -1248,7 +1248,7 @@ at upload time instead, against known-fresh bytes, which is the better place for
 
 So a gem that raised `PreviewError` for a capacity refusal would, on HEY, permanently destroy the
 thumbnail of every blob viewed during a cell restart, with no recovery short of a hand-written backfill.
-`terminal` on the wire is what tells the client which class to raise; injection is what stops the gem
+`permanent` on the wire is what tells the client which class to raise; injection is what stops the gem
 from guessing. An application adopting HotCell should also revisit its own permanent list — HEY's
 predates out-of-process conversion, where a timeout stopped being a property of the input.
 
@@ -1753,7 +1753,7 @@ them early: several of them constrain the architecture rather than the implement
     worker's life: 68.5ms/7,907 faults, then 50.7/3,590, 38.3/1,875, 41.9/1,786, 40.8/1,220. A fresh worker
     every time is 71.2ms/8,004, matching the reused worker's first request, which confirms both arms measure
     the same thing. Over 70 transforms of identical work, timed from the parent so `fork` and reap count,
-    reuse saved **27.3ms per transform, 36%**. Pre-warming with a synthetic image recovers only about a
+    max_requests_per_worker saved **27.3ms per transform, 36%**. Pre-warming with a synthetic image recovers only about a
     quarter of the faults and is not a substitute. See Appendix B.
 
 ## 9. Development
@@ -1857,12 +1857,12 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   to trigger the reap. The naive reap-at-top-of-accept-loop implementation fails the second.
 - The deadline is per request, not per worker life: a worker that has already served several quick requests
   still gets the full `deadline` on its next one.
-- Worker reuse: at `reuse: 3` the same pid serves three requests and a fourth arrives at a different pid.
-  At `reuse: 1` every request gets a new pid.
-- A cell configured with `reuse` above `1` **warns at boot** when any loaded operation declares
+- Worker max_requests_per_worker: at `max_requests_per_worker: 3` the same pid serves three requests and a fourth arrives at a different pid.
+  At `max_requests_per_worker: 1` every request gets a new pid.
+- A cell configured with `max_requests_per_worker` above `1` **warns at boot** when any loaded operation declares
   `untrusted_input :in_process`, and names the operation. Assert the warning is emitted and that the cell
   serves normally afterwards — the point is that the trade is visible, not that it is prevented.
-- At `reuse: 3` with an `:in_process` operation, a second request landing on the same worker can observe
+- At `max_requests_per_worker: 3` with an `:in_process` operation, a second request landing on the same worker can observe
   state the first left behind. Write it as a **descriptive** test: it documents what the setting costs, and it
   is the evidence behind the boot warning.
 - A `perform.hot_cell` event is emitted for a success, an `unreadable`, and a `capacity`, each carrying
@@ -2116,11 +2116,11 @@ against 5,289 ms fresh — 27.3 ms saved per transform, 36%.**
 
 That is larger than the phase table above implies, for two reasons worth stating: the phase numbers exclude
 fork and reap, and a reused worker converges to about 40 ms rather than the 46–54 ms a long-lived benchmark
-process shows. So the trade is worth about a third of the request. It is the `reuse` setting in section 4, it
+process shows. So the trade is worth about a third of the request. It is the `max_requests_per_worker` setting in section 4, it
 costs invariant 8 above `1`, and it amortizes fast enough that a high value buys nothing. Shrink the
 supervisor first, because that lever costs no isolation at all.
 
-**Synthetic pre-warming is not a free alternative to reuse.** Tested, because it would have been the ideal
+**Synthetic pre-warming is not a free alternative to max_requests_per_worker.** Tested, because it would have been the ideal
 answer: running a synthetic 64×64 pipeline in the worker before the real transform moved the real
 transform's faults from 7,885 only to 6,184, against a warm floor of about 3,300 — roughly a quarter of the
 excess. Most of the cost is proportional to the real image's own work, not to shared code paths a synthetic

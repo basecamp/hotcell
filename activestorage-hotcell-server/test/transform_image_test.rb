@@ -129,16 +129,16 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
-  # A caller bug is terminal and the client raises it. A bad document is terminal too but the client serves a
+  # A caller bug is permanent and the client raises it. A bad document is permanent too but the client serves a
   # placeholder for it, so the two must not arrive as the same code.
-  def test_a_refused_transformation_is_terminal
+  def test_a_refused_transformation_is_permanent
     Cell.boot do |cell|
       with_output do |destination|
         failure = assert_failed "invalid", cell.call("active_storage.transform_image",
                                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                                      payload: { format: "png", operations: { system: "id" } })
 
-        assert_predicate failure, :terminal?
+        assert_predicate failure, :permanent?
       end
     end
   end
@@ -151,7 +151,7 @@ class TransformImageTest < ActiveStorageHotCellTest
                                                         payload: { format: "png" })
 
         assert_equal "Vips::Error", failure.error_class
-        assert_predicate failure, :terminal?
+        assert_predicate failure, :permanent?
       end
     end
   end

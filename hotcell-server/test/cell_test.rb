@@ -96,7 +96,7 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       failure = assert_failed "unsupported", cell.call("test.nonexistent")
 
-      refute_predicate failure, :terminal?
+      refute_predicate failure, :permanent?
       assert_match "test.nonexistent", failure.message
     end
   end
@@ -107,18 +107,18 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       failure = assert_failed "protocol", cell.call("test.echo", version: 99)
 
-      refute_predicate failure, :terminal?
+      refute_predicate failure, :permanent?
     end
   end
 
-  # Not terminal, and that is the whole point of `failed`. This one really is the operation's own bug and
+  # Not permanent, and that is the whole point of `failed`. This one really is the operation's own bug and
   # would fail again — but the rescue that produces this code cannot tell it apart from Errno::ENOSPC out of
   # a full tmpfs, so it must answer for the case where retrying is the recoverable one.
   def test_an_operation_that_raises
     TestCell.boot do |cell|
       failure = assert_failed "failed", cell.call("test.broken")
 
-      refute_predicate failure, :terminal?
+      refute_predicate failure, :permanent?
       assert_equal "RuntimeError", failure.error_class
       assert_match "the operation itself is broken", failure.message
     end
@@ -128,7 +128,7 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("test.undecodable")
 
-      assert_predicate failure, :terminal?
+      assert_predicate failure, :permanent?
       assert_equal "HotCell::UnreadableInput", failure.error_class
     end
   end
@@ -162,7 +162,7 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       failure = assert_failed "killed", cell.call("test.hungry"), limit: "memory"
 
-      assert_predicate failure, :terminal?
+      assert_predicate failure, :permanent?
     end
   end
 
@@ -187,7 +187,7 @@ class CellTest < HotCellServerTest
         failure = assert_failed "unavailable", cell.call("test.silent", inputs: [ source ],
                                                                         outputs: [ destination ])
 
-        refute_predicate failure, :terminal?
+        refute_predicate failure, :permanent?
         assert_equal 0, File.size(destination)
       end
     end
@@ -260,13 +260,13 @@ class CellTest < HotCellServerTest
 
   # A worker that dies mid-request without a signal is the cell's fault rather than the input's, and a
   # misconfigured cell does it on every request. Recording that against a blob would condemn everything
-  # uploaded during a broken deploy, so it is the one `killed` verdict that is not terminal alongside the
+  # uploaded during a broken deploy, so it is the one `killed` verdict that is not permanent alongside the
   # deadline.
-  def test_a_worker_that_dies_without_answering_is_reported_and_is_not_terminal
+  def test_a_worker_that_dies_without_answering_is_reported_and_is_not_permanent
     TestCell.boot do |cell|
       failure = assert_failed "killed", cell.call("test.vanishes"), limit: "crashed"
 
-      refute_predicate failure, :terminal?
+      refute_predicate failure, :permanent?
       assert_nil failure.signal
     end
   end
@@ -306,7 +306,7 @@ class CellTest < HotCellServerTest
           failure = assert_failed "unavailable", cell.call("test.half_written", inputs: [ source ],
                                                                                 outputs: [ first, second ])
 
-          refute_predicate failure, :terminal?
+          refute_predicate failure, :permanent?
           assert_match "1 of 2 outputs received no bytes", failure.message
         end
       end

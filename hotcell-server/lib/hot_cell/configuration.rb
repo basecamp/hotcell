@@ -17,7 +17,7 @@ module HotCell
       concurrency:      4,   # workers running at once, and therefore the number of slots
       queue_factor:     2,   # accepted-but-not-running connections, as a multiple of concurrency
       queue_wait:       10,  # seconds a queued connection may wait before it is answered `capacity`
-      reuse:            1,   # requests a worker serves before it is discarded
+      max_requests_per_worker:            1,   # requests a worker serves before it is discarded
       control_deadline: 5,   # seconds a control connection may take to send its request
     }.freeze
 
@@ -61,12 +61,12 @@ module HotCell
       concurrency * queue_factor
     end
 
-    def unlimited_reuse?
-      reuse == UNLIMITED
+    def unlimited_requests?
+      max_requests_per_worker == UNLIMITED
     end
 
     def retire?(served)
-      !unlimited_reuse? && served >= reuse
+      !unlimited_requests? && served >= max_requests_per_worker
     end
 
     # A worker serving several requests holds each of them in the same address space, so an input that
@@ -76,18 +76,21 @@ module HotCell
     #
     # It reaches the verdict as well as the bytes, and that is worth saying because it is the part nothing
     # else here defends. The supervisor hands the caller's connection to the worker and never reads it, so
-    # the worker writes the response — including `terminal`, which the client turns into a permanent mark on
-    # a blob. At reuse 1 a compromised worker can only lie about the input that compromised it, which is
-    # nobody's problem but the attacker's. Above it, it can condemn a later caller's file.
+    # the worker writes the response — including `permanent`, which the client turns into a permanent mark on
+    # a blob. At max_requests_per_worker 1 a compromised worker can only lie about the input that compromised it,
+    # which is nobody's problem but the attacker's. Above it, it can condemn a later caller's file.
     def in_process_warning(operations)
-      return nil if reuse == 1
+      return nil if max_requests_per_worker == 1
 
       exposed = operations.select { |operation| operation.untrusted_input == :in_process }
       return nil if exposed.empty?
 
-      "reuse: #{reuse} with #{exposed.map(&:operation_name).join(", ")} parsing untrusted input in " \
-        "process. An input that compromises a worker reaches up to #{reuse == UNLIMITED ? "every" : reuse - 1} " \
-        "later request on it — their bytes, their output, and the verdict written down against them."
+      reached = unlimited_requests? ? "every" : max_requests_per_worker - 1
+
+      "max_requests_per_worker: #{max_requests_per_worker} with " \
+        "#{exposed.map(&:operation_name).join(", ")} parsing untrusted input in process. An input that " \
+        "compromises a worker reaches up to #{reached} later request on it — their bytes, their output, " \
+        "and the verdict written down against them."
     end
 
     # What this cell expects to answer within, and deliberately not a bound it can keep. Nothing enforces
@@ -103,12 +106,14 @@ module HotCell
       queue_wait + limits.deadline + KILL_GRACE
     end
 
-    # Goes on the wire as the answer to hotcell.describe, so every value has to be JSON-native. `reuse` is the
-    # one that is not: :unlimited is a Symbol, and a cell configured with it could not describe itself at all.
+    # Goes on the wire as the answer to hotcell.describe, so every value has to be JSON-native.
+    # `max_requests_per_worker` is the one that is not: :unlimited is a Symbol, and a cell configured with it could
+    # not describe itself at all.
     def to_h
       SCHEDULING.keys.to_h { |key| [ key, public_send(key) ] }
         .merge(limits.to_h)
-        .merge(reuse: unlimited_reuse? ? UNLIMITED.to_s : reuse, answer_within: answer_within)
+        .merge(answer_within: answer_within,
+               max_requests_per_worker: unlimited_requests? ? UNLIMITED.to_s : max_requests_per_worker)
     end
 
     private
@@ -123,8 +128,9 @@ module HotCell
           raise ConfigurationError, "queue_factor: #{queue_factor} must not be negative"
         end
 
-        unless unlimited_reuse? || (reuse.is_a?(Integer) && reuse.positive?)
-          raise ConfigurationError, "reuse: #{reuse.inspect} must be a positive Integer or :unlimited"
+        unless unlimited_requests? || (max_requests_per_worker.is_a?(Integer) && max_requests_per_worker.positive?)
+          raise ConfigurationError, "max_requests_per_worker: #{max_requests_per_worker.inspect} must be " \
+                                    "a positive Integer or :unlimited"
         end
       end
 

@@ -79,7 +79,7 @@ module HotCell
     # already named by `killed_for`, so a SIGKILL arriving here came from somewhere this process cannot see —
     # a cgroup OOM kill made on aggregate pressure, or a sibling worker, which shares a uid and is not
     # prevented from signalling. Reading it as this request's memory condemned an input for someone else's
-    # pressure. It falls through to `signal`, which is not terminal.
+    # pressure. It falls through to `signal`, which is not permanent.
     #
     # The three that remain are causally attributable: XFSZ is this worker passing RLIMIT_FSIZE, and SEGV,
     # ABRT and TRAP are how libvips and GLib die on their own allocation failures — libvips dereferences null
@@ -279,10 +279,10 @@ module HotCell
       # be available when nothing else is, and it runs inside the loop every conversion depends on — so
       # anything raised while answering a scrape would stop the cell serving.
       #
-      # **No test, because nothing can currently raise here.** `reuse: :unlimited` used to: a Symbol is not
-      # JSON-native, so a cell configured that way could not describe itself. Configuration#to_h reports it as
-      # a String now, and nothing else describe or metrics returns is unserializable. The rescue stays for the
-      # next field added to either — one unserializable value would otherwise stop the cell serving
+      # **No test, because nothing can currently raise here.** `max_requests_per_worker: :unlimited` used to: a
+      # Symbol is not JSON-native, so a cell configured that way could not describe itself. Configuration#to_h
+      # reports it as a String now, and nothing else describe or metrics returns is unserializable. The rescue stays
+      # for the next field added to either — one unserializable value would otherwise stop the cell serving
       # conversions, and this channel exists to answer when nothing else does.
       def answer_control(connection, line)
         response = begin
@@ -415,11 +415,11 @@ module HotCell
       #
       # **No test, because neither hazard can be triggered as the code stands.** A report is one small write,
       # well under PIPE_BUF, so a worker cannot write half of one; and 160 requests across four concurrent
-      # callers at reuse 8 never coalesced two reports into a single read. Both defences are here for the
-      # change that makes them reachable — a longer report, or a worker that writes in more than one call —
-      # after which a blocking read parks the loop enforcing every deadline, and a stranded second report
-      # leaves the supervisor waiting on a worker that already answered. Both kill the cell, and both cost
-      # about four lines to prevent.
+      # callers at max_requests_per_worker 8 never coalesced two reports into a single read. Both defences are here
+      # for the change that makes them reachable — a longer report, or a worker that writes in more than one call —
+      # after which a blocking read parks the loop enforcing every deadline, and a stranded second report leaves the
+      # supervisor waiting on a worker that already answered. Both kill the cell, and both cost about four lines to
+      # prevent.
       def child_reported(socket)
         child = @children.each_value.find { |candidate| candidate.control.socket == socket }
         return if child.nil?
