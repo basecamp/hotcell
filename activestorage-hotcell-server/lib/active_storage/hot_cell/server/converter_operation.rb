@@ -7,19 +7,13 @@ module ActiveStorage
     module Server
       # Everything that hands the untrusted bytes to an exec'd converter rather than parsing them here.
       #
-      # That is what `untrusted_input :subprocess` claims, and the claim is about this code rather than about the
-      # converter: a malicious input executes inside a child that dies at the end of the conversion, and this
-      # worker only copies bytes, spawns, and reads an exit status. Recycling such a worker buys nothing, because
-      # it was never exposed.
-      #
-      # The claim is easy to break later, and there are exactly two ways. Reading the converter's *output* with an
-      # in-process library — to put dimensions in the result, say — parses bytes a converter just produced from a
-      # hostile input, in this worker. So does parsing its stdout. Neither happens here, and the suite asserts the
-      # declarations rather than trusting these paragraphs.
+      # A malicious input executes inside a child that dies at the end of the conversion, and this worker only
+      # copies bytes, spawns, and reads an exit status. That is worth knowing when reading these operations,
+      # and it is worth being careful about when changing them: reading a converter's output with an
+      # in-process library — to put dimensions in the result, say — or parsing its stdout brings bytes a
+      # hostile input produced back into this worker. Neither happens here.
       class ConverterOperation < ::HotCell::Operation
         abstract_operation
-
-        untrusted_input :subprocess
 
         # A converter that exits non-zero on a document it cannot read is the commonest failure on this path, and
         # it is the input's fault rather than the operation's.

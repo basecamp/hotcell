@@ -92,7 +92,8 @@ module ActiveStorage
           # all, and a thumbnailer needs the output's own dimensions rather than the ones it asked for.
           #
           # This parses bytes libvips produced from a hostile input, in this worker. That is already true of
-          # everything above, which is why this operation declares untrusted_input :in_process.
+          # everything above: this operation parses hostile bytes in the worker, and reading its own output
+          # is one more place it does so.
           def describe(path, format)
             image = ::Vips::Image.new_from_file(path)
 

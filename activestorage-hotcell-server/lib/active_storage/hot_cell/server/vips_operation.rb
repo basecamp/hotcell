@@ -28,10 +28,6 @@ module ActiveStorage
       class VipsOperation < ::HotCell::Operation
         abstract_operation
 
-        # libvips parses here, in this process, so `max_requests_per_worker` is a security setting for these operations and not
-        # only a performance one.
-        untrusted_input :in_process
-
         # Vips::Error is how libvips reports a file it cannot decode, which is common rather than exceptional: it
         # covers truncated uploads, formats this build was not compiled with, and formats deliberately refused by
         # block_untrusted. All of those are the input's fault and none is the operation's.

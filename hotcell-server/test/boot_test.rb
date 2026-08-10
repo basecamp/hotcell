@@ -69,28 +69,6 @@ class BootTest < RegistryIsolatedTest
     end
   end
 
-  # Supported, often right, and it must not be made silently by somebody adding an operation to an existing
-  # cell. So it is a line in the log naming what is given up, not a refusal.
-  def test_reuse_above_one_with_in_process_parsing_warns_and_serves_anyway
-    TestCell.boot(max_requests_per_worker: 3) do |cell|
-      assert_ok cell.call("test.echo")
-      cell.stop
-
-      warning = cell.log_events("cell.reuse_warning").first
-      assert_match "max_requests_per_worker: 3", warning[:warning]
-      assert_match "test.uppercase", warning[:warning]
-    end
-  end
-
-  def test_reuse_of_one_has_nothing_to_warn_about
-    TestCell.boot do |cell|
-      assert_ok cell.call("test.echo")
-      cell.stop
-
-      assert_empty cell.log_events("cell.reuse_warning")
-    end
-  end
-
   # The worker tells the supervisor when its operation asked for less than the cell allows, because the
   # supervisor never reads a request and cannot know. It may only narrow. The worker is the one process here
   # that runs untrusted code, so the number it reports is checked rather than trusted: this is the side that

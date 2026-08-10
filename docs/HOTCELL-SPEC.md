@@ -962,49 +962,31 @@ So `max_requests_per_worker` is a dial, `1` is one end of it, and the right valu
 | **Subprocess converter** — `soffice`, `mutool`, `ffmpeg`, ImageMagick's CLI | In an `exec`'d child that dies at the end of the conversion. The worker only copies bytes, spawns, and reads an exit status. | **Nothing.** The worker was never exposed. These cells can run persistent workers. |
 | **In-process library** — libvips through `ruby-vips`, RMagick | In the worker's own address space. | **Isolation between requests.** So `max_requests_per_worker` here is a genuine security dial, and its value is a judgement about how much isolation a third of a request is worth. |
 
-An operation declares which it is:
+**This is a property of the operation's code, not something it declares.** An earlier draft had operations
+declare `untrusted_input :in_process` or `:subprocess`, and a cell warned at boot when
+`max_requests_per_worker` was above `1` and any operation claimed the first. That was withdrawn: the
+declaration was an unverifiable self-assertion whose only consumer was a log line, and the assertion is easy
+to break — reading a converter's output with an in-process library, or parsing its stdout, moves bytes a
+hostile input produced back into the worker, with nothing to notice.
 
-```ruby
-class TransformImage < HotCell::Operation
-  untrusted_input :in_process     # libvips parses here, so `max_requests_per_worker` is a security setting
-end
+What survives is the reasoning, which belongs where an operation is written rather than in a keyword. The
+question is narrow: can a malicious input *execute* in this process?
 
-class ConvertDocument < HotCell::Operation
-  untrusted_input :subprocess     # soffice parses in an exec'd child
-end
-```
-
-`:in_process` is the default, because it is the answer that makes `max_requests_per_worker` mean something and a wrong default
-should be the cautious one.
-
-**This is a warning at boot, not a refusal.** A cell with `max_requests_per_worker` above `1` hosting `:in_process` operations
-logs one line naming them and naming what is given up: an input that compromises a worker reaches up to
-`max_requests_per_worker - 1` later requests. That configuration is supported and is often the right call — a cell doing avatar
-thumbnails for one tenant is a very different risk from one converting arbitrary uploads across tenants — and
-the decision belongs to whoever runs the cell, not to this document. What must not happen is that the trade
-is made silently by somebody adding an operation to an existing cell, which is what the warning is for.
-
-`max_requests_per_worker: :unlimited` is available and is intended for cells whose operations are all `:subprocess`. Persistent
-workers there give up nothing, keep their slot's converter profile warm, and never pay the settling cost at
-all. Using it in a cell with `:in_process` operations warns like any other value above `1`.
-
-**The declaration is a claim about the operation's own code, and it is easy to break later.** The question it
-answers is narrow: can a malicious input *execute* in this process? That is what decides whether recycling the
-worker is safe, so the line falls here:
-
-1. **Reading its own output with an in-process media library makes it `:in_process`.** Building `result` from
-   the converter's output header — width and page height, which BC4's thumbnailer wants — runs a decoder over
+1. **Reading its own output with an in-process media library means it can.** Building `result` from the
+   converter's output header — width and page height, which BC4's thumbnailer wants — runs a decoder over
    bytes a converter just produced from a hostile input, in the worker. `preview_pdf` and `preview_video`
    therefore return no dimensions at all, which is also what Rails' previewers return: a previewer yields
    `io:`, `filename:` and `content_type:`, and the dimensions come later from analysing the attached blob.
 2. **Parsing the converter's structured stdout does not.** `probe_media` reads ffprobe's JSON, on a bounded
-   buffer, with the standard library. Treating that as equivalent to an image decoder would make `:in_process`
+   buffer, with the standard library. Treating that as equivalent to an image decoder would make the category
    mean "touches any attacker-influenced byte", which is every operation — and a distinction that covers
    everything guides nobody. What it must do instead is refuse to pass that data on: only numbers and codec
    names matching a conservative pattern come back, because everything ffprobe reports is attacker-controlled,
    including title tags that need not be valid UTF-8.
 
-Test the claim rather than trusting the comment. A one-line addition is enough to invalidate it.
+`max_requests_per_worker` above `1` is therefore a judgement made by whoever runs the cell, against what that
+cell carries. A cell doing avatar thumbnails for one tenant is a very different risk from one converting
+arbitrary uploads across tenants.
 
 **Reuse is simple here only because there is no `RLIMIT_CPU`.** A cumulative CPU limit would stop meaning
 "per request" the moment `max_requests_per_worker` went above `1`, and would need a different answer for `:subprocess` and
@@ -1859,12 +1841,9 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   still gets the full `deadline` on its next one.
 - Worker max_requests_per_worker: at `max_requests_per_worker: 3` the same pid serves three requests and a fourth arrives at a different pid.
   At `max_requests_per_worker: 1` every request gets a new pid.
-- A cell configured with `max_requests_per_worker` above `1` **warns at boot** when any loaded operation declares
-  `untrusted_input :in_process`, and names the operation. Assert the warning is emitted and that the cell
-  serves normally afterwards — the point is that the trade is visible, not that it is prevented.
-- At `max_requests_per_worker: 3` with an `:in_process` operation, a second request landing on the same worker can observe
-  state the first left behind. Write it as a **descriptive** test: it documents what the setting costs, and it
-  is the evidence behind the boot warning.
+- At `max_requests_per_worker: 3`, a second request landing on the same worker can observe state the first
+  left behind. Write it as a **descriptive** test: it documents what the setting costs, which is the whole
+  reason the number is a judgement rather than a tuning knob.
 - A `perform.hot_cell` event is emitted for a success, an `unreadable`, and a `capacity`, each carrying
   `code`, `bytes_in`, `bytes_out`, `queued_ms`, and `perform_ms`.
 

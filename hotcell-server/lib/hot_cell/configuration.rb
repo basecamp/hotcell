@@ -63,30 +63,6 @@ module HotCell
       !unlimited_requests? && served >= max_requests_per_worker
     end
 
-    # A worker serving several requests holds each of them in the same address space, so an input that
-    # achieves code execution can read and tamper with every later request that worker handles, with no
-    # race to win. That trade is often the right one, and it must not be made silently by somebody
-    # adding an operation to an existing cell.
-    #
-    # It reaches the verdict as well as the bytes, and that is worth saying because it is the part nothing
-    # else here defends. The supervisor hands the caller's connection to the worker and never reads it, so
-    # the worker writes the response — including `permanent`, which the client turns into a permanent mark on
-    # a blob. At max_requests_per_worker 1 a compromised worker can only lie about the input that compromised it,
-    # which is nobody's problem but the attacker's. Above it, it can condemn a later caller's file.
-    def in_process_warning(operations)
-      return nil if max_requests_per_worker == 1
-
-      exposed = operations.select { |operation| operation.untrusted_input == :in_process }
-      return nil if exposed.empty?
-
-      reached = unlimited_requests? ? "every" : max_requests_per_worker - 1
-
-      "max_requests_per_worker: #{max_requests_per_worker} with " \
-        "#{exposed.map(&:operation_name).join(", ")} parsing untrusted input in process. An input that " \
-        "compromises a worker reaches up to #{reached} later request on it — their bytes, their output, " \
-        "and the verdict written down against them."
-    end
-
     # What this cell expects to answer within, and deliberately not a bound it can keep. Nothing enforces
     # KILL_GRACE: a worker in uninterruptible sleep does not die when it is signalled, and the supervisor
     # answers only after the reap. Treat it as the threshold a client's timeout should clear, not as a

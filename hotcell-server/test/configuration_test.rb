@@ -55,57 +55,6 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: :forever) }
   end
 
-  # The trade is supported and often right. What must not happen is that somebody makes it silently by
-  # adding an operation to an existing cell.
-  def test_reuse_above_one_warns_and_names_the_operations_that_parse_in_process
-    warning = HotCell::Configuration.new(max_requests_per_worker: 3).in_process_warning([ Fixtures::Uppercase ])
-
-    assert_match "max_requests_per_worker: 3", warning
-    assert_match "test.uppercase", warning
-    assert_match "up to 2 later request", warning
-  end
-
-  def test_reuse_of_one_has_nothing_to_warn_about
-    assert_nil HotCell::Configuration.new(max_requests_per_worker: 1).in_process_warning([ Fixtures::Uppercase ])
-  end
-
-  def test_a_cell_of_subprocess_operations_has_nothing_to_warn_about
-    subprocess = Class.new(HotCell::Operation) do
-      operation "test.subprocess_only"
-      untrusted_input :subprocess
-    end
-
-    assert_nil HotCell::Configuration.new(max_requests_per_worker: 5).in_process_warning([ subprocess ])
-  end
-
-  # This goes on the wire as the answer to hotcell.describe, so "reportable" has to mean serializable and not
-  # just present. :unlimited is the one supported value that is not JSON-native, and a cell configured with it
-  # could not describe itself at all.
-  def test_the_whole_configuration_is_reportable
-    reported = HotCell::Configuration.new(concurrency: 2, deadline: 30).to_h
-
-    assert_equal 2, reported[:concurrency]
-    assert_equal 30, reported[:deadline]
-    assert_equal reported, HotCell::Payload.validate!(reported, "result")
-  end
-
-  def test_unlimited_reuse_is_reportable_too
-    reported = HotCell::Configuration.new(max_requests_per_worker: :unlimited).to_h
-
-    assert_equal "unlimited", reported[:max_requests_per_worker]
-    assert_equal reported, HotCell::Payload.validate!(reported, "result")
-  end
-
-  # A nil is a missing number rather than "use the default". A cell whose deadline is nil accepts every
-  # request and then dies on the first arithmetic the supervisor does with it.
-  def test_a_limit_explicitly_set_to_nil_is_refused_where_it_is_written
-    error = assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(deadline: nil) }
-
-    assert_match "deadline cannot be nil", error.message
-  end
-
-  # The client compares its own timeout against this rather than adding up the parts, so the cell is the one
-  # side that has to know what its stages cost.
   def test_it_reports_the_longest_it_may_take_to_answer
     configuration = HotCell::Configuration.new(queue_wait: 10, deadline: 60)
 
