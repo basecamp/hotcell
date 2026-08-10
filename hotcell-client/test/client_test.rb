@@ -12,6 +12,12 @@ class ClientTest < HotCellClientTest
     assert_equal "client_test.derived_name", DerivedName.operation
   end
 
+  # A client named TransformImage and an operation named TransformImageOperation derive the same default,
+  # which is what makes the naming convention free of explicit declarations.
+  def test_the_default_name_strips_a_trailing_operation_suffix
+    assert_equal "client_test.derived_name", DerivedNameOperation.operation
+  end
+
   def test_a_subclass_inherits_the_cell_it_talks_to
     assert_equal "test", Specialized.hotcell
   end
@@ -92,6 +98,10 @@ class ClientTest < HotCellClientTest
   class Specialized < Uppercase; end
 
   class DerivedName < HotCell::Client
+    hotcell "test"
+  end
+
+  class DerivedNameOperation < HotCell::Client
     hotcell "test"
   end
 

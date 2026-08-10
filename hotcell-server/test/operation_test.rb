@@ -11,6 +11,16 @@ class OperationTest < RegistryIsolatedTest
     assert_equal "operation_test.pdf_preview", PDFPreview.operation_name
   end
 
+  # The cell-side convention is a trailing Operation — TransformImageOperation — and the client keeps the
+  # bare name, so stripping the suffix is what lets both sides derive the same default.
+  def test_the_default_name_strips_a_trailing_operation_suffix
+    assert_equal "operation_test.extract_text", ExtractTextOperation.operation_name
+  end
+
+  def test_a_class_named_only_operation_keeps_its_name
+    assert_equal "operation_test.operation", Operation.operation_name
+  end
+
   def test_an_explicit_name_wins
     assert_equal "test.uppercase", Fixtures::Uppercase.operation_name
   end
@@ -63,6 +73,8 @@ class OperationTest < RegistryIsolatedTest
   end
 
   class TransformImage < HotCell::Operation; end
+  class ExtractTextOperation < HotCell::Operation; end
+  class Operation < HotCell::Operation; end
   class PDFPreview < HotCell::Operation; end
 
   class Callbacks < HotCell::Operation
