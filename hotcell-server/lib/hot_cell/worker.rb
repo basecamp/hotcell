@@ -124,7 +124,7 @@ module HotCell
       def convert(operation, inputs, outputs, payload, timing)
         timing.performing
 
-        result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, payload) }
+        result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, **payload) }
         written = timing.measure(:writeback_ms) { outputs.map(&:post) }
 
         return unwritten(outputs, written, timing) if written.any?(&:zero?)

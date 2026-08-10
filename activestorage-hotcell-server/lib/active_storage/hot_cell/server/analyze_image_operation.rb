@@ -22,7 +22,7 @@ module ActiveStorage
         # Analysis reads a header rather than decoding a whole image, so it gets far less room than a transform.
         limits deadline: 10, memory: 1024 * 1024**2, file_size: 48 * 1024**2, open_files: 64
 
-        def perform(inputs, _outputs, _payload)
+        def perform(inputs, _outputs)
           source, = inputs
           image = ::Vips::Image.new_from_file(source.path, access: :sequential)
 

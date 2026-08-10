@@ -124,6 +124,18 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # The payload arrives as keyword arguments, so a key the operation did not declare raises inside
+  # perform. Transient, like every unclassified raise: a caller bug must never become a verdict.
+  def test_a_payload_key_the_operation_does_not_declare_answers_failed
+    TestCell.boot do |cell|
+      failure = assert_failed "failed", cell.call("test.blocking", payload: { hours: 1 })
+
+      refute_predicate failure, :permanent?
+      assert_equal "ArgumentError", failure.error_class
+      assert_match "keyword", failure.message
+    end
+  end
+
   def test_an_input_that_cannot_be_decoded
     TestCell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("test.undecodable")

@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 module HotCell
-  # An operation declares only what is not an argument. Every operation on both sides takes the same
-  # three: inputs, outputs, and a payload. There is no per-operation argument schema and no generated
-  # code, and an operation that receives the wrong count fails inside perform and reports `failed`. The
-  # blast radius of a miscounted argument is one worker with no network, and skipping the schema buys
-  # back an entire declaration layer.
+  # Every operation takes inputs, outputs, and the payload — and the payload arrives as keyword
+  # arguments. There is no argument schema and no generated code, but an operation may declare the
+  # specific keywords it wants (`format:, operations: {}`), and Ruby validates them on arrival; one that
+  # wants the payload as a plain Hash declares `**payload` as its third argument, and one that takes no
+  # options declares neither. A mismatched call raises inside perform and reports `failed`, and the
+  # blast radius of that is one worker with no network.
   #
   # This is the one place application code deliberately runs inside a cell. The invariant is not "no
   # application code": it is that the code running there has no credentials, no database, no network, and
@@ -115,8 +116,8 @@ module HotCell
 
     # A fresh instance per request, so that nothing an operation puts in an instance variable survives
     # into the next request a reused worker serves.
-    def perform(inputs, outputs, payload)
-      raise NotImplementedError, "#{self.class} must implement perform(inputs, outputs, payload)"
+    def perform(inputs, outputs, **)
+      raise NotImplementedError, "#{self.class} must implement perform(inputs, outputs, <keywords>)"
     end
 
     Converted = Struct.new(:status, :out, :err) do

@@ -36,7 +36,7 @@ module ActiveStorage
         CODEC = /\A[a-z0-9_]{1,32}\z/
         SCRUB = ->(value) { value.to_s.match?(CODEC) ? value.to_s : nil }
 
-        def perform(inputs, _outputs, _payload)
+        def perform(inputs, _outputs)
           source, = inputs
           probed = JSON.parse(run!("ffprobe", "-v", "quiet", "-print_format", "json",
                                    "-show_format", "-show_streams", source.path).out)

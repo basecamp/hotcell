@@ -18,7 +18,7 @@ module HotCell
     class Uppercase < HotCell::Operation
       operation "test.uppercase"
 
-      def perform(inputs, outputs, _payload)
+      def perform(inputs, outputs)
         source, = inputs
         destination, = outputs
         File.binwrite destination.path, File.binread(source.path).upcase
@@ -31,9 +31,9 @@ module HotCell
     class Concatenate < HotCell::Operation
       operation "test.concatenate"
 
-      def perform(inputs, outputs, payload)
+      def perform(inputs, outputs, separator: "")
         destination, = outputs
-        File.binwrite destination.path, inputs.map { |input| File.binread(input.path) }.join(payload[:separator].to_s)
+        File.binwrite destination.path, inputs.map { |input| File.binread(input.path) }.join(separator.to_s)
 
         { inputs: inputs.size }
       end
@@ -43,11 +43,11 @@ module HotCell
     class Measure < HotCell::Operation
       operation "test.measure"
 
-      def perform(inputs, _outputs, payload)
+      def perform(inputs, _outputs, asked_for: nil)
         source, = inputs
 
         { bytes: File.size(source.path), digest: Digest::SHA256.file(source.path).hexdigest[0, 8],
-          asked_for: payload[:asked_for] }
+          asked_for: asked_for }
       end
     end
 
@@ -55,7 +55,7 @@ module HotCell
     class Echo < HotCell::Operation
       operation "test.echo"
 
-      def perform(_inputs, _outputs, payload)
+      def perform(_inputs, _outputs, **payload)
         { echoed: payload }
       end
     end
@@ -63,7 +63,7 @@ module HotCell
     class WhoAmI < HotCell::Operation
       operation "test.whoami"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { pid: Process.pid, home: ENV["HOME"], scratch: Dir.exist?(scratch_path) }
       end
 
@@ -78,7 +78,7 @@ module HotCell
     class Reverse < HotCell::Operation
       operation "test.reverse"
 
-      def perform(inputs, outputs, _payload)
+      def perform(inputs, outputs)
         outputs.first.to_io.write inputs.first.to_io.read.reverse
 
         { copied: inputs.first.staged? }
@@ -88,7 +88,7 @@ module HotCell
     class Broken < HotCell::Operation
       operation "test.broken"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         raise "the operation itself is broken"
       end
     end
@@ -96,7 +96,7 @@ module HotCell
     class Undecodable < HotCell::Operation
       operation "test.undecodable"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         raise HotCell::UnreadableInput, "not an image at all"
       end
     end
@@ -109,7 +109,7 @@ module HotCell
       operation "test.declared_unreadable"
       unreadable LibraryError
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         raise LibraryError, "the library says no"
       end
     end
@@ -117,7 +117,7 @@ module HotCell
     class Hungry < HotCell::Operation
       operation "test.hungry"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         raise HotCell::MemoryExhausted, "out of memory -- size == 732MB"
       end
     end
@@ -125,7 +125,7 @@ module HotCell
     class BadResult < HotCell::Operation
       operation "test.bad_result"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         "a String is not a result"
       end
     end
@@ -133,7 +133,7 @@ module HotCell
     class UnserializableResult < HotCell::Operation
       operation "test.unserializable_result"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { format: :png }
       end
     end
@@ -142,7 +142,7 @@ module HotCell
     class Silent < HotCell::Operation
       operation "test.silent"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         {}
       end
     end
@@ -150,9 +150,9 @@ module HotCell
     class Overflowing < HotCell::Operation
       operation "test.overflowing"
 
-      def perform(_inputs, outputs, payload)
+      def perform(_inputs, outputs, megabytes:)
         File.open(outputs.first.path, "wb") do |file|
-          payload.fetch(:megabytes).times { file.write "x" * (1024 * 1024) }
+          megabytes.times { file.write "x" * (1024 * 1024) }
           file.flush
         end
 
@@ -181,7 +181,7 @@ module HotCell
         false
       end
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { digits: (3**EXPONENT).bit_length }
       end
     end
@@ -191,7 +191,7 @@ module HotCell
     class Spawns < HotCell::Operation
       operation "test.spawns"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         pid = spawn("sleep", "60")
         tell_and_wait pid
       end
@@ -222,10 +222,10 @@ module HotCell
     class Environment < HotCell::Operation
       operation "test.environment"
 
-      def perform(_inputs, _outputs, payload)
-        converted = convert "env", env: payload[:env] || {}
+      def perform(_inputs, _outputs, env: {}, canary: nil)
+        converted = convert "env", env: env
 
-        { seen: converted.out.lines.map(&:chomp).sort, worker_saw: ENV[payload[:canary].to_s],
+        { seen: converted.out.lines.map(&:chomp).sort, worker_saw: ENV[canary.to_s],
           ok: converted.ok? }
       end
     end
@@ -235,8 +235,8 @@ module HotCell
     class Noisy < HotCell::Operation
       operation "test.noisy"
 
-      def perform(_inputs, _outputs, payload)
-        stream = payload[:stream] == "err" ? "STDERR" : "STDOUT"
+      def perform(_inputs, _outputs, stream: "out")
+        stream = stream == "err" ? "STDERR" : "STDOUT"
         script = "40.times { #{stream}.write('x' * 1_000_000) }"
         converted = convert "ruby", "-e", script, capture: 1024
 
@@ -251,7 +251,7 @@ module HotCell
     class ConfiguresGlobal < HotCell::Operation
       abstract_operation
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { configured_for: CONFIGURED.last }
       end
     end
@@ -271,7 +271,7 @@ module HotCell
     class HalfWritten < HotCell::Operation
       operation "test.half_written"
 
-      def perform(_inputs, outputs, _payload)
+      def perform(_inputs, outputs)
         File.binwrite outputs.first.path, "only the first"
 
         { wrote: 1 }
@@ -281,7 +281,7 @@ module HotCell
     class Rlimits < HotCell::Operation
       operation "test.rlimits"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { memory: Process.getrlimit(Process::RLIMIT_DATA), file_size: Process.getrlimit(Process::RLIMIT_FSIZE),
           open_files: Process.getrlimit(Process::RLIMIT_NOFILE), core: Process.getrlimit(Process::RLIMIT_CORE) }
       end
@@ -303,8 +303,8 @@ module HotCell
     class Greedy < HotCell::Operation
       operation "test.greedy"
 
-      def perform(_inputs, _outputs, payload)
-        { bytes: ("x" * (payload.fetch(:megabytes) * 1024 * 1024)).bytesize }
+      def perform(_inputs, _outputs, megabytes:)
+        { bytes: ("x" * (megabytes * 1024 * 1024)).bytesize }
       end
     end
 
@@ -312,7 +312,7 @@ module HotCell
     class Mojibake < HotCell::Operation
       operation "test.mojibake"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { filename: "caf\xFF.jpg".dup.force_encoding(Encoding::UTF_8) }
       end
     end
@@ -322,7 +322,7 @@ module HotCell
     class Vanishes < HotCell::Operation
       operation "test.vanishes"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         exit! 3
       end
     end
@@ -330,10 +330,10 @@ module HotCell
     class Blocking < HotCell::Operation
       operation "test.blocking"
 
-      def perform(_inputs, _outputs, payload)
-        sleep payload.fetch(:seconds)
+      def perform(_inputs, _outputs, seconds:)
+        sleep seconds
 
-        { slept: payload[:seconds], pid: Process.pid }
+        { slept: seconds, pid: Process.pid }
       end
     end
   end

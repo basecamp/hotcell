@@ -15,8 +15,9 @@ require "hot_cell/cell"
 require "hot_cell/cells"
 
 module HotCell
-  # The application side. A client class names the cell that serves it, and the call signature is the same
-  # three arguments an operation receives on the other side.
+  # The application side. A client class names the cell that serves it, and the call carries the same
+  # three things an operation receives on the other side — with the payload Hash arriving there as
+  # keyword arguments.
   #
   #   class ArchiveFolder < HotCell::Client
   #     hotcell "archiver"

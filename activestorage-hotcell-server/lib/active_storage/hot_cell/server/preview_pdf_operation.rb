@@ -27,12 +27,12 @@ module ActiveStorage
         MAX_PAGE = 10_000
         MAX_RESOLUTION = 600
 
-        def perform(inputs, outputs, payload)
+        def perform(inputs, outputs, page: 1, resolution: 72)
           source, = inputs
           destination, = outputs
 
-          page = positive_integer!(payload, :page, 1, MAX_PAGE)
-          resolution = positive_integer!(payload, :resolution, 72, MAX_RESOLUTION)
+          page = positive_integer!(:page, page, MAX_PAGE)
+          resolution = positive_integer!(:resolution, resolution, MAX_RESOLUTION)
 
           run! "mutool", "draw", "-F", "png", "-r", resolution.to_s, "-o", destination.path,
                source.path, page.to_s

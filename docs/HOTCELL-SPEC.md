@@ -176,7 +176,7 @@ contract would be a network-reachable ImageMagick RPC drivable by anything that 
 That is a consequence of an unauthenticated HTTP listener on a shared network. HotCell's transport is an
 `AF_UNIX` socket under `network: none`, in a directory mounted into exactly two containers, so "anything
 that can reach it" is already "the application". The argument is worth stating because a reader who
-knows thimble will otherwise read `perform(inputs, outputs, payload)` as the mistake thimble named.
+knows thimble will otherwise read `perform(inputs, outputs, **payload)` as the mistake thimble named.
 
 What survives of that concern is the value allowlist, and it survives in full: see "Validation belongs
 to the operation". The transformations reaching an operation are **not** drawn from anything the
@@ -471,27 +471,30 @@ exist. The cost we pay instead is that a cell must be on the same host as its ca
 
 ### The uniform signature
 
-Every operation, on both sides, takes the same three arguments. There is no per-operation argument
-schema, no generated code, and no introspection.
+Every operation takes inputs, outputs, and the payload. There is no per-operation argument schema, no
+generated code, and no introspection — but the payload arrives in `perform` as keyword arguments, so an
+operation that declares the keys it wants gets Ruby's own validation of them.
 
 ```ruby
-perform_in_hotcell(inputs, outputs, payload)   # cold side
-perform(inputs, outputs, payload)              # hot side
+perform_in_hotcell(inputs, outputs, payload)      # cold side: payload is a Hash
+perform(inputs, outputs, **payload)               # hot side: the worker double-splats it
 ```
 
-`inputs` and `outputs` are arrays of `HotCell::Input` and `HotCell::Output`. `payload` is a Hash. An
-operation destructures what it expects at the top of `perform`:
+`inputs` and `outputs` are arrays of `HotCell::Input` and `HotCell::Output`, and a cold-side caller may
+pass a bare IO where an array of one is meant. An operation destructures the descriptors at the top of
+`perform` and declares its options as keywords — or takes `**payload` to receive the Hash whole, or
+declares nothing when it has no options:
 
 ```ruby
-def perform(inputs, outputs, payload)
+def perform(inputs, outputs, format:, operations: {})
   image, overlay = inputs
   result, = outputs
 end
 ```
 
-An operation that receives the wrong count fails inside `perform` and reports `failed`. That is
-acceptable: the blast radius of a miscounted argument is one worker with no network, and it buys back
-an entire declaration layer.
+An operation that receives the wrong descriptor count, a missing keyword, or an undeclared one fails
+inside `perform` and reports `failed`. That is acceptable: `failed` is transient, so no verdict is
+recorded for a caller bug, and the blast radius is one worker with no network.
 
 ### Request
 
@@ -720,10 +723,10 @@ class TransformImageOperation < HotCell::Operation
   before_fork        { require "image_processing/vips" }
   before_worker_boot { Vips.concurrency_set 4; Vips.block_untrusted true; Vips.cache_set_max_mem 10 * 1024**2 }
 
-  def perform(inputs, outputs, payload)
+  def perform(inputs, outputs, format:, operations: {})
     source, = inputs
     destination, = outputs
-    validate! payload            # plain Ruby; see below
+    validate! format, operations       # plain Ruby; see below
     …
     { width:, height:, bytes:, content_type: }
   end
