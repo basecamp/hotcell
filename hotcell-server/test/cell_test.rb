@@ -277,6 +277,23 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # The supervisor renames rather than deletes, because how long a recursive delete takes is chosen by
+  # whatever filled the directory — and it would run inside the loop enforcing every other deadline. The
+  # unlinking lands on the next worker for this slot, which has a deadline of its own.
+  def test_a_killed_workers_scratch_is_taken_out_of_the_way_rather_than_deleted_in_the_loop
+    slot = HotCell::Slot.build(Dir.mktmpdir("hotcell-slot"), 0)
+    FileUtils.mkdir_p File.join(slot.make_scratch, "deep")
+
+    slot.discard_scratch
+
+    refute Dir.exist?(slot.scratch), "the scratch path is free for the next request"
+    assert_equal 1, Dir.glob("#{slot.scratch}.discarded-*").size, "the tree is still there, out of the way"
+
+    slot.make_scratch
+
+    assert_empty Dir.glob("#{slot.scratch}.discarded-*"), "the next worker on this slot sweeps it"
+  end
+
   def test_scratch_is_gone_once_the_request_is_answered
     TestCell.boot do |cell|
       with_files do |source, destination|

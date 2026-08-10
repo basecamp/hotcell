@@ -11,6 +11,8 @@ module HotCell
   # application code": it is that the code running there has no credentials, no database, no network, and
   # no application configuration.
   class Operation
+    READ_BYTES = 16 * 1024
+
     STAGING = [ :paths, :descriptors ].freeze
     UNTRUSTED_INPUT = [ :in_process, :subprocess ].freeze
 
@@ -171,14 +173,51 @@ module HotCell
     #
     # Bounded output, because a converter's stdout is attacker-influenced. The environment is also why
     # parsing that output moves an operation from :subprocess to :in_process — see untrusted_input.
+    # `capture` bounds what is kept AND what is read, which capture3 could not do. It accumulates both
+    # streams in full and hands them over at exit, so slicing afterwards bounded the Strings this method
+    # returns and nothing else: an input that makes a converter print gigabytes of diagnostics had already
+    # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
+    # verdict, which is terminal, for a document whose only crime was being noisy.
     def convert(*command, env: {}, capture: 64 * 1024)
       require "open3"
 
-      out, err, status = Open3.capture3(converter_environment(env), *command, unsetenv_others: true)
-      Converted.new status, out.byteslice(0, capture), err.byteslice(0, capture)
+      Open3.popen3(converter_environment(env), *command, unsetenv_others: true) do |stdin, out, err, thread|
+        stdin.close
+        captured = drain(out, err, capture)
+
+        Converted.new thread.value, captured[out], captured[err]
+      end
     end
 
     private
+      # Reads both streams until they close, keeping only the first `limit` bytes of each and discarding the
+      # rest as it arrives. Both have to be read, not just the one being kept: a converter blocks writing to
+      # a pipe nobody drains, and a converter blocked on stderr never exits, which turns a noisy document
+      # into a deadline kill.
+      def drain(*streams, limit)
+        kept = streams.to_h { |stream| [ stream, +"".b ] }
+        open = streams.dup
+
+        until open.empty?
+          readable, = IO.select(open)
+
+          Array(readable).each do |stream|
+            chunk = stream.read_nonblock(READ_BYTES, exception: false)
+            next if chunk == :wait_readable
+
+            if chunk.nil?
+              open.delete stream
+              next
+            end
+
+            room = limit - kept[stream].bytesize
+            kept[stream] << chunk.byteslice(0, room) if room.positive?
+          end
+        end
+
+        kept
+      end
+
       def converter_environment(overrides)
         { "HOME" => ENV["HOME"], "PATH" => ENV["PATH"], "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8" }
           .merge(overrides.transform_keys(&:to_s))

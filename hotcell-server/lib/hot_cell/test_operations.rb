@@ -232,6 +232,21 @@ module HotCell
       end
     end
 
+    # Prints far more than any sane capture, on the stream the payload names, then exits. For proving that
+    # a noisy converter costs a bounded amount of this worker's memory rather than all of it.
+    class Noisy < HotCell::Operation
+      operation "test.noisy"
+      untrusted_input :subprocess
+
+      def perform(_inputs, _outputs, payload)
+        stream = payload[:stream] == "err" ? "STDERR" : "STDOUT"
+        script = "40.times { #{stream}.write('x' * 1_000_000) }"
+        converted = convert "ruby", "-e", script, capture: 1024
+
+        { out: converted.out.bytesize, err: converted.err.bytesize, ok: converted.ok? }
+      end
+    end
+
     class Rlimits < HotCell::Operation
       operation "test.rlimits"
 

@@ -27,7 +27,9 @@ module HotCell
       new number, File.join(workspace, number.to_s, "home"), File.join(workspace, number.to_s, "scratch")
     end
 
+    # Sweeps first, because the supervisor only renames. See discard_scratch.
     def make_scratch
+      sweep
       FileUtils.mkdir_p scratch, mode: 0o700
       scratch
     end
@@ -40,11 +42,36 @@ module HotCell
       nil
     end
 
+    # **The supervisor renames rather than deletes, and that is a scheduling decision.**
+    #
+    # How long a recursive delete takes is chosen by the operation that filled the directory. Nothing bounds
+    # the number of entries — RLIMIT_FSIZE caps one file, not a million tiny ones — so an input that makes a
+    # converter write an enormous tree and then hang buys a deletion the supervisor performs synchronously,
+    # after the kill, inside the loop enforcing every other request's deadline.
+    #
+    # A rename within one filesystem is O(1) and takes the tree out of the way. The unlinking is charged to
+    # the next worker on this slot, which is a process with a deadline and a SIGKILL waiting for it.
+    def discard_scratch
+      return unless Dir.exist?(scratch)
+
+      File.rename scratch, "#{scratch}.discarded-#{Process.pid}-#{(@discarded = @discarded.to_i + 1)}"
+    rescue SystemCallError
+      remove_scratch
+    end
+
     # The home survives between requests on purpose, so it is created once; scratch must not, so anything
     # a previous boot left behind goes now.
     def prepare
       FileUtils.mkdir_p home, mode: 0o700
       remove_scratch
+      sweep
     end
+
+    private
+      def sweep
+        Dir.glob("#{scratch}.discarded-*").each { |path| FileUtils.remove_entry path }
+      rescue SystemCallError
+        nil
+      end
   end
 end
