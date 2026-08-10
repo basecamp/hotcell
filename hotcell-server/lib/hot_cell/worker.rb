@@ -81,7 +81,7 @@ module HotCell
         rescue MessageError, AccessModeError => error
           response = refuse("invalid", error, timing)
         rescue NoMemoryError, Errno::ENOMEM, MemoryExhausted => error
-          response = refuse(Codes::KILLED, error, timing, limit: "memory")
+          response = refuse(Codes::KILLED, error, timing, limit: Codes::MEMORY)
         rescue StandardError => error
           response = refuse("failed", error, timing)
         end

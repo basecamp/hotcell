@@ -32,12 +32,40 @@ class CodesTest < HotCellTest
     refute HotCell::Codes.terminal?("killed", limit: "deadline")
   end
 
-  def test_killed_with_no_limit_is_terminal
-    assert HotCell::Codes.terminal?("killed")
+  # `killed` with no limit is the same ignorance as a limit the table does not carry: something killed the
+  # worker and nothing says what. Every mint site in the cell sets a limit, so this is a malformed message or
+  # a hand-written caller — and neither is grounds for condemning the input.
+  def test_killed_with_no_limit_is_not_terminal
+    refute HotCell::Codes.terminal?("killed")
   end
 
   def test_a_writer_asking_for_an_unknown_code_is_a_typo_rather_than_forward_compatibility
     assert_raises(ArgumentError) { HotCell::Codes.terminal?("nonsense") }
+  end
+
+  # The whole point of the table's default. A cell mints these, and a kill reason added to the supervisor
+  # without a row here is a forgotten row rather than a verdict — so it must not come out permanent, which is
+  # the answer that cannot be taken back.
+  def test_a_limit_the_table_has_never_heard_of_is_not_terminal
+    refute HotCell::Codes.terminal?("killed", limit: "oom")
+    refute HotCell::Failure.new(code: "killed", limit: "oom").terminal?
+  end
+
+  # And it must not raise either, which is why this differs from an unknown code. Supervisor#answer_for builds
+  # its Failure as an argument to `answer`, above that method's rescue, on the one path whose job is reporting
+  # a dead worker — so a raise there would take the cell down instead of one request.
+  def test_an_unknown_limit_does_not_raise
+    HotCell::Codes.terminal? "killed", limit: "oom"
+    HotCell::Failure.new code: "killed", limit: "oom"
+  end
+
+  # Every name the cell mints is a constant, so neither the supervisor nor the worker can spell one the table
+  # does not carry.
+  def test_every_named_limit_has_a_row
+    [ HotCell::Codes::FSIZE, HotCell::Codes::MEMORY, HotCell::Codes::DEADLINE,
+      HotCell::Codes::SIGNAL, HotCell::Codes::CRASHED ].each do |limit|
+      assert HotCell::Codes::TERMINAL_BY_LIMIT.key?(limit), "#{limit} has no row"
+    end
   end
 
   def test_known
