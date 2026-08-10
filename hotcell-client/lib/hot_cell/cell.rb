@@ -7,10 +7,6 @@ module HotCell
   # Both socket paths are derived from one directory, so the volume mounts are mechanical rather than
   # something to remember and the two sockets cannot end up apart.
   class Cell
-    # The supervisor kills with a signal and answers immediately, so this is the time it needs to notice
-    # and write, not a shutdown grace period.
-    KILL_GRACE = 1
-
     attr_reader :name, :timeout, :permanent, :transient, :transport
 
     def initialize(name, dir: nil, timeout: 30, permanent: PermanentFailure, transient: TransientFailure,
@@ -97,13 +93,15 @@ module HotCell
       # serving traffic. A background job wants it looser, so it receives `capacity` or `killed` and can act
       # on them rather than guessing from a socket error. Both outcomes are transient, so neither is
       # misclassified — which is the only reason this is safe.
+      # The cell states this; adding it up here would mean guessing at stages only the supervisor knows about.
+      # A cell too old to report it says nothing, which is the right answer for a number we cannot know.
       def warn_about_timeout(described)
-        needed = described[:queue_wait].to_f + described[:deadline].to_f + KILL_GRACE
-        return if timeout.nil? || timeout >= needed
+        needed = described[:answer_within]
+        return if needed.nil? || timeout.nil? || timeout >= needed
 
-        HotCell.logger.warn "hotcell #{name}: this client waits #{timeout}s and the cell may take " \
-                            "#{needed}s (queue_wait #{described[:queue_wait]} + deadline " \
-                            "#{described[:deadline]} + #{KILL_GRACE}s to answer), so a saturated cell will " \
+        HotCell.logger.warn "hotcell #{name}: this client waits #{timeout}s and the cell says it may take " \
+                            "#{needed}s to answer (queue_wait #{described[:queue_wait]} + deadline " \
+                            "#{described[:deadline]} + the time to kill and reply), so a saturated cell will " \
                             "arrive here as a transport failure rather than as its own verdict. Deliberate " \
                             "on a synchronous path; a mistake for a background job."
       end

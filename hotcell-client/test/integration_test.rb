@@ -126,8 +126,20 @@ class IntegrationTest < HotCellClientTest
     with_cell(deadline: 30, queue_wait: 10, register: { timeout: 5 }) do
       warnings = capturing_warnings { HotCell.describe_cells }
 
-      assert_match "this client waits 5s and the cell may take 41.0s", warnings
+      assert_match "this client waits 5s and the cell says it may take 41s", warnings
       assert_match "a mistake for a background job", warnings
+    end
+  end
+
+  # A cell too old to report its own budget says nothing rather than having the client guess at one.
+  def test_describe_is_quiet_when_the_cell_does_not_report_a_budget
+    with_cell(deadline: 30, queue_wait: 10, register: { timeout: 5 }) do
+      cell = HotCell.cell("test")
+      described = cell.send(:control, HotCell::DESCRIBE).result.except(:answer_within)
+
+      warnings = capturing_warnings { cell.send :warn_about_timeout, described }
+
+      refute_match "this client waits", warnings
     end
   end
 

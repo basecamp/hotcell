@@ -30,6 +30,9 @@ module HotCell
 
     UNLIMITED = :unlimited
 
+    # Noticing an overdue worker, signalling it, reaping it, and writing the answer.
+    KILL_GRACE = 1
+
     attr_reader(*SCHEDULING.keys)
     attr_reader :limits
 
@@ -81,12 +84,22 @@ module HotCell
         "later request on it."
     end
 
+    # The longest this cell may take to answer, which the client compares its own timeout against. Derived
+    # here rather than reassembled there: a client adding up `queue_wait + deadline` plus its own guess at
+    # the kill-to-answer step cannot follow a change to any of them, and the error points the unsafe way —
+    # the client believes its timeout is generous and takes a transport failure instead of the cell's verdict.
+    #
+    # A stage added later that costs a caller time belongs in this sum.
+    def answer_within
+      queue_wait + limits.deadline + KILL_GRACE
+    end
+
     # Goes on the wire as the answer to hotcell.describe, so every value has to be JSON-native. `reuse` is the
     # one that is not: :unlimited is a Symbol, and a cell configured with it could not describe itself at all.
     def to_h
       SCHEDULING.keys.to_h { |key| [ key, public_send(key) ] }
         .merge(limits.to_h)
-        .merge(reuse: unlimited_reuse? ? UNLIMITED.to_s : reuse)
+        .merge(reuse: unlimited_reuse? ? UNLIMITED.to_s : reuse, answer_within: answer_within)
     end
 
     private
