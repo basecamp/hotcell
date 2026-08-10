@@ -24,6 +24,10 @@ module HotCell
   # cannot hold its limits and a client that cannot classify a failure are both worse discovered in traffic.
   class ConfigurationError < Error; end
 
+  # A peer that stopped mid-message. Distinct from a cell answering `timeout`, which is a verdict: this is
+  # the caller's own deadline passing with the response incomplete.
+  class ReadTimeout < Error; end
+
   # A client naming a cell nobody registered.
   class UnregisteredCell < Error; end
 

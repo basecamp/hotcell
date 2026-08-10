@@ -25,15 +25,17 @@ module HotCell
       end
 
       private
+        # One absolute deadline across the whole response, not a wait for the first byte. Waiting for
+        # readability and then calling a blocking read bounded nothing: a peer that sent one byte inside the
+        # timeout and then stopped held this caller until the cell's own deadline, and a peer that never
+        # closed held it forever — on a path an application may well be calling from a web request.
         def receive(connection, timeout)
-          unless timeout.nil? || connection.socket.wait_readable(timeout)
-            return failed("timeout", "the cell did not answer within #{timeout}s")
-          end
-
-          line = connection.read_line
+          line = connection.read_line(deadline: timeout && Clock.now + timeout)
           return supervisor_gone if line.nil?
 
           Response.parse line
+        rescue ReadTimeout
+          failed "timeout", "the cell did not answer within #{timeout}s"
         rescue MessageError => error
           unavailable "the cell's answer could not be read: #{error.message}"
         end
