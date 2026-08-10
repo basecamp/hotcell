@@ -130,10 +130,11 @@ wall-clock deadline, the control channel, the client and its classification, the
 Active Storage operations converting real images, PDFs and video, and the transformer, analyzer and previewers
 Rails is configured with.
 
-`activestorage-hotcell-client` depends on [rails/rails#58384](https://github.com/rails/rails/pull/58384), which
-is unmerged — the Gemfile pins the branch. Without it a class value matches none of the arms the engine
-assigns `ActiveStorage.variant_transformer` from, so it is left at `nil` and the first variant dies with
-`NoMethodError`. The PR adds a `Class` arm, and an `else` that raises at boot.
+`activestorage-hotcell-client` depends on
+[rails/rails#58384](https://github.com/rails/rails/pull/58384), which is merged and unreleased — so the
+Gemfile tracks `main` until 8.2 ships and the gemspec floor can name a version. It adds the `Class` arm the
+engine assigns `ActiveStorage.variant_transformer` from, and an `else` that raises at boot rather than
+leaving it `nil` for the first variant to die on.
 
 Not yet, in the order they matter:
 
