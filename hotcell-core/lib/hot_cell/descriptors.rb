@@ -17,10 +17,11 @@ module HotCell
       Fcntl::O_RDWR   => "read-write",
     }.freeze
 
-    attr_reader :io, :path
+    attr_reader :io
 
-    def initialize(io)
+    def initialize(io, scratch: nil)
       @io = io
+      @scratch = scratch
       verify_regular_file!
       verify_access_mode!
       verify_position!
@@ -34,12 +35,20 @@ module HotCell
       io.close unless io.closed?
     end
 
-    # Whether the worker has given this descriptor a filename on its own scratch.
+    # Whether this descriptor has been given a filename on the worker's own scratch.
     def staged?
-      !path.nil?
+      !@path.nil?
     end
 
     private
+      # The worker hands each descriptor the scratch it may stage onto; the client hands over nothing,
+      # because a filename is the worker's concern and no path the cold side names must ever matter.
+      def scratch_path
+        raise Error, "#{self.class.name} has no scratch, so a path is not a question for this side" if @scratch.nil?
+
+        @scratch.call
+      end
+
       def verify_access_mode!
         mode = io.fcntl(Fcntl::F_GETFL) & Fcntl::O_ACCMODE
         return if mode == self.class::ACCESS_MODE
@@ -71,23 +80,32 @@ module HotCell
   class Input < Descriptor
     ACCESS_MODE = Fcntl::O_RDONLY
 
-    # Copies the bytes onto the worker's own scratch and returns the path. Every subprocess converter
-    # wants a filename, and image_processing is filename-in and filename-out, so this is the general
-    # model rather than a workaround. RLIMIT_FSIZE bounds this copy as well as the output, which is why
-    # one number covers both.
-    def stage(path)
-      @path = path
-      File.open(path, "wb") { |file| IO.copy_stream(io, file) }
-      path
+    # Copies the bytes onto the worker's own scratch on the first call and returns the filename. Every
+    # subprocess converter wants a filename, and image_processing is filename-in and filename-out, so
+    # this is the general model rather than a workaround. RLIMIT_FSIZE bounds this copy as well as the
+    # output, which is why one number covers both.
+    #
+    # On call rather than up front, so an operation that can consume the descriptor directly — ffprobe
+    # reads only a container header — never pays to copy a multi-gigabyte input onto a small tmpfs.
+    def path
+      @path ||= copied_to(scratch_path)
     end
+
+    private
+      def copied_to(path)
+        File.open(path, "wb") { |file| IO.copy_stream(io, file) }
+        path
+      end
   end
 
   class Output < Descriptor
     ACCESS_MODE = Fcntl::O_WRONLY
 
-    # Names the file the operation is to write. Nothing is copied yet.
-    def stage(path)
-      @path = path
+    # Names the file the operation is to write, on the first call. Nothing is copied yet: post sends
+    # the file back out through the descriptor, and an operation that writes the descriptor directly
+    # never names one at all.
+    def path
+      @path ||= scratch_path
     end
 
     # Sends whatever the operation produced back out through the descriptor, and returns the byte count

@@ -13,8 +13,6 @@ module HotCell
   class Operation
     READ_BYTES = 16 * 1024
 
-    STAGING = [ :paths, :descriptors ].freeze
-
     class << self
       include Declarations
 
@@ -58,22 +56,6 @@ module HotCell
         return inherited_value(:@limits) || Limits.new if values.empty?
 
         @limits = Limits.new(**values)
-      end
-
-      # Whether the worker copies the inputs onto its scratch and gives the operation filenames.
-      #
-      # Paths are the general model rather than a workaround: image_processing is filename-in and
-      # filename-out, and mutool, ffmpeg, and ffprobe all take paths. Copying gives the tool a path the
-      # cold side never named.
-      #
-      # Descriptors are for an operation that can consume one directly. ffprobe reads only a container
-      # header, and making it copy a multi-gigabyte input onto a 512MB tmpfs first is not a corner case:
-      # it is why thimble's video role abandoned descriptors for a shared volume, at roughly 300x I/O
-      # amplification on its commonest call.
-      def stage(mode = nil)
-        return inherited_value(:@stage) || :paths if mode.nil?
-
-        @stage = verify_one_of(mode, STAGING, "stage")
       end
 
       # Runs in the supervisor, once, at boot. It may require and it may configure, and it must never
@@ -123,12 +105,6 @@ module HotCell
       private
         def derived_operation_name
           Naming.default_operation_name self
-        end
-
-        def verify_one_of(value, allowed, setting)
-          return value if allowed.include?(value)
-
-          raise ConfigurationError, "#{setting}: #{value.inspect} must be one of #{allowed.inspect}"
         end
 
         # Superclass first, so a base class's hooks run before the ones that specialize it.
