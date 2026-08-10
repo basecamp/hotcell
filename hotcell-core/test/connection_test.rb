@@ -12,42 +12,38 @@ class ConnectionTest < HotCellTest
   end
 
   def test_a_message_and_its_descriptors_cross_together
-    with_file("source") do |source|
-      with_file do |destination|
-        reading(source) do |readable|
-          writing(destination) do |writable|
-            request = HotCell::Request.new(op: "test.copy", inputs: 1, outputs: 1)
-            descriptors = [ HotCell::Input.new(readable), HotCell::Output.new(writable) ]
-            cold.send_message request.to_line, descriptors: descriptors
+    with_files("source") do |source, destination|
+      reading(source) do |readable|
+        writing(destination) do |writable|
+          request = HotCell::Request.new(op: "test.copy", inputs: 1, outputs: 1)
+          descriptors = [ HotCell::Input.new(readable), HotCell::Output.new(writable) ]
+          cold.send_message request.to_line, descriptors: descriptors
 
-            line, received = hot.receive_message
+          line, received = hot.receive_message
 
-            assert_equal "test.copy", HotCell::Request.parse(line).op
-            assert_equal 2, received.size
-            assert_equal "source", received.first.read
-          ensure
-            received&.each(&:close)
-          end
+          assert_equal "test.copy", HotCell::Request.parse(line).op
+          assert_equal 2, received.size
+          assert_equal "source", received.first.read
+        ensure
+          received&.each(&:close)
         end
       end
     end
   end
 
   def test_the_access_modes_survive_the_crossing
-    with_file("source") do |source|
-      with_file do |destination|
-        reading(source) do |readable|
-          writing(destination) do |writable|
-            cold.send_message HotCell::Request.new(op: "test.copy", inputs: 1, outputs: 1).to_line,
-                              descriptors: [ HotCell::Input.new(readable), HotCell::Output.new(writable) ]
+    with_files("source") do |source, destination|
+      reading(source) do |readable|
+        writing(destination) do |writable|
+          cold.send_message HotCell::Request.new(op: "test.copy", inputs: 1, outputs: 1).to_line,
+                            descriptors: [ HotCell::Input.new(readable), HotCell::Output.new(writable) ]
 
-            _line, received = hot.receive_message
+          _line, received = hot.receive_message
 
-            assert_instance_of HotCell::Input, HotCell::Input.new(received.first)
-            assert_instance_of HotCell::Output, HotCell::Output.new(received.last)
-          ensure
-            received&.each(&:close)
-          end
+          assert_instance_of HotCell::Input, HotCell::Input.new(received.first)
+          assert_instance_of HotCell::Output, HotCell::Output.new(received.last)
+        ensure
+          received&.each(&:close)
         end
       end
     end

@@ -12,7 +12,7 @@ class BootTest < RegistryIsolatedTest
   # it, so a cell that finds it off has lost the guarantee, and a warning in a log is how a dead control
   # stays dead.
   def test_a_host_where_a_worker_could_read_a_siblings_memory_refuses_to_boot
-    with_ptrace_scope "0" do |path|
+    with_file "0" do |path|
       error = assert_raises(RuntimeError) { HotCell::TestCell.boot(supervisor: { ptrace_scope_path: path }) { nil } }
 
       assert_match "kernel.yama.ptrace_scope is 0", error.message
@@ -21,7 +21,7 @@ class BootTest < RegistryIsolatedTest
   end
 
   def test_a_protected_host_boots
-    with_ptrace_scope "1" do |path|
+    with_file "1" do |path|
       TestCell.boot(supervisor: { ptrace_scope_path: path }) do |cell|
         assert_ok cell.call("test.echo")
       end
@@ -108,11 +108,4 @@ class BootTest < RegistryIsolatedTest
   end
 
   private
-    def with_ptrace_scope(value)
-      Tempfile.create("ptrace_scope") do |file|
-        file.write value
-        file.flush
-        yield file.path
-      end
-    end
 end
