@@ -29,6 +29,12 @@ module HotCell
       version == PROTOCOL_VERSION
     end
 
+    # Next to the predicate it explains, because both sockets answer with it and a caller may well be
+    # grepping for it — the one failure that arrives at a hundred percent during a rolling deploy.
+    def version_mismatch
+      "this cell speaks v#{PROTOCOL_VERSION} and the request is v#{version}"
+    end
+
     def to_line
       Payload.validate! payload, "payload"
 
@@ -41,14 +47,17 @@ module HotCell
     end
 
     class << self
-      def parse(line)
-        parsed = Payload.parse(line)
-        raise MessageError, "request is not a JSON object" unless parsed.is_a?(Hash)
+      include Fields
 
-        new version: integer(parsed, :v), op: name(parsed, :op), inputs: count(parsed, :inputs),
-            outputs: count(parsed, :outputs), payload: object(parsed, :payload)
-      rescue JSON::ParserError => error
-        raise MessageError, "request is not valid JSON: #{error.message}"
+      def noun
+        "request"
+      end
+
+      def parse(line)
+        parse_message(line) do |parsed|
+          new version: integer(parsed, :v), op: name(parsed, :op), inputs: count(parsed, :inputs),
+              outputs: count(parsed, :outputs), payload: object(parsed, :payload)
+        end
       end
 
       private
@@ -70,13 +79,6 @@ module HotCell
           return value if value.is_a?(String) && !value.empty?
 
           raise MessageError, "request #{key} is #{value.inspect} and must be a non-empty String"
-        end
-
-        def object(parsed, key)
-          value = parsed[key]
-          return value if value.is_a?(Hash)
-
-          raise MessageError, "request #{key} is #{value.inspect} and must be a JSON object"
         end
     end
 

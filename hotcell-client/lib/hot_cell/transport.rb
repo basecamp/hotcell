@@ -19,7 +19,7 @@ module HotCell
         # the most likely failures in production and they produce no wire response at all, so they belong
         # in the taxonomy rather than outside it — otherwise the code on the instrumentation event is blank
         # for exactly the outage you most want to see.
-        unavailable error.message, error_class: error.class.name
+        unavailable error
       ensure
         connection&.close
       end
@@ -45,12 +45,13 @@ module HotCell
           unavailable "the connection closed with no response, so the cell's supervisor is gone"
         end
 
-        def unavailable(message, error_class: nil)
-          failed "unavailable", message, error_class: error_class
+        # Takes a String or an Exception; Failure.for splits an Exception into its two wire fields.
+        def unavailable(detail)
+          failed "unavailable", detail
         end
 
-        def failed(code, message, error_class: nil)
-          Response.failed Failure.new(code: code, message: message, error_class: error_class)
+        def failed(code, detail)
+          Response.failed Failure.for(code, detail)
         end
     end
   end

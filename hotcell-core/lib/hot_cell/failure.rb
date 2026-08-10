@@ -43,6 +43,17 @@ module HotCell
     end
 
     class << self
+      # Builds from either a message String or an Exception. An Exception has to become two wire fields, and
+      # that rule was written out at three call sites across two gems — the worker, the supervisor's control
+      # answer, and the client's transport.
+      def for(code, detail, limit: nil)
+        if detail.is_a?(Exception)
+          new code: code, limit: limit, error_class: detail.class.name, message: detail.message
+        else
+          new code: code, limit: limit, message: detail
+        end
+      end
+
       # A code this client has never heard of is not terminal. An old client will meet a code added
       # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
       # some work, while writing down a verdict that was temporary is irreversible.

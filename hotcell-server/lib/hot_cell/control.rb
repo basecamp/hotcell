@@ -26,7 +26,7 @@ module HotCell
       request = Request.parse(line)
 
       unless request.current_version?
-        return failed("protocol", "this cell speaks v#{PROTOCOL_VERSION} and the request is v#{request.version}")
+        return failed("protocol", request.version_mismatch)
       end
 
       case request.op
