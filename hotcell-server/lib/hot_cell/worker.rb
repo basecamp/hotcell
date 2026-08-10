@@ -73,23 +73,23 @@ module HotCell
       end
 
       def serve(connection, queued_ms)
-        started = Clock.now
+        timing = Timing.new(queued_ms)
         received = []
         response = nil
 
         begin
           line, received = connection.receive_message
-          response = handle(line, received, queued_ms, started) unless line.nil?
+          response = handle(line, received, timing) unless line.nil?
         rescue MessageError, AccessModeError => error
-          response = refuse("invalid", error, queued_ms, started)
+          response = refuse("invalid", error, timing)
         rescue NoMemoryError, Errno::ENOMEM, MemoryExhausted => error
-          response = refuse(Codes::KILLED, error, queued_ms, started, limit: "memory")
+          response = refuse(Codes::KILLED, error, timing, limit: "memory")
         rescue StandardError => error
-          response = refuse("failed", error, queued_ms, started)
+          response = refuse("failed", error, timing)
         end
 
         deliver connection, response
-        record response, started
+        record response, timing
       ensure
         received.each(&:close)
         connection.close
@@ -97,44 +97,44 @@ module HotCell
         report_idle response&.failure&.code
       end
 
-      def handle(line, received, queued_ms, started)
+      def handle(line, received, timing)
         request = Request.parse(line)
 
         unless request.current_version?
           return refuse("protocol", "this cell speaks v#{PROTOCOL_VERSION} and the request is " \
-                                    "v#{request.version}", queued_ms, started)
+                                    "v#{request.version}", timing)
         end
 
         operation = Registry.lookup(request.op)
-        return refuse("unsupported", "no operation named #{request.op.inspect}", queued_ms, started) if operation.nil?
+        return refuse("unsupported", "no operation named #{request.op.inspect}", timing) if operation.nil?
 
         inputs, outputs = wrap(request, received)
         boot operation
         narrow operation
         report_deadline operation
 
-        convert operation, inputs, outputs, request.payload, queued_ms
+        convert operation, inputs, outputs, request.payload, timing
       end
 
-      def convert(operation, inputs, outputs, payload, queued_ms)
-        timing = { queued_ms: queued_ms }
-        began = Clock.now
+      def convert(operation, inputs, outputs, payload, timing)
+        timing.performing
 
-        timing[:staging_ms] = measure { stage inputs, outputs } if operation.stage == :paths
-        result = nil
-        timing[:convert_ms] = measure { result = operation.new.perform(inputs, outputs, payload) }
-        timing[:writeback_ms] = measure { outputs.each(&:post) }
-        timing[:perform_ms] = Clock.ms_since(began)
+        timing.measure(:staging_ms) { stage inputs, outputs } if operation.stage == :paths
+        result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, payload) }
+        timing.measure(:writeback_ms) { outputs.each(&:post) }
+
+        # Read before the scratch goes, so perform_ms measures performing and not the cleanup after it.
+        Payload.validate! result, "result"
+        response = Response.ok(result: result, timing: timing.to_h)
 
         # Before answering rather than after, so the window in which a sibling worker could read this
         # request's bytes off the shared tmpfs closes before the caller is told anything. Files are not
         # isolated between concurrent workers and cannot be, so the window's size is the whole control.
         remove_scratch
 
-        Payload.validate! result, "result"
-        Response.ok result: result, timing: timing
+        response
       rescue *operation.unreadable => error
-        refuse "unreadable", error, queued_ms, began
+        refuse "unreadable", error, timing
       end
 
       def wrap(request, received)
@@ -199,17 +199,16 @@ module HotCell
         Response.failed(verdict("failed", error), timing: response.timing).to_line
       end
 
-      def record(response, started)
+      def record(response, timing)
         return if response.nil?
 
         log.write "request", slot: slot.number, code: response.failure&.code || "ok",
-                             terminal: response.failure&.terminal?, elapsed_ms: Clock.ms_since(started),
+                             terminal: response.failure&.terminal?, elapsed_ms: timing.elapsed_ms,
                              **response.timing
       end
 
-      def refuse(code, detail, queued_ms, since, limit: nil)
-        Response.failed verdict(code, detail, limit: limit),
-                        timing: { queued_ms: queued_ms, perform_ms: Clock.ms_since(since) }
+      def refuse(code, detail, timing, limit: nil)
+        Response.failed verdict(code, detail, limit: limit), timing: timing.to_h
       end
 
       def verdict(code, detail, limit: nil)
@@ -229,12 +228,6 @@ module HotCell
         FileUtils.remove_entry slot.scratch if Dir.exist?(slot.scratch)
       rescue SystemCallError
         nil
-      end
-
-      def measure
-        at = Clock.now
-        yield
-        Clock.ms_since at
       end
   end
 end

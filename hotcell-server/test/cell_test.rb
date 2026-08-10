@@ -138,6 +138,21 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # A refusal reports the phases that finished before it, so a verdict says where the request got to rather
+  # than only that it failed. Staging completed here and converting did not.
+  def test_a_refusal_reports_the_phases_that_completed
+    TestCell.boot do |cell|
+      with_files do |source, destination|
+        response = cell.call "test.declared_unreadable", inputs: [ source ], outputs: [ destination ]
+        assert_failed "unreadable", response
+
+        assert response.timing.key?(:staging_ms), "expected staging_ms in #{response.timing.inspect}"
+        refute response.timing.key?(:convert_ms), "converting never finished, so it must not be reported"
+        assert_operator response.timing[:perform_ms], :>=, response.timing[:staging_ms]
+      end
+    end
+  end
+
   # Memory belongs with the resource verdicts rather than in `failed`, because it is the
   # decompression-bomb case and a caller must be able to act on it without parsing a message.
   def test_running_out_of_memory_is_killed_rather_than_failed
