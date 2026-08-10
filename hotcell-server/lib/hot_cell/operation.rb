@@ -15,6 +15,8 @@ module HotCell
     UNTRUSTED_INPUT = [ :in_process, :subprocess ].freeze
 
     class << self
+      include Declarations
+
       def inherited(subclass)
         super
         Registry.register subclass
@@ -139,15 +141,6 @@ module HotCell
           return value if allowed.include?(value)
 
           raise ConfigurationError, "#{setting}: #{value.inspect} must be one of #{allowed.inspect}"
-        end
-
-        def inherited_value(variable)
-          ancestors.grep(Class).each do |ancestor|
-            value = ancestor.instance_variable_get(variable)
-            return value unless value.nil?
-          end
-
-          nil
         end
 
         # Superclass first, so a base class's hooks run before the ones that specialize it.

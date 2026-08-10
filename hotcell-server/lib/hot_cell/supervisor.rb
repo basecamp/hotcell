@@ -17,8 +17,36 @@ module HotCell
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
   # knows when every worker started its current request, which is what the deadline needs.
   class Supervisor
+    # Owns "is this worker busy" and the two transitions that change the answer, because the supervisor asking
+    # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
+    # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired, :buffer) do
+                       :retired, :buffer, keyword_init: true) do
+      def self.build(slot:, pid:, control:, deadline:)
+        new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, retired: false, buffer: "".b
+      end
+
+      def dispatched(connection, deadline, at:)
+        self.connection = connection
+        self.dispatched_at = at
+        self.deadline = deadline
+        self.killed_for = nil
+        self.served += 1
+      end
+
+      # Not a reset of `deadline`: the supervisor re-establishes it on the next dispatch, and leaving the last
+      # one readable is what lets a log line after the fact say what this worker was being held to.
+      def finished
+        connection&.close
+        released
+      end
+
+      # Stop being busy while leaving the connection open, for the one caller that still has to answer on it.
+      def released
+        self.connection = nil
+        self.dispatched_at = nil
+      end
+
       def busy?
         !connection.nil?
       end
@@ -149,7 +177,8 @@ module HotCell
         when @work then accept_work
         when @control then accept_control
         else
-          pending_control(source) ? read_control(source) : child_reported(source)
+          pending = pending_control(source)
+          pending ? read_control(pending) : child_reported(source)
         end
       end
 
@@ -211,9 +240,8 @@ module HotCell
 
       # Keep whatever arrived and come back for the rest. A stream socket does not promise the whole line
       # lands in one read, and a blocking read here would put the loop at the mercy of a control client.
-      def read_control(socket)
-        pending = pending_control(socket)
-        chunk = socket.read_nonblock(MAX_REQUEST_BYTES, exception: false)
+      def read_control(pending)
+        chunk = pending.connection.socket.read_nonblock(MAX_REQUEST_BYTES, exception: false)
         return if chunk == :wait_readable
 
         return drop_control(pending) if chunk.nil?
@@ -284,11 +312,7 @@ module HotCell
       # A worker can die between the fork and this write. Answering rather than raising is what keeps one dead
       # worker from taking the whole cell down with it, and the caller gets a transient verdict either way.
       def dispatch(child, connection, queued_ms)
-        child.connection = connection
-        child.dispatched_at = Clock.now
-        child.deadline = configuration.limits.deadline
-        child.killed_for = nil
-        child.served += 1
+        child.dispatched connection, configuration.limits.deadline, at: Clock.now
 
         child.control.send_message JSON.generate({ queued_ms: queued_ms }) << "\n",
                                    descriptors: [ connection ]
@@ -296,7 +320,10 @@ module HotCell
       rescue SystemCallError, IOError => error
         log.write "worker.undispatchable", pid: child.pid, slot: child.slot.number,
                                            error: error.class.name
-        child.connection = nil
+
+        # Released rather than finished: this is the only path that hands the connection back to be answered
+        # here, so it must not be closed on the way out.
+        child.released
         child.retired = true
         answer connection, Failure.new(code: Codes::KILLED, limit: "crashed", message: error.message)
         false
@@ -329,8 +356,8 @@ module HotCell
         worker_side.close
         log.write "worker.forked", pid: pid, slot: number
 
-        @children[number] = Child.new(slot, pid, Connection.new(supervisor_side), nil, nil,
-                                      configuration.limits.deadline, 0, nil, false, "".b)
+        @children[number] = Child.build(slot: slot, pid: pid, control: Connection.new(supervisor_side),
+                                        deadline: configuration.limits.deadline)
       end
 
       # Everything the supervisor holds and the worker must not: the listener, the signal pipe, the other
@@ -408,9 +435,7 @@ module HotCell
 
       def finish(child, code)
         counters.record code
-        child.connection&.close
-        child.connection = nil
-        child.dispatched_at = nil
+        child.finished
         remove_scratch child.slot
 
         retire child if configuration.retire?(child.served)

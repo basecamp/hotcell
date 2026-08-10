@@ -28,6 +28,8 @@ module HotCell
   # detail and several clients may name the same cell.
   class Client
     class << self
+      include Declarations
+
       def inherited(subclass)
         super
         HotCell.clients << subclass
@@ -61,16 +63,6 @@ module HotCell
       def perform_in_hotcell(inputs, outputs, payload = {})
         new.perform_in_hotcell inputs, outputs, payload
       end
-
-      private
-        def inherited_value(variable)
-          ancestors.grep(Class).each do |ancestor|
-            value = ancestor.instance_variable_get(variable)
-            return value unless value.nil?
-          end
-
-          nil
-        end
     end
 
     def perform_in_hotcell(inputs, outputs, payload = {})
