@@ -11,8 +11,11 @@ require "json"
 require "hot_cell/server"
 require "hot_cell/test_support"
 
-require_relative "support/operations"
+require "hot_cell/test_operations"
 require_relative "support/test_cell"
+
+# The fixtures ship namespaced; these suites read better without the prefix.
+Fixtures = HotCell::Fixtures
 
 class HotCellServerTest < Minitest::Test
   include HotCell::TestSupport

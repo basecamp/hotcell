@@ -90,15 +90,27 @@ module HotCell
     end
 
     private
+      # `integer:` is a real distinction rather than an oversight, so it is written as one: a count of workers
+      # or of queue places has to be whole, where a number of seconds does not.
       def verify!
-        raise ConfigurationError, "concurrency: #{concurrency} must be positive" unless concurrency.is_a?(Integer) && concurrency.positive?
-        raise ConfigurationError, "queue_factor: #{queue_factor} must not be negative" unless queue_factor.is_a?(Integer) && !queue_factor.negative?
-        raise ConfigurationError, "queue_wait: #{queue_wait} must be positive" unless queue_wait.positive?
-        raise ConfigurationError, "control_deadline: #{control_deadline} must be positive" unless control_deadline.positive?
+        positive! :concurrency, integer: true
+        positive! :queue_wait
+        positive! :control_deadline
+
+        unless queue_factor.is_a?(Integer) && !queue_factor.negative?
+          raise ConfigurationError, "queue_factor: #{queue_factor} must not be negative"
+        end
 
         unless unlimited_reuse? || (reuse.is_a?(Integer) && reuse.positive?)
           raise ConfigurationError, "reuse: #{reuse.inspect} must be a positive Integer or :unlimited"
         end
+      end
+
+      def positive!(key, integer: false)
+        value = public_send(key)
+        return if value.positive? && (!integer || value.is_a?(Integer))
+
+        raise ConfigurationError, "#{key}: #{value} must be positive"
       end
   end
 end

@@ -1,59 +1,21 @@
 # frozen_string_literal: true
 
-# Enough of a cell's consist to exercise the client against a real one. The cell carries whatever this
-# process has defined, because a worker inherits the registry through the fork.
-module Fixtures
-  class Uppercase < HotCell::Operation
-    operation "test.uppercase"
+# The consist this suite points a real cell at. It comes from hotcell-server rather than being written again
+# here: five of the operations this file used to define answered to wire names those already claim, so
+# `test.uppercase` meant one thing when this suite proved it and another when the server suite did.
+require "hot_cell/test_operations"
 
-    def perform(inputs, outputs, _payload)
-      File.binwrite outputs.first.path, File.binread(inputs.first.path).upcase
+Fixtures = HotCell::Fixtures
 
-      { bytes: File.size(outputs.first.path) }
-    end
-  end
+module HotCell
+  module Fixtures
+    # Its slot home names the cell it ran in, so a test can tell two cells apart. Only this suite boots two.
+    class WhereAmI < HotCell::Operation
+      operation "test.whereami"
 
-  class Echo < HotCell::Operation
-    operation "test.echo"
-
-    def perform(_inputs, _outputs, payload)
-      { echoed: payload }
-    end
-  end
-
-  class Undecodable < HotCell::Operation
-    operation "test.undecodable"
-
-    def perform(_inputs, _outputs, _payload)
-      raise HotCell::UnreadableInput, "not an image at all"
-    end
-  end
-
-  # Reports success and writes nothing, which is also how a full tmpfs arrives.
-  class Silent < HotCell::Operation
-    operation "test.silent"
-
-    def perform(_inputs, _outputs, _payload)
-      {}
-    end
-  end
-
-  # Its slot home names the cell it ran in, so a test can tell two cells apart.
-  class WhereAmI < HotCell::Operation
-    operation "test.whereami"
-
-    def perform(_inputs, _outputs, _payload)
-      { home: ENV["HOME"] }
-    end
-  end
-
-  class Blocking < HotCell::Operation
-    operation "test.blocking"
-
-    def perform(_inputs, _outputs, payload)
-      sleep payload.fetch(:seconds)
-
-      { slept: payload[:seconds] }
+      def perform(_inputs, _outputs, _payload)
+        { home: ENV["HOME"] }
+      end
     end
   end
 end

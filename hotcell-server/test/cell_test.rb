@@ -134,7 +134,7 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("test.declared_unreadable")
 
-      assert_equal "Fixtures::LibraryError", failure.error_class
+      assert_equal "HotCell::Fixtures::LibraryError", failure.error_class
     end
   end
 
