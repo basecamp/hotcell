@@ -13,15 +13,30 @@ module HotCell
   # will still dispose of it correctly.
   module Codes
     TERMINAL = {
-      "unreadable"  => true,   # the input could not be decoded
-      "failed"      => true,   # the operation raised for some other reason
+      "unreadable"  => true,   # the input could not be decoded — the operation said so explicitly
       "invalid"     => true,   # malformed request, or a descriptor that failed its access-mode check
+      "failed"      => false,  # the operation raised something nobody classified — see below
       "unsupported" => false,  # this cell does not carry that operation — see below
       "protocol"    => false,  # version mismatch, which heals when the accessory reboots
       "capacity"    => false,  # the queue is full
       "unavailable" => false,  # no connection, or a connection closed with no response
       "timeout"     => false,  # the client's own deadline fired
     }.freeze
+
+    # **`failed` is what an unclassified exception becomes, so it cannot be terminal.**
+    #
+    # A worker rescues StandardError around the whole request and calls it `failed`. Errno::ENOSPC is a
+    # StandardError, and so are EMFILE, EIO and ENOENT. A shared tmpfs filled by concurrent requests, a full
+    # disk under the caller's own output, a descriptor table exhausted by load, a converter missing during a
+    # broken deploy — every one of those raises inside staging or writeback and arrives here.
+    #
+    # Terminal meant each of them was written down against a customer's file and served from a cache forever,
+    # for a condition that would have succeeded on retry. Permanence has to be claimed, never inferred from
+    # not knowing: an operation says `unreadable` for an input it could not decode, and the protocol says
+    # `invalid` for a caller that broke its own contract. Everything else is this cell having a bad day.
+    #
+    # The cost of the other mistake is a genuinely broken operation being retried. That is bounded by the
+    # job's attempts, it is visible in the `failed` rate, and it is recoverable.
 
     # **`unsupported` is transient, and the design document says otherwise.** Its reasoning was that an
     # unknown *operation* is a caller bug that never heals, where an unknown *version* is a deploy window
@@ -57,11 +72,16 @@ module HotCell
     SIGNAL = "signal"
     CRASHED = "crashed"
 
+    # `signal` is the unexplained death, and it is not terminal, because a signal says how a process died and
+    # never why. The supervisor knows it sent SIGKILL for a deadline and says so. Every other signal arrived
+    # from somewhere it cannot see: a cgroup OOM kill chosen on aggregate pressure across concurrent workers,
+    # or one worker signalling another — they share a uid, and nothing stops that. Attributing either to the
+    # input this worker happened to be holding condemns a file for something it did not do.
     TERMINAL_BY_LIMIT = {
       FSIZE    => true,
       MEMORY   => true,
       DEADLINE => false,
-      SIGNAL   => true,
+      SIGNAL   => false,
       CRASHED  => false,
     }.freeze
 

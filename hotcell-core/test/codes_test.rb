@@ -3,10 +3,10 @@
 require "test_helper"
 
 class CodesTest < HotCellTest
-  # A caller cannot tell from `killed` alone whether a worker burned thirty seconds on a decompression
-  # bomb or merely sat behind a queue past its deadline, and those demand opposite responses.
+  # Both of these are claims about the input, made by something that knew: an operation declaring what it
+  # could not decode, or the protocol catching a caller breaking its own contract.
   def test_the_codes_that_mean_this_input_will_fail_again
-    %w[ unreadable failed invalid ].each do |code|
+    %w[ unreadable invalid ].each do |code|
       assert HotCell::Codes.terminal?(code), "expected #{code} to be terminal"
     end
   end
@@ -15,6 +15,13 @@ class CodesTest < HotCellTest
     %w[ protocol capacity unavailable timeout ].each do |code|
       refute HotCell::Codes.terminal?(code), "expected #{code} to be transient"
     end
+  end
+
+  # `failed` is whatever an unclassified exception became. Errno::ENOSPC is a StandardError, so a full tmpfs
+  # or a full disk under the caller's output arrives here — and terminal meant those were written down
+  # against a customer's file forever, for a condition that would have succeeded on retry.
+  def test_an_unclassified_exception_is_not_a_verdict_on_the_input
+    refute HotCell::Codes.terminal?("failed")
   end
 
   # An accessory is not updated by a deploy, so an application that ships a client for a new operation before
@@ -28,8 +35,14 @@ class CodesTest < HotCellTest
   def test_killed_answers_from_the_limit_the_worker_hit
     assert HotCell::Codes.terminal?("killed", limit: "fsize")
     assert HotCell::Codes.terminal?("killed", limit: "memory")
-    assert HotCell::Codes.terminal?("killed", limit: "signal")
     refute HotCell::Codes.terminal?("killed", limit: "deadline")
+  end
+
+  # A signal says how a process died, never why. The supervisor names its own deadline kill; anything else
+  # arrived from a cgroup OOM chosen on aggregate pressure, or from a sibling worker sharing this uid.
+  # Reading that as a verdict condemns an input for something it did not do.
+  def test_an_unexplained_signal_is_not_a_verdict_on_the_input
+    refute HotCell::Codes.terminal?("killed", limit: "signal")
   end
 
   # `killed` with no limit is the same ignorance as a limit the table does not carry: something killed the

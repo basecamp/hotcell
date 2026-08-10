@@ -9,21 +9,26 @@ require "test_helper"
 # That is not hypothetical: HEY carries a rails_ext that exists because `system(exception: true)` raised a
 # bare RuntimeError outside its rescue list.
 class ClassificationTest < HotCellClientTest
+  # Only the verdicts something actually knew: an operation naming what it could not decode, a caller
+  # breaking the protocol, and the two limits this request provably hit by itself.
   PERMANENT = [
     { code: "unreadable" },
-    { code: "failed" },
     { code: "invalid" },
     { code: "killed", limit: "fsize" },
     { code: "killed", limit: "memory" },
-    { code: "killed", limit: "signal" },
   ].freeze
 
+  # `failed` and `signal` sit here rather than above, and both used to be permanent. `failed` is whatever
+  # exception nobody classified, which includes a full disk; `signal` is a death this process cannot
+  # attribute to the input it was holding. Neither is grounds for writing a file off forever.
   TRANSIENT = [
     { code: "protocol" },
     { code: "unsupported" },
     { code: "capacity" },
     { code: "unavailable" },
     { code: "timeout" },
+    { code: "failed" },
+    { code: "killed", limit: "signal" },
     { code: "killed", limit: "deadline" },
     { code: "killed", limit: "crashed" },
   ].freeze

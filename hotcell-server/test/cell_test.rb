@@ -111,11 +111,14 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # Not terminal, and that is the whole point of `failed`. This one really is the operation's own bug and
+  # would fail again — but the rescue that produces this code cannot tell it apart from Errno::ENOSPC out of
+  # a full tmpfs, so it must answer for the case where retrying is the recoverable one.
   def test_an_operation_that_raises
     TestCell.boot do |cell|
       failure = assert_failed "failed", cell.call("test.broken")
 
-      assert_predicate failure, :terminal?
+      refute_predicate failure, :terminal?
       assert_equal "RuntimeError", failure.error_class
       assert_match "the operation itself is broken", failure.message
     end
