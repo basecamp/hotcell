@@ -33,20 +33,6 @@ class OperationTest < RegistryIsolatedTest
     assert_equal 300, Fixtures::Patient.limits.deadline
   end
 
-  def test_untrusted_input_defaults_to_the_cautious_answer
-    assert_equal :in_process, TransformImage.untrusted_input
-  end
-
-  def test_untrusted_input_can_say_the_parsing_happens_in_an_exec_ed_child
-    assert_equal :subprocess, ConvertDocument.untrusted_input
-  end
-
-  def test_a_nonsense_untrusted_input_is_refused
-    assert_raises HotCell::ConfigurationError do
-      Class.new(HotCell::Operation) { untrusted_input :somewhere_else }
-    end
-  end
-
   def test_staging_defaults_to_paths_because_every_subprocess_tool_wants_a_filename
     assert_equal :paths, TransformImage.stage
     assert_equal :descriptors, Fixtures::Reverse.stage
@@ -87,10 +73,6 @@ class OperationTest < RegistryIsolatedTest
 
   class TransformImage < HotCell::Operation; end
   class PDFPreview < HotCell::Operation; end
-
-  class ConvertDocument < HotCell::Operation
-    untrusted_input :subprocess
-  end
 
   class Callbacks < HotCell::Operation
     def self.log

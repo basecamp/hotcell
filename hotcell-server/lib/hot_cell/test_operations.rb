@@ -222,7 +222,6 @@ module HotCell
     # test can prove the canary was really there before proving the converter never got it.
     class Environment < HotCell::Operation
       operation "test.environment"
-      untrusted_input :subprocess
 
       def perform(_inputs, _outputs, payload)
         converted = convert "env", env: payload[:env] || {}
@@ -236,7 +235,6 @@ module HotCell
     # a noisy converter costs a bounded amount of this worker's memory rather than all of it.
     class Noisy < HotCell::Operation
       operation "test.noisy"
-      untrusted_input :subprocess
 
       def perform(_inputs, _outputs, payload)
         stream = payload[:stream] == "err" ? "STDERR" : "STDOUT"

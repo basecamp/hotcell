@@ -14,7 +14,6 @@ module HotCell
     READ_BYTES = 16 * 1024
 
     STAGING = [ :paths, :descriptors ].freeze
-    UNTRUSTED_INPUT = [ :in_process, :subprocess ].freeze
 
     class << self
       include Declarations
@@ -59,24 +58,6 @@ module HotCell
         return inherited_value(:@limits) || Limits.new if values.empty?
 
         @limits = Limits.new(**values)
-      end
-
-      # Where a malicious input gets to execute, which is what decides whether `max_requests_per_worker` is a
-      # security setting for this operation or only a performance one.
-      #
-      # A subprocess converter parses in an exec'd child that dies at the end of the conversion, and the
-      # worker only copies bytes, spawns, and reads an exit status — so recycling that worker buys
-      # nothing. An in-process library parses in the worker's own address space, so recycling buys
-      # isolation between requests. in_process is the default because it is the answer that makes
-      # `max_requests_per_worker` mean something, and a wrong default should be the cautious one.
-      #
-      # This is a claim about the operation's own code and it is easy to break later. Reading the
-      # converter's output with an in-process library to build `result`, or parsing its stderr, both turn
-      # a nominally-subprocess operation into an in-process one. Test the claim rather than the comment.
-      def untrusted_input(where = nil)
-        return inherited_value(:@untrusted_input) || :in_process if where.nil?
-
-        @untrusted_input = verify_one_of(where, UNTRUSTED_INPUT, "untrusted_input")
       end
 
       # Whether the worker copies the inputs onto its scratch and gives the operation filenames.
@@ -176,8 +157,9 @@ module HotCell
     # environment of the process it was forked from, and ENV.delete changes nothing that a sibling worker can
     # read. An exec'd child is different: it gets a fresh environ, and this is where that gets written.
     #
-    # Bounded output, because a converter's stdout is attacker-influenced. The environment is also why
-    # parsing that output moves an operation from :subprocess to :in_process — see untrusted_input.
+    # Bounded output, because a converter's stdout is attacker-influenced — and worth remembering when an
+    # operation parses it, because doing so brings the bytes a converter was isolating back into this worker.
+    #
     # `capture` bounds what is kept AND what is read, which capture3 could not do. It accumulates both
     # streams in full and hands them over at exit, so slicing afterwards bounded the Strings this method
     # returns and nothing else: an input that makes a converter print gigabytes of diagnostics had already

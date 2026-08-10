@@ -101,7 +101,9 @@ class IntegrationTest < HotCellClientTest
       with_counting_server File.join(root, "test", "work.sock") do |connections|
         assert_raises(TemporarilyUnavailable) { Echo.perform_in_hotcell [], [], {} }
 
-        assert_equal 1, connections.call
+        wait_until(what: "the connection to be counted") { connections.call.positive? }
+
+        assert_equal 1, connections.call, "a retry would have happened before the raise above"
       end
     end
   end
@@ -245,11 +247,18 @@ class IntegrationTest < HotCellClientTest
       HotCell.logger = nil
     end
 
+    # Counts on accept rather than after closing, so the number exists as early as it can. It is still
+    # another thread, so a caller has to wait for it — see the assertion, which is sound because this client
+    # is synchronous: by the time it has raised, every connection it was ever going to make has been made.
     def with_counting_server(path)
       server = UNIXServer.new(path)
       connections = 0
       accepting = Thread.new do
-        loop { server.accept.close.tap { connections += 1 } }
+        loop do
+          accepted = server.accept
+          connections += 1
+          accepted.close
+        end
       rescue IOError, Errno::EBADF
         nil
       end

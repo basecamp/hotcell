@@ -24,7 +24,6 @@ TransformImage.perform_in_hotcell [ source ], [ destination ], format: "png",
 class TransformImage < HotCell::Operation
   operation "active_storage.transform_image"
   limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2
-  untrusted_input :in_process
 
   before_fork        { require "image_processing/vips" }
   before_worker_boot { Vips.concurrency_set 4 }

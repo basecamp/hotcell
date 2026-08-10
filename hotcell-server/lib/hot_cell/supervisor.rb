@@ -138,7 +138,6 @@ module HotCell
 
       log.write "cell.boot", pid: Process.pid, directory: directory, operations: Registry.names,
                              **configuration.to_h
-      warn_about_reuse
       self
     end
 
@@ -698,11 +697,6 @@ module HotCell
 
       def preload
         Registry.operations.each { |operation| operation.before_fork.each(&:call) }
-      end
-
-      def warn_about_reuse
-        warning = configuration.in_process_warning(Registry.operations)
-        log.write "cell.reuse_warning", warning: warning if warning
       end
 
 
