@@ -19,7 +19,7 @@ module HotCell
       @configuration = configuration
       @control = control
       @log = log
-      @booted = {}
+      @booted = nil
       @effective = {}
     end
 
@@ -158,11 +158,15 @@ module HotCell
         outputs.each_with_index { |output, index| output.stage File.join(scratch, "output-#{index}") }
       end
 
+      # Tracks the last operation configured for rather than every one ever seen. Above `reuse: 1` a worker
+      # can serve A, then B, then A — and a set-shaped memo skipped A's hooks the second time, leaving it
+      # running under whatever B had set the shared library to. What these hooks configure is global and
+      # singular, so the question is not "has this ever run" but "is this what the library is set up for".
       def boot(operation)
-        return if @booted[operation]
+        return if @booted == operation
 
         operation.before_worker_boot.each(&:call)
-        @booted[operation] = true
+        @booted = operation
       end
 
       def narrow(operation)

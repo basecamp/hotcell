@@ -48,11 +48,23 @@ module HotCell
           case value
           when Hash
             too_deep! path, depth
+            seen = {}
+
             value.each do |key, nested|
               unless key.is_a?(String) || key.is_a?(Symbol)
                 raise SerializationError,
                       "#{path} has a #{key.class} key #{key.inspect}; keys must be String or Symbol"
               end
+
+              # A Hash holding both :a and "a" is legal Ruby and two distinct keys. JSON has one string key
+              # space, so it serializes to a document with "a" twice, and parsing that back keeps whichever
+              # came last — one of the values is gone and nothing said so. Refused here rather than silently
+              # dropped, because this runs on results too, where the loss would be the caller's data.
+              if (clash = seen[key.to_s])
+                raise SerializationError,
+                      "#{path} has both #{clash.inspect} and #{key.inspect}, which are one key in JSON"
+              end
+              seen[key.to_s] = key
 
               walk nested, "#{path}[#{key.inspect}]", depth + 1
             end
