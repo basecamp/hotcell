@@ -35,13 +35,13 @@ The app mounts the same volume and sets `HOTCELL_ROOT` to its parent, or registe
 
 | Flag | Why |
 | --- | --- |
-| `network: none` | The strongest property here, and the only one that is binary and auditable: either the container has interfaces or it does not. Under it, a document that persuades a converter to fetch a URL has nowhere to go. |
+| `network: none` | The strongest property here, and the only one that is binary and auditable: either the container has interfaces or it does not. Under it, a document that persuades a tool to fetch a URL has nowhere to go. |
 | `tmpfs … noexec` | The easiest to omit and worth the most. Scratch is exactly where a dropped payload would land. |
 | `read-only: true` | Nothing in a cell writes outside `/tmp` and the socket volume. |
 | `memory-swap` equal to `memory` | Stops the memory cap leaking into swap. |
 | `cap-drop: ALL` | Also the reason two residual exposures cannot be closed — see below. |
 | `user: 10001:10001` | High, outside any host user range, created `--no-create-home` with `nologin`. |
-| `ulimit: stack` | Worth roughly 140MB of `RLIMIT_DATA` headroom per worker at concurrency 4, because every thread a converter's pool starts reserves a stack. It cannot go in an operation's `limits`: glibc snapshots `RLIMIT_STACK` at process init, so `Process.setrlimit` in a worker changes the reported value and nothing else. |
+| `ulimit: stack` | Worth roughly 140MB of `RLIMIT_DATA` headroom per worker at concurrency 4, because every thread a tool's pool starts reserves a stack. It cannot go in an operation's `limits`: glibc snapshots `RLIMIT_STACK` at process init, so `Process.setrlimit` in a worker changes the reported value and nothing else. |
 
 Accessories are not updated by a deploy. Rebooting one is explicit:
 
@@ -95,7 +95,7 @@ decisions and not just scheduling ones.
 
 **A sibling's environment is readable.** `/proc/<pid>/environ` needs only `PTRACE_MODE_READ`, which Yama does
 not restrict, and a forked worker's environ is fixed at exec time so `ENV.delete` changes nothing. Two things
-replace it: keep anything worth stealing out of a cell's environment, and spawn converters with
+replace it: keep anything worth stealing out of a cell's environment, and spawn tools with
 `unsetenv_others`, which `HotCell::Operation#convert` does. An exec'd child is the one process in this picture
 whose environ we actually control.
 
@@ -105,7 +105,7 @@ needs `CAP_SYS_ADMIN`.
 
 ## Deriving an image
 
-The base image carries Ruby, bundler, and the two server gems. It carries no converter, because which
+The base image carries Ruby, bundler, and the two server gems. It carries no tool, because which
 toolchain a cell holds is what decides its blast radius.
 
 ```dockerfile

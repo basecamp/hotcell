@@ -11,7 +11,7 @@ References to Fizzy, Basecamp 4, haystack#8538, haystack#8546, and
 or depend on. Every requirement they support is stated here in full.
 
 thimble deserves a note of its own, because it is the same problem solved a different way and it is
-further along: a converter service holding no secrets, deployed as a Kamal accessory, reached over HTTP on
+further along: a conversion service holding no secrets, deployed as a Kamal accessory, reached over HTTP on
 the shared network. Where this document cites a measurement from it — LibreOffice profiles, hardening
 flags, queueing, error classification — that measurement was taken on a built image in production use, and
 is worth more than anything derived here from first principles. Read it before building this, and read it
@@ -40,16 +40,16 @@ network.
 
 Basecamp 4 shows the shape of it. `lib/sandboxed_script.rb` sets
 `SANDBOXED = !(Rails.env.local? || BC3.deployment.kamal?)`, so under Kamal its sandbox is disabled and
-those converters run unconfined against user uploads.
+those tools run unconfined against user uploads.
 
 An independent investigation reached the same conclusion:
 [Converter sandbox — the actual closing fix](https://app.basecamp.com/2914079/buckets/48394871/card_tables/cards/10170494972).
-Two findings from it shape this design. Scrubbing a converter's environment does not help, because a
+Two findings from it shape this design. Scrubbing a tool's environment does not help, because a
 file-read primitive can retarget `/proc/<parent>/environ` at a same-UID process, which was verified
 leaking `RAILS_MASTER_KEY` on the production image *through the scrubbed invocation*. And moving
 secrets out of the environment does not help either, because the same primitive reads arbitrary files,
 including `config/master.key`. That card weighs two remedies: a bubblewrap or nsjail wrapper inside the
-application image, or a separate converter service holding no secrets. HotCell is the second.
+application image, or a separate conversion service holding no secrets. HotCell is the second.
 
 Choosing the second also sidesteps the risk the card attaches to the first, which is that an in-image
 wrapper has to be verified to work under Kamal's container. That verification is exactly what firejail
@@ -100,7 +100,7 @@ loaded, coupled only by an operation name on the wire.
 **All five live in one repository for now.** Writing the Active Storage gems twice required changing
 `hotcell-server` first, which is what a coupled seam feels like; splitting a system before its seams are stable
 costs more than merging it later, and while nothing is published splitting is a directory move. The tasks and
-the CI jobs keep the two halves apart, because the three hotcell gems claim to be testable with no converter and
+the CI jobs keep the two halves apart, because the three hotcell gems claim to be testable with no tool and
 no container installed and a single job that installed libvips would stop that claim from ever being checked.
 
 **"Never both loaded" is not enough on its own, so the namespaces enforce it.** A cell is forked from a process
@@ -126,7 +126,7 @@ Five gems and a base image, serving more than one product, on an accessory that 
 Two things follow that a design document is the right place to fix.
 
 **Ownership.** Say who owns the gems and the base image, and give every consuming team write access. The
-duty that has to be live rather than nominal is converter-layer CVE response: when libvips, `mutool`,
+duty that has to be live rather than nominal is toolchain CVE response: when libvips, `mutool`,
 `ffmpeg`, or ImageMagick has one, somebody cuts a patch release of the base image and opens the bump in
 every consumer. Nothing else in this document works if that duty is unassigned. The base image repository
 should deploy nothing itself, so that paging follows each application's own accessory.
@@ -170,7 +170,7 @@ libraries kept apart from another's should register a second cell rather than ex
 
 **The closest comparable design refuses this extensibility on purpose, and the reason does not apply
 here.** [`basecamp/thimble`](https://github.com/basecamp/thimble) exposes a closed enum of conversions
-and builds every converter argv server-side, because it holds no secret and therefore cannot verify the
+and builds every tool argv server-side, because it holds no secret and therefore cannot verify the
 signed transformations hash an app embeds in a variant URL — so an open "apply these operations"
 contract would be a network-reachable ImageMagick RPC drivable by anything that can reach the accessory.
 That is a consequence of an unauthenticated HTTP listener on a shared network. HotCell's transport is an
@@ -213,7 +213,7 @@ image to build and publish, another socket, another volume mounted into the app,
 boot on every host, and another reboot in every deploy procedure. thimble reached the opposite
 conclusion for the same problem — it runs LibreOffice and mutool in one accessory separated by two
 internal pools, precisely so a fifty-second Office job cannot stall a millisecond PDF render — and that
-is a reasonable trade when the two converters are maintained together. HotCell pays the container cost
+is a reasonable trade when the two tools are maintained together. HotCell pays the container cost
 instead and gets a smaller blast radius for it, because a `soffice` compromise in a shared accessory
 still lands beside mutool. Take the second cell when the toolchains differ; do not take it to separate
 two operations over the same library.
@@ -222,7 +222,7 @@ two operations over the same library.
 `libreoffice-impress`, and `libreoffice-calc` beside `mupdf-tools` and `ffmpeg`, and LibreOffice is a
 far larger surface than the other three combined. It also wants a writable home directory and a much
 longer deadline than an image transform, so it fits badly in a shared cell on every axis. It is also
-the converter with a working prototype already: see haystack#8538.
+the tool with a working prototype already: see haystack#8538.
 
 ### Process model
 
@@ -275,7 +275,7 @@ narrow. That is invariant 6, enforced on the side that owns it.
 Ruby-level timer cannot interrupt a thread pinned in a C extension: `Timeout` works by raising in the
 target thread, and the exception is only delivered at an interrupt checkpoint, which a thread inside
 `vips_resize` with the GVL released will not reach until it returns. So self-enforcement fails in exactly
-the case a deadline exists for. A worker may additionally bound its own `exec`'d converter child, which is
+the case a deadline exists for. A worker may additionally bound its own `exec`'d tool child, which is
 cheaper and useful, but that is a nicety on top and not the control.
 
 ### Deployment
@@ -380,7 +380,7 @@ design is about.
 7. A cell cannot reach another cell's socket.
 8. A worker cannot read another **request's** memory. Conditional on two things: `kernel.yama.ptrace_scope
    >= 1`, a host setting no container flag can supply, and `max_requests_per_worker: 1`. Not files — see "Worker isolation".
-9. A converter subprocess sees only the environment its operation wrote for it.
+9. A tool subprocess sees only the environment its operation wrote for it.
 
 ### Worker isolation
 
@@ -428,8 +428,8 @@ between the application and the cell, and it does not extend to workers inside o
 forked process's `/proc/self/environ` is the exec-time environment of the process it was forked from,
 so a worker calling `ENV.delete` changes nothing about what a sibling reads. Two controls replace it.
 Invariant 2 keeps anything worth stealing out of a cell's environment in the first place. And invariant
-9 requires converters to be spawned with `unsetenv_others: true` and an explicitly written environment,
-because a converter is `exec`ed and therefore does get a fresh `/proc/<pid>/environ` — the one thing in
+9 requires tools to be spawned with `unsetenv_others: true` and an explicitly written environment,
+because a tool is `exec`ed and therefore does get a fresh `/proc/<pid>/environ` — the one thing in
 this picture that is actually under our control.
 
 `hidepid=2` on `/proc` would remove the sysctl dependency by hiding sibling processes entirely, and it
@@ -462,9 +462,9 @@ firewall rule. A network transport is not a future extension of this design; it 
 with a weaker guarantee.
 
 [haystack#8538](https://github.com/basecamp/haystack/pull/8538) is the worked example of the other
-choice. It puts its converter on the shared `kamal` network over HTTP, which is the right call for a
-single converter shipping now: no descriptor machinery, and it works across hosts. Its own limitations
-section then names the price, that the converter can still reach the internal network, so a document
+choice. It puts its conversion service on the shared `kamal` network over HTTP, which is the right call
+for a single service shipping now: no descriptor machinery, and it works across hosts. Its own limitations
+section then names the price, that the service can still reach the internal network, so a document
 that persuades LibreOffice to fetch a URL is an SSRF pivot, and closing it would need an `--internal`
 network plus a coordinated change to every app container. Under `network: none` that pivot does not
 exist. The cost we pay instead is that a cell must be on the same host as its caller.
@@ -907,7 +907,7 @@ tmpfs. See section 4, which has the measurements.
 workers run, so number them `0` to `concurrency - 1` and hand each worker its number at fork. The slot
 number selects two directories, both created at boot:
 
-- **`$HOME`, reused.** Some converters cannot share one. LibreOffice keeps a profile under `$HOME` and
+- **`$HOME`, reused.** Some tools cannot share one. LibreOffice keeps a profile under `$HOME` and
   corrupts itself when two instances share it, which
   [haystack#8538](https://github.com/basecamp/haystack/pull/8538) found and worked around with a fixed
   pool. A per-slot home makes that structural rather than a special case, and because it survives
@@ -922,16 +922,16 @@ waits in the cell's queue, which is a different thing with its own bound. See "Q
 
 **The reused home is a channel between requests, and that is an accepted cost.** Two requests that land
 on the same slot share a directory, so one can leave a file the other reads. It buys the warm profile
-and it is what makes a large converter usable at all, but it is the one place in this design where
+and it is what makes a large tool usable at all, but it is the one place in this design where
 requests are not fully isolated from each other, and it should be stated wherever it is relied on. What
-bounds it: nothing sensitive belongs in a converter's home, and scratch is separate and per-request. An
+bounds it: nothing sensitive belongs in a tool's home, and scratch is separate and per-request. An
 operation that does not need a warm home is better off with a fresh one.
 
 **The danger is what an earlier request wrote into that home, not what a later one reads out of it.** A
-converter's user profile is configuration, and for LibreOffice the user layer composes last — so a write
-into a slot's `$HOME` can plant settings that disable the converter's own hardening for every subsequent
+tool's user profile is configuration, and for LibreOffice the user layer composes last — so a write
+into a slot's `$HOME` can plant settings that disable the tool's own hardening for every subsequent
 request on that slot — measured on a built image, not hypothetical. An operation that reuses a home owes a
-converter configuration the user layer cannot override, and a probe that confirms it.
+tool configuration the user layer cannot override, and a probe that confirms it.
 
 Wiping a slot's home after a kill is the safe default and it is not free: for LibreOffice it reintroduces
 the cold start that a warm profile exists to avoid, on the next request to that slot. Warming every slot
@@ -959,25 +959,25 @@ So `max_requests_per_worker` is a dial, `1` is one end of it, and the right valu
 
 | | Where a malicious input executes | What recycling buys |
 | --- | --- | --- |
-| **Subprocess converter** — `soffice`, `mutool`, `ffmpeg`, ImageMagick's CLI | In an `exec`'d child that dies at the end of the conversion. The worker only copies bytes, spawns, and reads an exit status. | **Nothing.** The worker was never exposed. These cells can run persistent workers. |
+| **Subprocess tool** — `soffice`, `mutool`, `ffmpeg`, ImageMagick's CLI | In an `exec`'d child that dies at the end of the conversion. The worker only copies bytes, spawns, and reads an exit status. | **Nothing.** The worker was never exposed. These cells can run persistent workers. |
 | **In-process library** — libvips through `ruby-vips`, RMagick | In the worker's own address space. | **Isolation between requests.** So `max_requests_per_worker` here is a genuine security dial, and its value is a judgement about how much isolation a third of a request is worth. |
 
 **This is a property of the operation's code, not something it declares.** An earlier draft had operations
 declare `untrusted_input :in_process` or `:subprocess`, and a cell warned at boot when
 `max_requests_per_worker` was above `1` and any operation claimed the first. That was withdrawn: the
 declaration was an unverifiable self-assertion whose only consumer was a log line, and the assertion is easy
-to break — reading a converter's output with an in-process library, or parsing its stdout, moves bytes a
+to break — reading a tool's output with an in-process library, or parsing its stdout, moves bytes a
 hostile input produced back into the worker, with nothing to notice.
 
 What survives is the reasoning, which belongs where an operation is written rather than in a keyword. The
 question is narrow: can a malicious input *execute* in this process?
 
 1. **Reading its own output with an in-process media library means it can.** Building `result` from the
-   converter's output header — width and page height, which BC4's thumbnailer wants — runs a decoder over
-   bytes a converter just produced from a hostile input, in the worker. `preview_pdf` and `preview_video`
+   tool's output header — width and page height, which BC4's thumbnailer wants — runs a decoder over
+   bytes a tool just produced from a hostile input, in the worker. `preview_pdf` and `preview_video`
    therefore return no dimensions at all, which is also what Rails' previewers return: a previewer yields
    `io:`, `filename:` and `content_type:`, and the dimensions come later from analysing the attached blob.
-2. **Parsing the converter's structured stdout does not.** `probe_media` reads ffprobe's JSON, on a bounded
+2. **Parsing the tool's structured stdout does not.** `probe_media` reads ffprobe's JSON, on a bounded
    buffer, with the standard library. Treating that as equivalent to an image decoder would make the category
    mean "touches any attacker-influenced byte", which is every operation — and a distinction that covers
    everything guides nobody. What it must do instead is refuse to pass that data on: only numbers and codec
@@ -1100,11 +1100,11 @@ So the cell's maximums go on first, at a point that needs no parsing at all, and
 tighter set replaces them once the operation is known. The 8192-byte request cap and an explicit low
 `max_nesting` are what bound the parse itself.
 
-**Every converter subprocess is spawned with `unsetenv_others: true` and a fully written environment**,
+**Every tool subprocess is spawned with `unsetenv_others: true` and a fully written environment**,
 never a filtered copy of the worker's own. This is invariant 9. Filtering would not work: the worker is
 forked, so its `/proc/self/environ` is fixed and `ENV.delete` does not change what anything reads. An
 `exec`ed child is different, and writing its environment in full is the only point where we control
-what a converter's `/proc/<pid>/environ` shows.
+what a tool's `/proc/<pid>/environ` shows.
 
 Staging inputs to scratch is the general model, not a workaround. Every subprocess tool wants a path:
 `image_processing` is filename-in and filename-out, and mutool, ffmpeg, and ffprobe take paths. Copying
@@ -1217,7 +1217,7 @@ an exception or returns it as data per configuration.
 ```ruby
 HotCell.register "active_storage",
   permanent: ActiveStorage::PreviewError,
-  transient: MyApp::ConverterTemporarilyUnavailable
+  transient: MyApp::ConversionTemporarilyUnavailable
 ```
 
 The gem cannot choose these, because two applications already do irreconcilable things with the same
@@ -1309,7 +1309,7 @@ Ship with every flag off. Then the merge changes nothing in production, and each
 one-line configuration change with a known way back.
 
 One sequencing rule, because the failure between the two steps is silent: **the `accept?` overrides land
-and are verified before any converter binary leaves the app image.** See section 6.
+and are verified before any tool binary leaves the app image.** See section 6.
 
 ### The control channel
 
@@ -1331,7 +1331,7 @@ pointed at a cell that does not carry the operation it wants, which is otherwise
 the first real request.
 
 Boot must not fail when a cell does not answer. A cell that is down at app boot is a degraded deployment,
-not a broken one, and an app that refuses to start because its thumbnail converter is restarting is worse
+not a broken one, and an app that refuses to start because its thumbnail cell is restarting is worse
 than one that serves placeholders. Warn, and carry on.
 
 **`hotcell.metrics` — counters and gauges, polled.**
@@ -1359,7 +1359,7 @@ response.
 the reasoning that a child inherits the counters at fork and can report them without being told — which works,
 and is beside the point. The whole value of this channel is being available when nothing else is, and a channel
 that needs a fork to answer goes quiet exactly when a fork is what is failing. Neither built-in takes a
-descriptor, touches a converter, or evaluates a byte of image data, so none of the reasons the supervisor stays
+descriptor, touches a tool, or evaluates a byte of image data, so none of the reasons the supervisor stays
 out of a conversion applies here.
 
 It reads the control request to route it, which is the one thing the supervisor does parse. That is a bounded
@@ -1372,7 +1372,7 @@ of connections waiting to speak, too.
 **The control channel has its own small concurrency allowance and its own short deadline**, independent of
 `work.sock`. A scrape must not queue behind conversions and must not be answered `capacity`, because a
 metrics channel that goes quiet under load reports the same thing as a dead cell. Neither built-in takes
-descriptors, reads a payload, or touches a converter, so none of the reasons for the work socket's limit
+descriptors, reads a payload, or touches a tool, so none of the reasons for the work socket's limit
 apply to them.
 
 ### Instrumentation
@@ -1700,7 +1700,7 @@ them early: several of them constrain the architecture rather than the implement
    and does not restrict `PTRACE_MODE_READ`, which `environ` needs.
 8. **A forked process cannot change what its own `/proc/self/environ` shows.** That view is the
    exec-time environment, so `ENV.delete` in a worker is invisible to a reader. Only an `exec`ed child
-   gets a fresh one, which is why `unsetenv_others` on the converter spawn is the control.
+   gets a fresh one, which is why `unsetenv_others` on the tool spawn is the control.
 9. **Docker cannot mount `/proc` with `hidepid`.** `--security-opt proc-opts=hidepid=2` is a Podman
    feature; Docker rejects it outright, and remounting inside the container needs `CAP_SYS_ADMIN`.
 10. **LibreOffice corrupts itself when two instances share a `$HOME` profile**, per haystack#8538, which
@@ -1758,7 +1758,7 @@ flags, or reliable `RLIMIT_AS`, which Darwin does not enforce dependably. A deve
 operation is testing the operation. The sandbox is verified on Linux, in CI and in the container suite,
 and a change that touches hardening has to be tested there.
 
-Converters have to be installed on the host, which they already are for the in-process path being
+Tools have to be installed on the host, which they already are for the in-process path being
 replaced.
 
 ### The inline transport
@@ -1792,7 +1792,7 @@ assurance.
 
 ### Making the suite run without the toolchain
 
-Protocol and client behavior must be testable with neither Docker nor a real converter. haystack#8538
+Protocol and client behavior must be testable with neither Docker nor a real tool. haystack#8538
 does this with a scripted stand-in for `soffice`, which lets 14 tests exercise the whole surface in
 milliseconds. Do the same: a fixture operation that fakes the work, so only the end-to-end suite needs
 a container.
@@ -1823,7 +1823,7 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   socket.
 - Worker isolation: a sibling's `/proc/<pid>/mem` is `EACCES`, and the startup check reports loudly
   when `kernel.yama.ptrace_scope` is `0`.
-- A converter subprocess's `/proc/<pid>/environ` contains only what the operation wrote, proving
+- A tool subprocess's `/proc/<pid>/environ` contains only what the operation wrote, proving
   `unsetenv_others`.
 - Concurrency: at `concurrency: 2, queue_size: 1`, two requests run together, a third waits and
   reports a non-zero `queued_ms`, and a fourth is answered `capacity`. Two requests on the same slot
@@ -1833,7 +1833,7 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   reach it and assert it is answered `killed`. Measured across the standard library: `sleep`, a Ruby spin loop
   and `Zlib::Inflate` are all interruptible, and `Integer#**` is not — `3 ** 40_000_000` runs for about seven
   seconds straight through a fifty-millisecond `Timeout`. That lets the cell's own suite hold this with no
-  converter installed. Assert the premise in the test, so a Ruby that adds an interrupt check to that path
+  tool installed. Assert the premise in the test, so a Ruby that adds an interrupt check to that path
   reports it rather than quietly weakening the test. Two things are being
   tested: that the supervisor kills it at all, and that it does so **promptly**, with no other request needed
   to trigger the reap. The naive reap-at-top-of-accept-loop implementation fails the second.
@@ -1888,8 +1888,8 @@ prescriptive.
 ### Proving the assertions are not vacuous
 
 Every security control needs a test that observes the behaviour the control produces, not one that asserts the
-control is written down. `unsetenv_others` is proved by setting a variable in the parent, running a converter,
-and finding that the converter never saw it — and by asserting the premise, that the worker did inherit it, so
+control is written down. `unsetenv_others` is proved by setting a variable in the parent, running a tool,
+and finding that the tool never saw it — and by asserting the premise, that the worker did inherit it, so
 the test cannot pass because the variable was never set. Widening an input descriptor to read-write, skipping
 the limit clamp, dropping an operation's argument allowlist, returning success without writing the output, and
 answering `ok` when the worker was killed all get the same treatment.
@@ -1949,7 +1949,7 @@ This is not a hypothetical comparison. thimble's video role took the volume rout
 reason given below — and then wrote down precisely this checklist: a token validated against
 `\A[a-f0-9]{32}\z`, a path built server-side from one component, `O_RDONLY|O_NOFOLLOW|O_NONBLOCK`, an
 `fstat` on the descriptor for a regular file and an exact size under a maximum, and then **the open
-descriptor rather than the path handed to the converter.** Which is to say it arrived at descriptor
+descriptor rather than the path handed to the tool.** Which is to say it arrived at descriptor
 passing anyway, having paid for the volume first.
 
 **Cross-request isolation is a smaller reason than it first appears, and the difference matters.** Under a

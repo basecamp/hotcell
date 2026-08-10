@@ -19,7 +19,7 @@ module HotCell
     #
     #   HotCell.register "active_storage",
     #     permanent: ActiveStorage::PreviewError,
-    #     transient: MyApp::ConverterTemporarilyUnavailable
+    #     transient: MyApp::ConversionTemporarilyUnavailable
     #
     #   HotCell.register "archiver", dir: -> { ENV["HOTCELL_ARCHIVER_DIR"] }, timeout: 300
     def register(name, **options)

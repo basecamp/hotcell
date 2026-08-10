@@ -6,30 +6,30 @@ require "test_helper"
 #
 # A worker is forked, so its own /proc/self/environ is the exec-time environment of the process it came from,
 # and ENV.delete changes nothing a sibling worker can read. An exec'd child is different: it gets a fresh
-# environ, and that is the only point where we choose what a converter sees.
+# environ, and that is the only point where we choose what a tool sees.
 #
 # `unsetenv_others: true` is one keyword whose removal changes nothing observable in normal operation, which
 # is exactly why it is tested.
 class EnvironmentTest < HotCellServerTest
   CANARY = "HOTCELL_ENVIRONMENT_TEST_CANARY"
 
-  def test_a_converter_sees_only_what_its_operation_wrote_for_it
+  def test_a_tool_sees_only_what_its_operation_wrote_for_it
     with_canary do
       TestCell.boot do |cell|
         result = assert_ok(cell.call("test.environment",
-                                     payload: { canary: CANARY, env: { "CONVERTER_SETTING" => "yes" } })).result
+                                     payload: { canary: CANARY, env: { "TOOL_SETTING" => "yes" } })).result
 
         # The premise first: the worker really did inherit the canary, so its absence below means something.
         assert_equal "must-not-leak", result[:worker_saw]
 
-        assert_includes result[:seen], "CONVERTER_SETTING=yes"
+        assert_includes result[:seen], "TOOL_SETTING=yes"
         assert_empty result[:seen].grep(/#{CANARY}/),
-                     "the converter inherited the worker's environment"
+                     "the tool inherited the worker's environment"
       end
     end
   end
 
-  def test_a_converter_gets_the_slots_home_rather_than_the_callers
+  def test_a_tool_gets_the_slots_home_rather_than_the_callers
     with_canary do
       TestCell.boot do |cell|
         seen = assert_ok(cell.call("test.environment", payload: { canary: CANARY })).result[:seen]
@@ -39,7 +39,7 @@ class EnvironmentTest < HotCellServerTest
     end
   end
 
-  def test_a_converter_gets_a_predictable_locale_so_its_output_does_not_shift_under_it
+  def test_a_tool_gets_a_predictable_locale_so_its_output_does_not_shift_under_it
     with_canary do
       TestCell.boot do |cell|
         seen = assert_ok(cell.call("test.environment", payload: { canary: CANARY })).result[:seen]
@@ -51,16 +51,16 @@ class EnvironmentTest < HotCellServerTest
   end
 
   # capture3 accumulated both streams in full and handed them over at exit, so slicing afterwards bounded
-  # only the Strings this method returned. An input that made a converter print 40MB of diagnostics had
+  # only the Strings this method returned. An input that made a tool print 40MB of diagnostics had
   # already cost this worker 40MB of address space — which RLIMIT_DATA charges, arriving as a `memory`
   # verdict for a document whose only crime was being noisy.
-  def test_a_noisy_converter_costs_a_bounded_amount_of_the_workers_memory
+  def test_a_noisy_tool_costs_a_bounded_amount_of_the_workers_memory
     TestCell.boot do |cell|
       %w[ out err ].each do |stream|
         result = assert_ok(cell.call("test.noisy", payload: { stream: stream }, timeout: 30)).result
 
         assert_equal 1024, result[stream.to_sym], "#{stream} kept more than the capture"
-        assert result[:ok], "the converter should have exited cleanly"
+        assert result[:ok], "the tool should have exited cleanly"
       end
     end
   end

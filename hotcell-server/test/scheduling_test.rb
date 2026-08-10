@@ -46,7 +46,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   # The deadline has to reach what the request started, not only the Ruby process that started it. A
-  # converter is a grandchild — the worker spawns it — and killing the worker alone left it running, adopted
+  # tool is a grandchild — the worker spawns it — and killing the worker alone left it running, adopted
   # by the supervisor as pid 1, with no deadline and nothing watching it.
   def test_a_deadline_kills_what_the_worker_started_too
     with_file do |path|

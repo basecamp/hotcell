@@ -23,7 +23,7 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   end
 
   # The premise, so the test above cannot pass for the wrong reason: the built-in ones do go false, which is
-  # exactly what happens to an application the moment it takes the converters out of its image.
+  # exactly what happens to an application the moment it takes the tools out of its image.
   def test_the_built_in_previewers_do_go_false_without_their_binaries
     with_binary_missing MUPDF, :@mutool_exists do
       refute ActiveStorage::Previewer::MuPDFPreviewer.accept?(Blob.new(fixture("sample.pdf")))

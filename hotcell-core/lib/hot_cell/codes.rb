@@ -27,7 +27,7 @@ module HotCell
     #
     # A worker rescues StandardError around the whole request and calls it `failed`. Errno::ENOSPC is a
     # StandardError, and so are EMFILE, EIO and ENOENT. A shared tmpfs filled by concurrent requests, a full
-    # disk under the caller's own output, a descriptor table exhausted by load, a converter missing during a
+    # disk under the caller's own output, a descriptor table exhausted by load, a tool missing during a
     # broken deploy — every one of those raises inside staging or writeback and arrives here.
     #
     # Terminal meant each of them was written down against a customer's file and served from a cache forever,
