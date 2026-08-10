@@ -66,6 +66,11 @@ module HotCell
     end
 
     def perform_in_hotcell(inputs, outputs, payload = {})
+      # Explicit wrapping rather than Array(): an IO is Enumerable, so Array(io) reads the stream line by
+      # line instead of wrapping it.
+      inputs = [ inputs ] unless inputs.is_a?(Array)
+      outputs = [ outputs ] unless outputs.is_a?(Array)
+
       cell = self.class.cell
 
       unless cell.enabled?

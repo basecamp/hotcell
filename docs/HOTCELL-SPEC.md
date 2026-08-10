@@ -1208,7 +1208,8 @@ underscored class name, minus a trailing `Operation`, and can be overridden — 
 `ArchiveFolder` and a cell-side `ArchiveFolderOperation` derive the same wire name. An unregistered
 server name raises at call time.
 
-`HotCell::Client#perform_in_hotcell` wraps each IO as `Input` or `Output`, validates the payload,
+`HotCell::Client#perform_in_hotcell` accepts a bare IO wherever an array of one is meant — most call
+sites have exactly one input and one output. It wraps each IO as `Input` or `Output`, validates the payload,
 connects to its cell's socket, sends one request, reads one response, and translates `error.code` into
 an exception or returns it as data per configuration.
 

@@ -17,6 +17,19 @@ class IntegrationTest < HotCellClientTest
     end
   end
 
+  def test_a_single_input_and_output_need_no_array
+    with_cell do
+      with_files("hello") do |source, destination|
+        result = reading(source) do |input|
+          writing(destination) { |output| Uppercase.perform_in_hotcell input, output }
+        end
+
+        assert_equal 5, result[:bytes]
+        assert_equal "HELLO", File.binread(destination)
+      end
+    end
+  end
+
   def test_a_payload_and_a_result_both_round_trip_with_symbol_keys
     with_cell do
       payload = { format: "png", operations: { resize_to_limit: [ 800, 600 ] } }
