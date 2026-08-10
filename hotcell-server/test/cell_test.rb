@@ -178,14 +178,16 @@ class CellTest < HotCellServerTest
     end
   end
 
-  # The worker flushes before reporting success, so this should not happen — which is exactly why it must
-  # be handled rather than assumed away. A full tmpfs arrives this way too, so the client classifies zero
-  # bytes as transient rather than recording the document as unprocessable.
-  def test_an_operation_that_writes_nothing_still_reports_ok_and_leaves_the_output_empty
+  # The cell says so rather than leaving it to the caller to notice. It used to answer `ok` here and let the
+  # client compare the output's size, which cannot see which of several outputs was the empty one. A full
+  # tmpfs arrives this way, so it is transient rather than a verdict on the document.
+  def test_an_operation_that_writes_nothing_is_refused_rather_than_reported_ok
     TestCell.boot do |cell|
       with_files do |source, destination|
-        assert_ok cell.call("test.silent", inputs: [ source ], outputs: [ destination ])
+        failure = assert_failed "unavailable", cell.call("test.silent", inputs: [ source ],
+                                                                        outputs: [ destination ])
 
+        refute_predicate failure, :terminal?
         assert_equal 0, File.size(destination)
       end
     end
@@ -292,6 +294,23 @@ class CellTest < HotCellServerTest
     slot.sweep
 
     assert_empty Dir.glob("#{slot.scratch}.discarded-*"), "a worker sweeps it once nobody is waiting"
+  end
+
+  # The API takes several outputs and success was inferred from their total size, so writing the first and
+  # skipping the second was a positive total and read as `ok`. Transient rather than a verdict: the
+  # commonest way to write nothing is a full tmpfs.
+  def test_an_output_that_received_nothing_is_not_success
+    TestCell.boot do |cell|
+      with_files do |source, first|
+        with_file do |second|
+          failure = assert_failed "unavailable", cell.call("test.half_written", inputs: [ source ],
+                                                                                outputs: [ first, second ])
+
+          refute_predicate failure, :terminal?
+          assert_match "1 of 2 outputs received no bytes", failure.message
+        end
+      end
+    end
   end
 
   def test_scratch_is_gone_once_the_request_is_answered

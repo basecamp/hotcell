@@ -126,7 +126,9 @@ module HotCell
 
         timing.measure(:staging_ms) { stage inputs, outputs } if operation.stage == :paths
         result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, payload) }
-        timing.measure(:writeback_ms) { outputs.each(&:post) }
+        written = timing.measure(:writeback_ms) { outputs.map(&:post) }
+
+        return unwritten(outputs, written, timing) if written.any?(&:zero?)
 
         # Read before the scratch goes, so perform_ms measures performing and not the cleanup after it.
         Payload.validate! result, "result"
@@ -140,6 +142,21 @@ module HotCell
         response
       rescue *operation.unreadable => error
         refuse "unreadable", error, timing
+      end
+
+      # `post` returns what each output received and the worker used to throw all of it away, leaving the
+      # client to check the total size of the outputs it had handed over. A total hides the case the
+      # multiple-output API exists for: writing the first and skipping the second is a positive total and
+      # reads as success. This is the side that knows which one is empty, so it is the side that says so.
+      #
+      # Transient, for the reason the client's own check is: the commonest way to write nothing is a full
+      # tmpfs, and a full filesystem must never be recorded as a verdict on the document.
+      def unwritten(outputs, written, timing)
+        empty = written.each_index.select { |index| written[index].zero? }
+
+        refuse "unavailable",
+               "#{empty.size} of #{outputs.size} outputs received no bytes (#{empty.join(", ")})",
+               timing
       end
 
       def wrap(request, received)

@@ -45,8 +45,27 @@ class IntegrationTest < HotCellClientTest
           end
         end
 
-        assert_match "wrote no bytes", error.message
+        assert_match "received no bytes", error.message
       end
+    end
+  end
+
+  # The cell answers first now, which is why the case above no longer reaches this. It stays because it is a
+  # different defence against the same fact: the client cannot tell whether a cell it does not control
+  # checked, and `ok` with nothing written must never become a valid empty image.
+  def test_the_client_refuses_an_empty_output_even_when_the_cell_called_it_ok
+    HotCell.root = "/nowhere"
+    HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable,
+                             transport: ->(*) { HotCell::Response.ok(result: {}, timing: {}) }
+
+    with_files do |source, destination|
+      error = reading(source) do |input|
+        writing(destination) do |output|
+          assert_raises(TemporarilyUnavailable) { Silent.perform_in_hotcell [ input ], [ output ], {} }
+        end
+      end
+
+      assert_match "wrote no bytes", error.message
     end
   end
 
