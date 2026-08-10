@@ -39,7 +39,7 @@ module ActiveStorage
               begin
                 convert file, output, format: format.to_s, operations: transformations
                 output.tap(&:rewind)
-              rescue Exception # rubocop:disable Lint/RescueException
+              rescue StandardError
                 output.close!
                 raise
               end
