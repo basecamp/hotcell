@@ -13,7 +13,7 @@ module HotCell
     class WhereAmI < HotCell::Operation
       operation "test.whereami"
 
-      def perform(_inputs, _outputs, _payload)
+      def perform(_inputs, _outputs)
         { home: ENV["HOME"] }
       end
     end

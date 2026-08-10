@@ -69,7 +69,7 @@ class OperationTest < RegistryIsolatedTest
   end
 
   def test_an_operation_that_does_not_implement_perform_says_so
-    assert_raises(NotImplementedError) { TransformImage.new.perform([], [], {}) }
+    assert_raises(NotImplementedError) { TransformImage.new.perform([], []) }
   end
 
   class TransformImage < HotCell::Operation; end

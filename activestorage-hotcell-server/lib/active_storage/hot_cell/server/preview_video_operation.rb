@@ -21,11 +21,11 @@ module ActiveStorage
 
         MAX_SEEK = 86_400
 
-        def perform(inputs, outputs, payload)
+        def perform(inputs, outputs, seek: 0)
           source, = inputs
           destination, = outputs
 
-          seek = seek!(payload)
+          seek = seek!(seek)
 
           # JPEG rather than PNG, because Rails' own video previewer yields image/jpeg and this is meant to drop
           # into its place. A preview that changed the attached blob's content type would not be a replacement.
@@ -40,8 +40,7 @@ module ActiveStorage
         end
 
         private
-          def seek!(payload)
-            seek = payload.fetch(:seek, 0)
+          def seek!(seek)
             return seek if seek.is_a?(Numeric) && !seek.negative? && seek <= MAX_SEEK
 
             refuse! "seek #{seek.inspect} must be a number of seconds between 0 and #{MAX_SEEK}"

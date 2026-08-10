@@ -44,12 +44,12 @@ module ActiveStorage
         # Bounding what may appear inside them is a planned feature — see the allowlist note in the README.
         PIPELINE = %w[ loader saver ].freeze
 
-        def perform(inputs, outputs, payload)
+        def perform(inputs, outputs, format:, operations: {})
           source, = inputs
           destination, = outputs
 
-          format = format!(payload)
-          produced = pipeline(source.path, format, payload).call
+          format = format!(format)
+          produced = pipeline(source.path, format, operations).call
 
           begin
             IO.copy_stream produced.path, destination.path
@@ -65,16 +65,15 @@ module ActiveStorage
           # hundred-frame GIF being decoded in full to produce one thumbnail. A caller's own `loader` arrives
           # through `apply` and merges over it, which is also what Rails does — asking for every frame is
           # `loader: { n: -1 }`.
-          def pipeline(path, format, payload)
+          def pipeline(path, format, operations)
             ImageProcessing::Vips
               .source(path)
               .loader(page: 0)
               .convert(format)
-              .apply(operations_for(payload))
+              .apply(operations_for(operations))
           end
 
-          def operations_for(payload)
-            declared = payload[:operations] || {}
+          def operations_for(declared)
             refuse! "operations must be an object, and this is a #{declared.class}" unless declared.is_a?(Hash)
 
             declared.filter_map do |name, argument|

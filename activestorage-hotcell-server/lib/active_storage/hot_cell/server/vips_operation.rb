@@ -89,9 +89,9 @@ module ActiveStorage
             raise ::HotCell::MessageError, message
           end
 
-          def format!(payload)
-            format = payload[:format].to_s.downcase
-            refuse! "format #{payload[:format].inspect} is not one of #{FORMATS.keys.join(", ")}" unless FORMATS.key?(format)
+          def format!(value)
+            format = value.to_s.downcase
+            refuse! "format #{value.inspect} is not one of #{FORMATS.keys.join(", ")}" unless FORMATS.key?(format)
 
             format
           end

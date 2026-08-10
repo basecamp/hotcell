@@ -46,11 +46,10 @@ module ActiveStorage
             bytes
           end
 
-          def positive_integer!(payload, key, default, maximum)
-            value = payload.fetch(key, default)
+          def positive_integer!(name, value, maximum)
             return value if value.is_a?(Integer) && value.positive? && value <= maximum
 
-            refuse! "#{key} #{value.inspect} must be an integer between 1 and #{maximum}"
+            refuse! "#{name} #{value.inspect} must be an integer between 1 and #{maximum}"
           end
       end
     end
