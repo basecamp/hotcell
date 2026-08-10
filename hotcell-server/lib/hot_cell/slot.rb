@@ -8,16 +8,16 @@ module HotCell
   # leasing: a slot is always free when a worker starts, because the thing that bounds workers is the same
   # thing that counts slots. A request never waits for a slot, it waits in the cell's queue.
   #
-  # The home is reused between requests on purpose. Some converters cannot share one — LibreOffice keeps a
+  # The home is reused between requests on purpose. Some tools cannot share one — LibreOffice keeps a
   # profile under $HOME and corrupts itself when two instances share it — and because a per-slot home
   # survives, that expensive profile is created once and is warm afterwards. This is the pre-warming
   # benefit without a warming pass and without the supervisor spawning anything.
   #
   # It is also the one place in this design where two requests are not fully isolated from each other: one
-  # can leave a file the next reads. What bounds it is that nothing sensitive belongs in a converter's
+  # can leave a file the next reads. What bounds it is that nothing sensitive belongs in a tool's
   # home, and that scratch is separate and per-request. The danger is what an earlier request wrote into
   # the home rather than what a later one reads out of it — for LibreOffice the user layer composes last,
-  # so a write there can disable the converter's own hardening for every later request on that slot.
+  # so a write there can disable the tool's own hardening for every later request on that slot.
   #
   # The filesystem behaviour belongs here rather than in the two processes that call it. Scratch is removed
   # from both — the worker before it answers, the supervisor at finish and at reap — so the guard and the
@@ -44,7 +44,7 @@ module HotCell
     #
     # How long a recursive delete takes is chosen by the operation that filled the directory. Nothing bounds
     # the number of entries — RLIMIT_FSIZE caps one file, not a million tiny ones — so an input that makes a
-    # converter write an enormous tree and then hang buys a deletion the supervisor performs synchronously,
+    # tool write an enormous tree and then hang buys a deletion the supervisor performs synchronously,
     # after the kill, inside the loop enforcing every other request's deadline.
     #
     # A rename within one filesystem is O(1) and takes the tree out of the way. A worker sweeps it later,

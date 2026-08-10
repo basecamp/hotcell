@@ -125,26 +125,26 @@ module HotCell
       end
     end
 
-    # Runs a converter with `unsetenv_others` and a fully written environment, never a filtered copy of this
+    # Runs a tool with `unsetenv_others` and a fully written environment, never a filtered copy of this
     # worker's own. This is invariant 9, and it is the only point in the whole design where we control what a
-    # converter's /proc/<pid>/environ shows.
+    # tool's /proc/<pid>/environ shows.
     #
     # Filtering would not work. The worker is forked, so its own /proc/self/environ is the exec-time
     # environment of the process it was forked from, and ENV.delete changes nothing that a sibling worker can
     # read. An exec'd child is different: it gets a fresh environ, and this is where that gets written.
     #
-    # Bounded output, because a converter's stdout is attacker-influenced — and worth remembering when an
-    # operation parses it, because doing so brings the bytes a converter was isolating back into this worker.
+    # Bounded output, because a tool's stdout is attacker-influenced — and worth remembering when an
+    # operation parses it, because doing so brings the bytes a tool was isolating back into this worker.
     #
     # `capture` bounds what is kept AND what is read, which capture3 could not do. It accumulates both
     # streams in full and hands them over at exit, so slicing afterwards bounded the Strings this method
-    # returns and nothing else: an input that makes a converter print gigabytes of diagnostics had already
+    # returns and nothing else: an input that makes a tool print gigabytes of diagnostics had already
     # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
     # verdict, which is permanent, for a document whose only crime was being noisy.
     def convert(*command, env: {}, capture: 64 * 1024)
       require "open3"
 
-      Open3.popen3(converter_environment(env), *command, unsetenv_others: true) do |stdin, out, err, thread|
+      Open3.popen3(tool_environment(env), *command, unsetenv_others: true) do |stdin, out, err, thread|
         stdin.close
         captured = drain(out, err, capture)
 
@@ -154,8 +154,8 @@ module HotCell
 
     private
       # Reads both streams until they close, keeping only the first `limit` bytes of each and discarding the
-      # rest as it arrives. Both have to be read, not just the one being kept: a converter blocks writing to
-      # a pipe nobody drains, and a converter blocked on stderr never exits, which turns a noisy document
+      # rest as it arrives. Both have to be read, not just the one being kept: a tool blocks writing to
+      # a pipe nobody drains, and a tool blocked on stderr never exits, which turns a noisy document
       # into a deadline kill.
       def drain(*streams, limit)
         kept = streams.to_h { |stream| [ stream, +"".b ] }
@@ -181,7 +181,7 @@ module HotCell
         kept
       end
 
-      def converter_environment(overrides)
+      def tool_environment(overrides)
         { "HOME" => ENV["HOME"], "PATH" => ENV["PATH"], "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8" }
           .merge(overrides.transform_keys(&:to_s))
           .compact

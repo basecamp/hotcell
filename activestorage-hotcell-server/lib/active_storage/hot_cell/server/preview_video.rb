@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "active_storage/hot_cell/server/converter_operation"
+require "active_storage/hot_cell/server/tool_operation"
 
 module ActiveStorage
   module HotCell
@@ -10,8 +10,8 @@ module ActiveStorage
       # Rails runs `ffmpeg -i <file> -y -vframes 1 -f image2 -` and lets an application override those arguments
       # with a string it splits with Shellwords. This does not take arguments from anybody: the caller says how
       # many seconds in to seek and nothing else, because `video_preview_arguments` is a shell string and a cell
-      # exists so that a caller cannot choose what a converter runs.
-      class PreviewVideo < ConverterOperation
+      # exists so that a caller cannot choose what a tool runs.
+      class PreviewVideo < ToolOperation
         operation "active_storage.preview_video"
 
         # Video is the reason a cell exists as a separate accessory. A preview measured in minutes and a thumbnail

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
-require "active_storage/hot_cell/server/converter_operation"
+require "active_storage/hot_cell/server/tool_operation"
 
 module ActiveStorage
   module HotCell
@@ -9,22 +9,21 @@ module ActiveStorage
       # What Rails' video and audio analyzers do, moved out of the application: ffprobe, and a small set of numbers
       # taken out of what it says.
       #
-      # **This reads its converter's stdout, and it is still `:subprocess`. That is a judgement, so here it is.**
+      # **This reads its tool's stdout, and that is a judgement, so here it is.**
       #
       # ffprobe parses the media in an exec'd child that dies at the end of the call. What comes back into this
       # worker is JSON on a bounded buffer, parsed by `JSON.parse` — not a media decoder, and not a parser with a
-      # history of memory-safety bugs. Treating that as equivalent to decoding an image in-process would make the
-      # `:in_process` declaration mean "touches any attacker-influenced byte", which is every operation, and a
-      # distinction that covers everything guides nobody.
-      #
-      # What the declaration is actually for is deciding whether recycling a worker is safe, and the question it
-      # asks is whether a malicious input can execute in this process. Through ffprobe's JSON it cannot.
+      # history of memory-safety bugs. The question that decides whether recycling a worker is safe is whether a
+      # malicious input can execute in this process, and through ffprobe's JSON it cannot. Treating that as
+      # equivalent to decoding an image in-process would make "parses untrusted bytes" mean "touches any
+      # attacker-influenced byte", which is every operation, and a distinction that covers everything guides
+      # nobody.
       #
       # This is the line, and it is worth stating so the next operation can be judged against it: reading a
-      # converter's *output file* with an in-process media library is `:in_process`, because that is a decoder
-      # running on bytes a converter just produced from a hostile document. Parsing a converter's structured
-      # stdout with the standard library is not.
-      class ProbeMedia < ConverterOperation
+      # tool's *output file* with an in-process media library is in-process decoding, because that is a decoder
+      # running on bytes a tool just produced from a hostile document. Parsing a tool's structured stdout with
+      # the standard library is not.
+      class ProbeMedia < ToolOperation
         operation "active_storage.probe_media"
 
         limits deadline: 30, memory: 1024 * 1024**2, file_size: 48 * 1024**2, open_files: 128

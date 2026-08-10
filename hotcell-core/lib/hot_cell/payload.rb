@@ -79,7 +79,7 @@ module HotCell
             # JSON.generate refuses a String whose bytes are not valid UTF-8, and it refuses it *after* this
             # has said the structure is fine. In a worker that meant dying with no answer at all, on a
             # response that had already been decided — so the caller read a closed socket and retried
-            # something that will fail the same way every time. Converters produce these: a filename, or a
+            # something that will fail the same way every time. Tools produce these: a filename, or a
             # line of stderr. Scrub it in the operation if you want it; it is not scrubbed here, because a
             # result is data the caller acts on rather than a diagnostic.
             unless value.valid_encoding?

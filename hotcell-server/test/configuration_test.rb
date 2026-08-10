@@ -39,7 +39,7 @@ class ConfigurationTest < RegistryIsolatedTest
   end
 
   # Intended for cells whose operations are all subprocess ones: persistent workers there give up nothing,
-  # keep their slot's converter profile warm, and never pay the settling cost at all.
+  # keep their slot's tool profile warm, and never pay the settling cost at all.
   def test_unlimited_reuse_never_retires
     configuration = HotCell::Configuration.new(max_requests_per_worker: :unlimited)
 

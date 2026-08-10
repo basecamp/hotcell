@@ -83,7 +83,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   end
 
   # video_preview_arguments is a shell string an application can set, and Rails splits it with Shellwords. A cell
-  # exists so that nobody but the operation chooses what a converter runs, so the payload carries one number.
+  # exists so that nobody but the operation chooses what a tool runs, so the payload carries one number.
   def test_a_caller_cannot_choose_what_ffmpeg_runs
     Cell.boot do |cell|
       with_output(".png") do |destination|
@@ -111,7 +111,7 @@ class PreviewersTest < ActiveStorageHotCellTest
 
   # This is what Rails does, not a concession. A previewer yields io:, filename: and content_type: and nothing
   # else; Preview#process attaches that as a new blob, and the dimensions come later from analyzing that blob
-  # like any other. Returning them here would also mean parsing bytes a converter just made from a hostile
+  # like any other. Returning them here would also mean parsing bytes a tool just made from a hostile
   # document, in this worker, which is what would make these operations in-process ones.
   def test_a_preview_reports_no_dimensions_because_rails_previewers_do_not_either
     Cell.boot do |cell|

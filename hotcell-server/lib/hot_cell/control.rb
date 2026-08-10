@@ -13,7 +13,7 @@ module HotCell
   # departure from the original design. Forking would work — a child inherits the counters and could read
   # them without being told — but the whole value of this channel is being available when nothing else is,
   # and a channel that needs a fork to answer is a channel that goes quiet exactly when a fork is what is
-  # failing. Neither operation takes a descriptor, touches a converter, or evaluates a byte of image data,
+  # failing. Neither operation takes a descriptor, touches a tool, or evaluates a byte of image data,
   # so none of the reasons the supervisor stays out of a conversion apply. Reading a bounded control line
   # from the trusted side starts no thread pool and cannot deadlock a later fork.
   class Control

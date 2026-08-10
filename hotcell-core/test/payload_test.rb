@@ -86,7 +86,7 @@ class PayloadTest < HotCellTest
 
   # JSON.generate refuses these, and it refuses them *after* validation has said the structure is fine. In a
   # worker that meant dying with no answer at all, on a response that had already been decided — so the caller
-  # read a closed socket and retried something that would fail the same way forever. Converters produce these:
+  # read a closed socket and retried something that would fail the same way forever. Tools produce these:
   # a filename, or a line of stderr.
   def test_a_string_whose_bytes_are_not_valid_utf8_is_refused_here_rather_than_by_the_generator
     invalid = { note: "caf\xFF".dup.force_encoding(Encoding::UTF_8) }

@@ -61,7 +61,7 @@ module HotCell
     #
     # Boot must not fail when a cell does not answer. A cell that is down at app boot is a degraded
     # deployment rather than a broken one, and an application that refuses to start because its thumbnail
-    # converter is restarting is worse than one that serves placeholders. So this warns and carries on.
+    # cell is restarting is worse than one that serves placeholders. So this warns and carries on.
     def describe
       return nil unless enabled?
 

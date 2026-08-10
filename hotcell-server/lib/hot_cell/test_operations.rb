@@ -2,7 +2,7 @@
 
 require "digest"
 
-# Fixture operations, so the whole surface can be exercised with no converter installed and no container
+# Fixture operations, so the whole surface can be exercised with no tool installed and no container
 # running. haystack#8538 does the same thing with a scripted stand-in for soffice, which lets it test the
 # whole surface in milliseconds.
 #
@@ -187,7 +187,7 @@ module HotCell
     end
 
     # Starts a grandchild that outlives the worker, and reports its pid so a test can ask whether the
-    # deadline reached it. `spawn` rather than a converter, so this needs no toolchain installed.
+    # deadline reached it. `spawn` rather than a tool, so this needs no toolchain installed.
     class Spawns < HotCell::Operation
       operation "test.spawns"
 
@@ -217,8 +217,8 @@ module HotCell
       limits deadline: 300
     end
 
-    # Reports what an exec'd converter can see of its environment, and what the worker itself can see, so a
-    # test can prove the canary was really there before proving the converter never got it.
+    # Reports what an exec'd tool can see of its environment, and what the worker itself can see, so a
+    # test can prove the canary was really there before proving the tool never got it.
     class Environment < HotCell::Operation
       operation "test.environment"
 
@@ -231,7 +231,7 @@ module HotCell
     end
 
     # Prints far more than any sane capture, on the stream the payload names, then exits. For proving that
-    # a noisy converter costs a bounded amount of this worker's memory rather than all of it.
+    # a noisy tool costs a bounded amount of this worker's memory rather than all of it.
     class Noisy < HotCell::Operation
       operation "test.noisy"
 
@@ -308,7 +308,7 @@ module HotCell
       end
     end
 
-    # A result carrying bytes a converter produced, which is where invalid UTF-8 comes from in practice.
+    # A result carrying bytes a tool produced, which is where invalid UTF-8 comes from in practice.
     class Mojibake < HotCell::Operation
       operation "test.mojibake"
 

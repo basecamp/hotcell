@@ -180,7 +180,7 @@ class IntegrationTest < HotCellClientTest
   end
 
   # A cell that is down at app boot is a degraded deployment, not a broken one. An application that refuses
-  # to start because its thumbnail converter is restarting is worse than one that serves placeholders.
+  # to start because its thumbnail cell is restarting is worse than one that serves placeholders.
   def test_describe_warns_and_carries_on_when_a_cell_does_not_answer
     HotCell.root = Dir.mktmpdir "hotcell-absent"
     HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable

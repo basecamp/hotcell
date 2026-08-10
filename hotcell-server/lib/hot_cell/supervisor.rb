@@ -389,7 +389,7 @@ module HotCell
         [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
 
         # Its own process group, so the deadline can kill everything this request started rather than only
-        # the Ruby process that started it. A converter is a grandchild — the worker spawns it — and killing
+        # the Ruby process that started it. A tool is a grandchild — the worker spawns it — and killing
         # the worker alone left it running, reparented to this supervisor as pid 1, with no deadline, no slot
         # and nothing watching it. A document that hangs ffmpeg would have accumulated one orphan per
         # request until the cgroup ended the cell.

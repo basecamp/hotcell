@@ -5,7 +5,7 @@ require "fcntl"
 module HotCell
   # A descriptor, not a path. The cold side opens the file and passes the open descriptor, so no path a
   # hot side chooses is ever opened by the cold side, and no path the cold side chose is ever visible
-  # to a converter.
+  # to a tool.
   #
   # These verify rather than merely tag, and both sides verify. An access mode is fixed at open and
   # cannot be narrowed afterward, so a cell handed a read-write descriptor as an input cannot correct
@@ -81,7 +81,7 @@ module HotCell
     ACCESS_MODE = Fcntl::O_RDONLY
 
     # Copies the bytes onto the worker's own scratch on the first call and returns the filename. Every
-    # subprocess converter wants a filename, and image_processing is filename-in and filename-out, so
+    # subprocess tool wants a filename, and image_processing is filename-in and filename-out, so
     # this is the general model rather than a workaround. RLIMIT_FSIZE bounds this copy as well as the
     # output, which is why one number covers both.
     #

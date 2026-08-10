@@ -157,7 +157,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   end
 
   # The exact set rather than one of them. This gem defines two abstract base classes, VipsOperation and
-  # ConverterOperation, and an operation registers by existing — so an assertion that only looked for what
+  # ToolOperation, and an operation registers by existing — so an assertion that only looked for what
   # should be here would not notice two more that should not.
   def test_the_cell_carries_the_operations_and_says_so
     Cell.boot do |cell|

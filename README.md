@@ -159,12 +159,12 @@ Also outstanding: the canary harness.
 ```
 bundle install
 rake              # every suite
-rake hotcell      # only the suites that need no converter installed
+rake hotcell      # only the suites that need no tool installed
 rake rubocop      # style, one configuration for all five gems
 docker/smoke      # the only check that covers network: none and cap-drop
 ```
 
-**The three hotcell gems need no container and no converter**, and `rake hotcell` is what keeps that honest —
+**The three hotcell gems need no container and no tool**, and `rake hotcell` is what keeps that honest —
 CI runs it on a machine with nothing installed. Fixture operations stand in for the work, so the protocol, the
 fork, the descriptor passing, the limits and the reap are all exercised in milliseconds.
 
@@ -191,7 +191,7 @@ What that leaves out is the isolation, which is verified on Linux by `docker/smo
 Security controls here fail silently, so a test that would still pass with the control removed is worse than
 no test: it reads as assurance. Every control is covered by a test that observes the behaviour the control
 produces, rather than by an assertion that the control is written down — `unsetenv_others: true` is proved by
-setting a variable, running a converter, and finding that the converter never saw it. Where a control has no
+setting a variable, running a tool, and finding that the tool never saw it. Where a control has no
 reachable trigger and so cannot be tested, it says so where it lives.
 
 ## Design
