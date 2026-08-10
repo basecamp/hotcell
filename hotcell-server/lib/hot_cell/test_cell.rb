@@ -83,7 +83,11 @@ module HotCell
           writer.write READY
           writer.close
           supervisor.run
-        rescue Exception => error # rubocop:disable Lint/RescueException
+        # StandardError is enough. What must not happen is an exception escaping this block, because Ruby would
+        # then run at_exit in the child — including minitest's autorun, which starts the whole suite over inside
+        # a forked cell. The `ensure exit!` below is what prevents that, for anything raised. This rescue only
+        # writes the diagnostic the parent reads.
+        rescue StandardError => error
           File.write log_path, "#{error.class}: #{error.message}\n" \
                                "#{error.backtrace&.first(10)&.join("\n")}\n", mode: "a"
         ensure

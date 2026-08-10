@@ -35,6 +35,21 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
   # Rails hands out Tempfiles, which are read-write. The protocol refuses those: an input must be read-only and
   # an output write-only, because an access mode is fixed at open and a cell handed the wrong one can only
   # decline. This passes only because both handles are reopened by path.
+  # The failure path, which Rails' own `ensure` does not cover: it unlinks the output around the *yield*, and a
+  # refused conversion never reaches one. Left alone the file would go at GC, which on a busy web process means
+  # a variant storm fills the disk with scratch nobody is holding.
+  def test_the_output_is_unlinked_when_the_conversion_fails
+    with_cell do
+      before = scratch_files
+
+      assert_raises Unprocessable do
+        transform({}, "broken.png") { flunk "should not have yielded" }
+      end
+
+      assert_equal before, scratch_files
+    end
+  end
+
   def test_a_rails_tempfile_reaches_the_cell_with_the_access_modes_the_protocol_requires
     with_cell do
       Tempfile.create([ "source", ".png" ], binmode: true) do |readwrite|
@@ -100,6 +115,10 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
   end
 
   private
+    def scratch_files
+      Dir.glob(File.join(Dir.tmpdir, "hotcell*")).size
+    end
+
     def transformer(transformations)
       ActiveStorage::HotCell::Client::Transformers::Vips.new transformations
     end

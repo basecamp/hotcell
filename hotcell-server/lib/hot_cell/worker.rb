@@ -31,6 +31,15 @@ module HotCell
     # A non-zero status for anything unexpected, because the supervisor holds the connection and is the only
     # thing that can answer for a worker that died mid-request. Exiting zero here would leave a caller reading
     # a closed socket with no verdict at all.
+    #
+    # **The one deliberate `rescue Exception` in this repository.** Not for the exit status — Ruby's own handler
+    # would also exit non-zero — but for Failure.sanitize. Left to Ruby, a NoMemoryError or a SystemStackError
+    # prints its message and backtrace to stderr unsanitized, and in this process that message can carry bytes
+    # derived from a hostile file. sanitize forces UTF-8, scrubs invalid sequences and truncates; stderr is the
+    # one path out of a cell that would otherwise skip it, which is how an unscrubbed byte sequence reaches a
+    # log row and poisons it.
+    #
+    # It swallows nothing: `exit! 1` runs whatever was caught.
     def run
       configuration.limits.apply
       ENV["HOME"] = slot.home
@@ -40,7 +49,7 @@ module HotCell
       end
 
       exit! 0
-    rescue Exception => error # rubocop:disable Lint/RescueException
+    rescue Exception => error
       log.write "worker.crashed", slot: slot.number, error: error.class.name,
                                   message: Failure.sanitize(error.message)
       exit! 1

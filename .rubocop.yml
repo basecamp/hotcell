@@ -212,11 +212,6 @@ Lint/RequireParentheses:
 Lint/RedundantCopDisableDirective:
   Enabled: true
 
-# Three places catch Exception deliberately, to unlink a tempfile or to stop a worker taking the cell with
-# it. Enabling this is what makes each of their disable comments mean something.
-Lint/RescueException:
-  Enabled: true
-
 Lint/RedundantCopEnableDirective:
   Enabled: true
 
