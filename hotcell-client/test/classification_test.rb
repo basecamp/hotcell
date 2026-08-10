@@ -14,13 +14,13 @@ class ClassificationTest < HotCellClientTest
   PERMANENT = [
     { code: "unreadable" },
     { code: "invalid" },
-    { code: "killed", limit: "fsize" },
-    { code: "killed", limit: "memory" },
+    { code: "killed", cause: "fsize" },
+    { code: "killed", cause: "memory" },
   ].freeze
 
-  # `failed` and `signal` sit here rather than above, and both used to be permanent. `failed` is whatever
-  # exception nobody classified, which includes a full disk; `signal` is a death this process cannot
-  # attribute to the input it was holding. Neither is grounds for writing a file off forever.
+  # `failed` and `crashed` sit here rather than above, and both used to be permanent. `failed` is whatever
+  # exception nobody classified, which includes a full disk; `crashed` is a death this process cannot
+  # attribute to the input the worker was holding. Neither is grounds for writing a file off forever.
   TRANSIENT = [
     { code: "protocol" },
     { code: "unsupported" },
@@ -28,9 +28,8 @@ class ClassificationTest < HotCellClientTest
     { code: "unavailable" },
     { code: "timeout" },
     { code: "failed" },
-    { code: "killed", limit: "signal" },
-    { code: "killed", limit: "deadline" },
-    { code: "killed", limit: "crashed" },
+    { code: "killed", cause: "deadline" },
+    { code: "killed", cause: "crashed" },
   ].freeze
 
   def test_every_permanent_code_raises_the_injected_permanent_class
@@ -59,10 +58,10 @@ class ClassificationTest < HotCellClientTest
     assert_equal HotCell::Codes::PERMANENT.keys.push(HotCell::Codes::KILLED).sort, covered
   end
 
-  def test_every_killed_limit_is_covered
-    covered = (PERMANENT + TRANSIENT).filter_map { |failure| failure[:limit] }.sort
+  def test_every_killed_cause_is_covered
+    covered = (PERMANENT + TRANSIENT).filter_map { |failure| failure[:cause] }.sort
 
-    assert_equal HotCell::Codes::PERMANENT_BY_LIMIT.keys.sort, covered
+    assert_equal HotCell::Codes::PERMANENT_BY_CAUSE.keys.sort, covered
   end
 
   def test_the_raised_message_carries_enough_to_re_decide_on_later
@@ -167,8 +166,8 @@ class ClassificationTest < HotCellClientTest
       end
     end
 
-    def failed(code:, limit: nil, error_class: nil, message: nil)
-      HotCell::Response.failed HotCell::Failure.new(code: code, limit: limit, error_class: error_class,
+    def failed(code:, cause: nil, error_class: nil, message: nil)
+      HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, error_class: error_class,
                                                     message: message),
                                timing: { perform_ms: 1 }
     end

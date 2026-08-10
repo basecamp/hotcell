@@ -70,7 +70,7 @@ class RegistrationTest < HotCellClientTest
     assert_equal Unprocessable, cell.exception_for(HotCell::Failure.new(code: "unreadable"))
     assert_equal TemporarilyUnavailable, cell.exception_for(HotCell::Failure.new(code: "capacity"))
     assert_equal TemporarilyUnavailable,
-                 cell.exception_for(HotCell::Failure.new(code: "killed", limit: "deadline"))
-    assert_equal Unprocessable, cell.exception_for(HotCell::Failure.new(code: "killed", limit: "memory"))
+                 cell.exception_for(HotCell::Failure.new(code: "killed", cause: "deadline"))
+    assert_equal Unprocessable, cell.exception_for(HotCell::Failure.new(code: "killed", cause: "memory"))
   end
 end

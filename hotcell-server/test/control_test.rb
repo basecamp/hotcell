@@ -4,12 +4,12 @@ require "test_helper"
 
 class ControlTest < HotCellServerTest
   def test_describe_reports_what_the_cell_carries_and_how_long_it_may_take
-    TestCell.boot(concurrency: 3, queue_factor: 2, deadline: 45, queue_wait: 7) do |cell|
+    TestCell.boot(concurrency: 3, queue_size: 6, deadline: 45, queue_wait: 7) do |cell|
       result = assert_ok(cell.control("hotcell.describe")).result
 
       assert_equal HotCell::PROTOCOL_VERSION, result[:v]
       assert_equal 3, result[:concurrency]
-      assert_equal 2, result[:queue_factor]
+      assert_equal 6, result[:queue_size]
       assert_equal 45, result[:deadline]
       assert_equal 7, result[:queue_wait]
       assert_includes result[:operations], "test.uppercase"
@@ -44,7 +44,7 @@ class ControlTest < HotCellServerTest
       with_files do |source, destination|
         assert_failed "killed", cell.call("test.overflowing", inputs: [ source ], outputs: [ destination ],
                                                              payload: { megabytes: 8 }, timeout: 30),
-                      limit: "fsize"
+                      cause: "fsize"
       end
 
       result = assert_ok(cell.control("hotcell.metrics")).result
@@ -75,7 +75,7 @@ class ControlTest < HotCellServerTest
   end
 
   def test_metrics_report_what_no_single_caller_can_see
-    TestCell.boot(concurrency: 1, queue_factor: 4, deadline: 30) do |cell|
+    TestCell.boot(concurrency: 1, queue_size: 4, deadline: 30) do |cell|
       blocker = cell.connect
 
       begin
@@ -101,7 +101,7 @@ class ControlTest < HotCellServerTest
   # queue is full and every worker is busy, and the scrape still answers. A metrics channel that goes quiet
   # under load reports the same thing as a dead cell.
   def test_control_answers_while_the_work_socket_is_saturated_and_its_queue_is_full
-    TestCell.boot(concurrency: 1, queue_factor: 1, queue_wait: 20, deadline: 30) do |cell|
+    TestCell.boot(concurrency: 1, queue_size: 1, queue_wait: 20, deadline: 30) do |cell|
       held = 2.times.map { cell.connect }
 
       begin

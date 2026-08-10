@@ -10,7 +10,7 @@ module HotCell
   # formats deliberately refused.
   class UnreadableInput < OperationError; end
 
-  # Reported as `killed` with `limit: memory` rather than as an ordinary failure, because it is the
+  # Reported as `killed` with `cause: memory` rather than as an ordinary failure, because it is the
   # decompression-bomb case and a caller must be able to act on it without parsing a message.
   class MemoryExhausted < OperationError; end
 end

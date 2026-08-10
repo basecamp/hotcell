@@ -18,7 +18,7 @@ class SchedulingTest < HotCellServerTest
       response = nil
       took = elapsed { response = cell.call("test.uninterruptible", timeout: 20) }
 
-      failure = assert_failed "killed", response, limit: "deadline"
+      failure = assert_failed "killed", response, cause: "deadline"
       assert_equal "KILL", failure.signal
       assert_operator took, :<, 4, "the work itself takes 6.7s, so this was not a kill"
 
@@ -37,7 +37,7 @@ class SchedulingTest < HotCellServerTest
   # request's deadline.
   def test_a_deadline_kill_is_sent_once_rather_than_on_every_pass
     TestCell.boot(deadline: 0.2, concurrency: 1) do |cell|
-      assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), limit: "deadline"
+      assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), cause: "deadline"
       wait_until(what: "the worker to be reaped") { cell.log_events("worker.reaped").any? }
 
       assert_equal 1, cell.log_events("worker.deadline").size,
@@ -53,7 +53,7 @@ class SchedulingTest < HotCellServerTest
       ENV["HOTCELL_SPAWNED_PID_PATH"] = path
 
       TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
-        assert_failed "killed", cell.call("test.spawns", timeout: 20), limit: "deadline"
+        assert_failed "killed", cell.call("test.spawns", timeout: 20), cause: "deadline"
 
         wait_until(what: "the worker to report what it spawned") { File.size(path).positive? }
         spawned = Integer(File.read(path))
@@ -86,7 +86,7 @@ class SchedulingTest < HotCellServerTest
   # untrusted byte.
   def test_an_operation_may_ask_for_a_shorter_deadline_than_the_cell_allows
     TestCell.boot(deadline: 20) do |cell|
-      took = elapsed { assert_failed "killed", cell.call("test.impatient", timeout: 20), limit: "deadline" }
+      took = elapsed { assert_failed "killed", cell.call("test.impatient", timeout: 20), cause: "deadline" }
 
       assert_operator took, :<, 4, "the cell's 20s deadline was used instead of the operation's 1s"
     end
@@ -95,7 +95,7 @@ class SchedulingTest < HotCellServerTest
   # Invariant 6: an operation cannot exceed its cell's limits, whatever it declares.
   def test_an_operation_asking_for_a_longer_deadline_is_clamped_to_the_cell
     TestCell.boot(deadline: 1) do |cell|
-      took = elapsed { assert_failed "killed", cell.call("test.patient", timeout: 20), limit: "deadline" }
+      took = elapsed { assert_failed "killed", cell.call("test.patient", timeout: 20), cause: "deadline" }
 
       assert_operator took, :<, 4, "the operation's 300s deadline was not clamped to the cell's 1s"
     end
@@ -141,7 +141,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   def test_workers_running_at_once_get_different_slots_and_therefore_different_homes
-    TestCell.boot(concurrency: 2, queue_factor: 2) do |cell|
+    TestCell.boot(concurrency: 2, queue_size: 4) do |cell|
       homes = in_parallel(2) { assert_ok(cell.call("test.blocking", payload: { seconds: 0.4 }, timeout: 20)) }
         .map { |response| response.result[:pid] }
 
@@ -149,11 +149,11 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
-  # Saturation shows up as latency before it shows up as failure. At concurrency 2 and queue_factor 1 the
+  # Saturation shows up as latency before it shows up as failure. At concurrency 2 and queue_size 2 the
   # cell runs two and holds two waiting; the fifth is refused. A cell that only ever refused would go from
   # healthy to erroring with nothing in between and nothing to alarm on.
   def test_the_queue_absorbs_a_burst_and_the_overflow_is_refused
-    TestCell.boot(concurrency: 2, queue_factor: 1, queue_wait: 20, deadline: 30) do |cell|
+    TestCell.boot(concurrency: 2, queue_size: 2, queue_wait: 20, deadline: 30) do |cell|
       connections = 5.times.map { cell.connect }
 
       begin
@@ -177,7 +177,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   def test_a_refusal_is_transient_so_a_restarting_cell_never_condemns_a_document
-    TestCell.boot(concurrency: 1, queue_factor: 0, deadline: 30) do |cell|
+    TestCell.boot(concurrency: 1, queue_size: 0, deadline: 30) do |cell|
       connection = cell.connect
 
       begin
@@ -197,7 +197,7 @@ class SchedulingTest < HotCellServerTest
   # queue exists to surface unreachable exactly when the cell is saturated. thimble shipped without this
   # and documented the symptom.
   def test_a_connection_that_waits_too_long_is_told_so_by_the_cell_rather_than_timing_out
-    TestCell.boot(concurrency: 1, queue_factor: 4, queue_wait: 0.3, deadline: 30) do |cell|
+    TestCell.boot(concurrency: 1, queue_size: 4, queue_wait: 0.3, deadline: 30) do |cell|
       blocker = cell.connect
 
       begin

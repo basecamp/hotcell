@@ -29,8 +29,8 @@ module HotCell
       @requests[(code || :ok).to_sym] += 1
     end
 
-    def record_kill(limit)
-      @killed_by[limit.to_sym] += 1
+    def record_kill(cause)
+      @killed_by[cause.to_sym] += 1
     end
 
     def cancelled!

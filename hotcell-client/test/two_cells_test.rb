@@ -32,7 +32,7 @@ class TwoCellsTest < HotCellClientTest
   # priority. So a video preview measured in minutes and an avatar thumbnail measured in milliseconds must not
   # share a cell — separating them is what a second cell is for.
   def test_saturating_one_cell_leaves_the_other_serving
-    with_two_cells(images: { concurrency: 1, queue_factor: 0, deadline: 30 }) do |_images, _documents|
+    with_two_cells(images: { concurrency: 1, queue_size: 0, deadline: 30 }) do |_images, _documents|
       held = UNIXSocket.new HotCell.cell("images").work_socket
 
       begin

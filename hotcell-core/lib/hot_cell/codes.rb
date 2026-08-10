@@ -69,7 +69,6 @@ module HotCell
     FSIZE = "fsize"
     MEMORY = "memory"
     DEADLINE = "deadline"
-    SIGNAL = "signal"
     CRASHED = "crashed"
 
     # `signal` is the unexplained death, and it is not permanent, because a signal says how a process died and
@@ -77,20 +76,19 @@ module HotCell
     # from somewhere it cannot see: a cgroup OOM kill chosen on aggregate pressure across concurrent workers,
     # or one worker signalling another — they share a uid, and nothing stops that. Attributing either to the
     # input this worker happened to be holding condemns a file for something it did not do.
-    PERMANENT_BY_LIMIT = {
+    PERMANENT_BY_CAUSE = {
       FSIZE    => true,
       MEMORY   => true,
       DEADLINE => false,
-      SIGNAL   => false,
       CRASHED  => false,
     }.freeze
 
     KILLED = "killed"
 
     class << self
-      def permanent?(code, limit: nil)
+      def permanent?(code, cause: nil)
         code = code.to_s
-        return PERMANENT_BY_LIMIT.fetch(limit.to_s, false) if code == KILLED
+        return PERMANENT_BY_CAUSE.fetch(cause.to_s, false) if code == KILLED
 
         PERMANENT.fetch(code) do
           raise ArgumentError, "unknown error code #{code.inspect}"

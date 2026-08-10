@@ -69,7 +69,7 @@ class ResourceLimitsTest < HotCellServerTest
         response = cell.call "test.overflowing", inputs: [ source ], outputs: [ destination ],
                                                  payload: { megabytes: 16 }, timeout: 30
 
-        failure = assert_failed "killed", response, limit: "fsize"
+        failure = assert_failed "killed", response, cause: "fsize"
         assert_predicate failure, :permanent?
         assert_equal "XFSZ", failure.signal
       end
@@ -84,7 +84,7 @@ class ResourceLimitsTest < HotCellServerTest
         with_file do |destination|
           response = cell.call "test.uppercase", inputs: [ source ], outputs: [ destination ], timeout: 30
 
-          assert_failed "killed", response, limit: "fsize"
+          assert_failed "killed", response, cause: "fsize"
         end
       end
     end
@@ -96,7 +96,7 @@ class ResourceLimitsTest < HotCellServerTest
   def test_allocating_past_the_memory_limit_is_killed_rather_than_failed
     boot do |cell|
       failure = assert_failed "killed", cell.call("test.greedy", payload: { megabytes: 900 }, timeout: 30),
-                              limit: "memory"
+                              cause: "memory"
 
       assert_predicate failure, :permanent?
     end

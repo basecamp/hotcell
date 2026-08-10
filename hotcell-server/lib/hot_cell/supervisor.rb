@@ -75,16 +75,20 @@ module HotCell
     # bytes than Linux, and control.sock is the longer of the two names, so it overflows first.
     SUN_PATH_MAX = RUBY_PLATFORM.include?("darwin") ? 104 : 108
 
-    # SIGKILL is deliberately absent, and its absence is the point. The supervisor's own deadline kill is
-    # already named by `killed_for`, so a SIGKILL arriving here came from somewhere this process cannot see —
-    # a cgroup OOM kill made on aggregate pressure, or a sibling worker, which shares a uid and is not
-    # prevented from signalling. Reading it as this request's memory condemned an input for someone else's
-    # pressure. It falls through to `signal`, which is not permanent.
+    # The signals this cell can attribute to the request the worker was holding. XFSZ is that worker passing
+    # RLIMIT_FSIZE, and SEGV, ABRT and TRAP are how libvips and GLib die on their own allocation failures —
+    # libvips dereferences null after printing the correct diagnostic, and g_malloc aborts.
     #
-    # The three that remain are causally attributable: XFSZ is this worker passing RLIMIT_FSIZE, and SEGV,
-    # ABRT and TRAP are how libvips and GLib die on their own allocation failures — libvips dereferences null
-    # after printing the correct diagnostic, and g_malloc aborts.
-    SIGNAL_LIMITS = {
+    # SIGKILL is deliberately absent, and its absence is the point. The supervisor's own deadline kill is
+    # already named by `killed_for`, so a SIGKILL reaching this table came from somewhere this process
+    # cannot see: a cgroup OOM chosen on aggregate pressure, or a sibling worker, which shares a uid and is
+    # not prevented from signalling. Reading it as this request's memory condemned an input for someone
+    # else's pressure.
+    #
+    # Anything not here is `crashed`, which is also where a worker that exited without a signal lands. They
+    # were two names, `signal` and `crashed`, for one amount of knowledge: the worker died and nothing says
+    # why. One name is honest about that.
+    SIGNAL_CAUSES = {
       "XFSZ" => Codes::FSIZE,
       "SEGV" => Codes::MEMORY,
       "ABRT" => Codes::MEMORY,
@@ -343,7 +347,7 @@ module HotCell
         # here, so it must not be closed on the way out.
         child.released
         child.retired = true
-        answer connection, Failure.new(code: Codes::KILLED, limit: Codes::CRASHED, message: error.message)
+        answer connection, Failure.new(code: Codes::KILLED, cause: Codes::CRASHED, message: error.message)
         false
       end
 
@@ -584,16 +588,16 @@ module HotCell
       def answer_for(child, status)
         return child.connection&.close unless child.busy?
 
-        limit = child.killed_for ||
-                (status.signaled? ? SIGNAL_LIMITS.fetch(signal_name(status), Codes::SIGNAL) : Codes::CRASHED)
+        cause = child.killed_for ||
+                SIGNAL_CAUSES.fetch(signal_name(status), Codes::CRASHED)
         counters.record Codes::KILLED
-        counters.record_kill limit
+        counters.record_kill cause
 
-        log.write "worker.killed", pid: child.pid, slot: child.slot.number, limit: limit,
+        log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
                                    signal: signal_name(status), elapsed_ms: Clock.ms_since(child.dispatched_at)
 
         answer child.connection,
-               Failure.new(code: Codes::KILLED, limit: limit, signal: signal_name(status)),
+               Failure.new(code: Codes::KILLED, cause: cause, signal: signal_name(status)),
                timing: { perform_ms: Clock.ms_since(child.dispatched_at) }
       end
 

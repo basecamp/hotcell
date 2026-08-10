@@ -50,9 +50,9 @@ class ResponseTest < HotCellTest
   end
 
   def test_killed_splits_on_the_limit_the_worker_hit
-    assert_predicate HotCell::Failure.new(code: "killed", limit: "memory"), :permanent?
-    assert_predicate HotCell::Failure.new(code: "killed", limit: "fsize"), :permanent?
-    refute_predicate HotCell::Failure.new(code: "killed", limit: "deadline"), :permanent?
+    assert_predicate HotCell::Failure.new(code: "killed", cause: "memory"), :permanent?
+    assert_predicate HotCell::Failure.new(code: "killed", cause: "fsize"), :permanent?
+    refute_predicate HotCell::Failure.new(code: "killed", cause: "deadline"), :permanent?
   end
 
   def test_the_wire_carries_only_the_fields_a_failure_has
