@@ -31,12 +31,5 @@ module HotCell
 
       @configuration = Configuration.new(**options)
     end
-
-    # Test support. Named apart from the client gem's own reset, because both gems open this module and a
-    # shared name would mean whichever loaded last silently won.
-    def reset_configuration!
-      @configuration = nil
-      Registry.clear
-    end
   end
 end
