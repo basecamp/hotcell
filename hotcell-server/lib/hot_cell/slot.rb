@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "fileutils"
+
 module HotCell
   # Slots are a consequence of the concurrency limit rather than something to configure. At most
   # `concurrency` workers run, so number them and hand each worker its number at fork. There is no
@@ -16,9 +18,33 @@ module HotCell
   # home, and that scratch is separate and per-request. The danger is what an earlier request wrote into
   # the home rather than what a later one reads out of it — for LibreOffice the user layer composes last,
   # so a write there can disable the converter's own hardening for every later request on that slot.
+  #
+  # The filesystem behaviour belongs here rather than in the two processes that call it. Scratch is removed
+  # from both — the worker before it answers, the supervisor at finish and at reap — so the guard and the
+  # swallowed SystemCallError are a rule that has to hold on both sides of a fork, and it had a copy on each.
   Slot = Struct.new(:number, :home, :scratch) do
     def self.build(workspace, number)
       new number, File.join(workspace, number.to_s, "home"), File.join(workspace, number.to_s, "scratch")
+    end
+
+    def make_scratch
+      FileUtils.mkdir_p scratch, mode: 0o700
+      scratch
+    end
+
+    # A slot whose scratch is already gone, or which another process removed between the check and the
+    # unlink, is the outcome this wants either way.
+    def remove_scratch
+      FileUtils.remove_entry scratch if Dir.exist?(scratch)
+    rescue SystemCallError
+      nil
+    end
+
+    # The home survives between requests on purpose, so it is created once; scratch must not, so anything
+    # a previous boot left behind goes now.
+    def prepare
+      FileUtils.mkdir_p home, mode: 0o700
+      remove_scratch
     end
   end
 end

@@ -30,13 +30,12 @@ module HotCell
       @terminal
     end
 
+    # compact rather than four guards: the constructor puts every one of these through `&.to_s` or
+    # `sanitize`, so each is a String or nil and there is no falsey-but-meaningful value to protect.
+    # `terminal` is the exception and survives, because compact drops only nil.
     def to_h
-      { code: code, terminal: terminal? }.tap do |wire|
-        wire[:limit]   = limit if limit
-        wire[:signal]  = signal if signal
-        wire[:class]   = error_class if error_class
-        wire[:message] = message if message
-      end
+      { code: code, terminal: terminal? }
+        .merge(limit: limit, signal: signal, class: error_class, message: message).compact
     end
 
     def to_s

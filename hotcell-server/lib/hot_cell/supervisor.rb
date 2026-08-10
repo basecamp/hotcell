@@ -142,15 +142,13 @@ module HotCell
       shutdown
     end
 
-    def stop
-      @stopping = true
-    end
-
-    def stopped?
-      @stopping && @children.empty?
-    end
-
     private
+      # SIGTERM is the only way in. drain_signals owns the transition because the log line and the queue
+      # refusal are what it means; a setter that skipped them would be a trap rather than an affordance.
+      def stopped?
+        @stopping && @children.empty?
+      end
+
       def sources
         [ @signals ].tap do |list|
           list.concat @children.each_value.map { |child| child.control.socket }.reject(&:closed?)
@@ -436,7 +434,7 @@ module HotCell
       def finish(child, code)
         counters.record code
         child.finished
-        remove_scratch child.slot
+        child.slot.remove_scratch
 
         retire child if configuration.retire?(child.served)
       end
@@ -508,7 +506,7 @@ module HotCell
 
           @children.delete child.slot.number
           answer_for child, status
-          remove_scratch child.slot
+          child.slot.remove_scratch
           child.control.close
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,
@@ -633,11 +631,7 @@ module HotCell
       def prepare_directories
         FileUtils.mkdir_p directory
 
-        configuration.concurrency.times do |number|
-          slot = Slot.build(workspace, number)
-          FileUtils.mkdir_p slot.home, mode: 0o700
-          remove_scratch slot
-        end
+        configuration.concurrency.times { |number| Slot.build(workspace, number).prepare }
       end
 
       def preload
@@ -649,11 +643,6 @@ module HotCell
         log.write "cell.reuse_warning", warning: warning if warning
       end
 
-      def remove_scratch(slot)
-        FileUtils.remove_entry slot.scratch if Dir.exist?(slot.scratch)
-      rescue SystemCallError
-        nil
-      end
 
       def shutdown
         refuse_queue "the cell is stopping"

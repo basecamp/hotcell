@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "fileutils"
-
 module HotCell
   # Every untrusted byte is touched here and nowhere else.
   #
@@ -93,7 +91,7 @@ module HotCell
       ensure
         received.each(&:close)
         connection.close
-        remove_scratch
+        slot.remove_scratch
         report_idle response&.failure&.code
       end
 
@@ -130,7 +128,7 @@ module HotCell
         # Before answering rather than after, so the window in which a sibling worker could read this
         # request's bytes off the shared tmpfs closes before the caller is told anything. Files are not
         # isolated between concurrent workers and cannot be, so the window's size is the whole control.
-        remove_scratch
+        slot.remove_scratch
 
         response
       rescue *operation.unreadable => error
@@ -148,7 +146,7 @@ module HotCell
       end
 
       def stage(inputs, outputs)
-        scratch = make_scratch
+        scratch = slot.make_scratch
         inputs.each_with_index { |input, index| input.stage File.join(scratch, "input-#{index}") }
         outputs.each_with_index { |output, index| output.stage File.join(scratch, "output-#{index}") }
       end
@@ -217,17 +215,6 @@ module HotCell
         else
           Failure.new code: code, limit: limit, message: detail
         end
-      end
-
-      def make_scratch
-        FileUtils.mkdir_p slot.scratch, mode: 0o700
-        slot.scratch
-      end
-
-      def remove_scratch
-        FileUtils.remove_entry slot.scratch if Dir.exist?(slot.scratch)
-      rescue SystemCallError
-        nil
       end
   end
 end

@@ -29,10 +29,6 @@ module HotCell
       io
     end
 
-    def fileno
-      io.fileno
-    end
-
     def close
       io.close unless io.closed?
     end
