@@ -31,6 +31,20 @@ class SchedulingTest < HotCellServerTest
 
   # A deadline breach is as much a property of the load as of the input. Treating it as terminal would mean
   # a busy afternoon permanently condemns whatever was uploaded during it.
+  # One kill per breach. Killing leaves the child busy, because the supervisor still holds the connection it
+  # has to answer on, so a child that stayed a timer source would be re-killed and re-logged on every pass of
+  # the loop until the reap — a synchronous stdout write each time, in the loop enforcing every other
+  # request's deadline.
+  def test_a_deadline_kill_is_sent_once_rather_than_on_every_pass
+    TestCell.boot(deadline: 0.2, concurrency: 1) do |cell|
+      assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), limit: "deadline"
+      wait_until(what: "the worker to be reaped") { cell.log_events("worker.reaped").any? }
+
+      assert_equal 1, cell.log_events("worker.deadline").size,
+                   "expected one kill for one breach"
+    end
+  end
+
   def test_a_deadline_breach_is_not_terminal
     TestCell.boot(deadline: 1) do |cell|
       refute_predicate assert_failed("killed", cell.call("test.uninterruptible", timeout: 20)), :terminal?

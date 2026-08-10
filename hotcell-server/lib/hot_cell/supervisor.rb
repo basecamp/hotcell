@@ -55,12 +55,19 @@ module HotCell
         !busy? && !retired
       end
 
+      # A child already killed for its deadline stops being a timer, and that guard is load-bearing rather
+      # than tidy. Killing does not clear `busy?` — the supervisor still holds the connection it has to answer
+      # on — so without it `expires_at` stays in the past, `wait_for` returns 0, IO.select returns at once,
+      # and the loop re-kills and re-logs on every pass until the reap. Measured at a 0.2s deadline: 72
+      # SIGKILLs and 72 synchronous stdout writes for one breach. The window is longest exactly when the host
+      # is already struggling — a worker in uninterruptible sleep, or one tearing down gigabytes of mappings —
+      # and the loop it starves is the one enforcing every other request's deadline.
       def overdue?(now)
-        busy? && now - dispatched_at >= deadline
+        busy? && killed_for.nil? && now - dispatched_at >= deadline
       end
 
       def expires_at
-        dispatched_at + deadline if busy?
+        dispatched_at + deadline if busy? && killed_for.nil?
       end
     end
 
