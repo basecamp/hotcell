@@ -80,11 +80,11 @@ module HotCell
     # correct diagnostic, and GLib's non-nullable g_malloc aborts. So all of these mean memory, and the
     # deadline is told apart by the supervisor knowing it sent that signal itself.
     SIGNAL_LIMITS = {
-      "XFSZ" => "fsize",
-      "SEGV" => "memory",
-      "ABRT" => "memory",
-      "TRAP" => "memory",
-      "KILL" => "memory",
+      "XFSZ" => Codes::FSIZE,
+      "SEGV" => Codes::MEMORY,
+      "ABRT" => Codes::MEMORY,
+      "TRAP" => Codes::MEMORY,
+      "KILL" => Codes::MEMORY,
     }.freeze
 
     SOCKETS = [ "work.sock", "control.sock" ].freeze
@@ -330,7 +330,7 @@ module HotCell
         # here, so it must not be closed on the way out.
         child.released
         child.retired = true
-        answer connection, Failure.new(code: Codes::KILLED, limit: "crashed", message: error.message)
+        answer connection, Failure.new(code: Codes::KILLED, limit: Codes::CRASHED, message: error.message)
         false
       end
 
@@ -461,7 +461,7 @@ module HotCell
         now = Clock.now
 
         @children.each_value.select { |child| child.overdue?(now) }.each do |child|
-          child.killed_for = "deadline"
+          child.killed_for = Codes::DEADLINE
           log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline: child.deadline
 
           begin
@@ -534,7 +534,7 @@ module HotCell
         return child.connection&.close unless child.busy?
 
         limit = child.killed_for ||
-                (status.signaled? ? SIGNAL_LIMITS.fetch(signal_name(status), "signal") : "crashed")
+                (status.signaled? ? SIGNAL_LIMITS.fetch(signal_name(status), Codes::SIGNAL) : Codes::CRASHED)
         counters.record Codes::KILLED
         counters.record_kill limit
 

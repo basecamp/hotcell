@@ -41,12 +41,28 @@ module HotCell
     # a misconfigured cell does on every request. Recording that against a blob would condemn everything
     # uploaded during a broken deploy, so it is transient. An older client that has never heard of it still
     # disposes of it correctly, because `terminal` travels on the wire.
+    #
+    # **A limit this table has never heard of is not terminal, and that default is the point of the table.**
+    # A cell mints these; adding a kill reason to the supervisor without adding a row here used to make it
+    # permanent, silently, and permanent is the answer that cannot be taken back. The names below are
+    # constants so that the two places that mint them cannot spell one the table does not carry.
+    #
+    # Raising instead — the way an unknown *code* raises — would be worse than the bug. `Supervisor#answer_for`
+    # builds its Failure as an argument to `answer`, so the raise would land before that method's rescue, and
+    # neither `reap` nor `drain_signals` nor `run` catches it. A typo would take the whole cell down from the
+    # one path whose job is reporting a dead worker.
+    FSIZE = "fsize"
+    MEMORY = "memory"
+    DEADLINE = "deadline"
+    SIGNAL = "signal"
+    CRASHED = "crashed"
+
     TERMINAL_BY_LIMIT = {
-      "fsize"    => true,
-      "memory"   => true,
-      "deadline" => false,
-      "signal"   => true,
-      "crashed"  => false,
+      FSIZE    => true,
+      MEMORY   => true,
+      DEADLINE => false,
+      SIGNAL   => true,
+      CRASHED  => false,
     }.freeze
 
     KILLED = "killed"
@@ -54,7 +70,7 @@ module HotCell
     class << self
       def terminal?(code, limit: nil)
         code = code.to_s
-        return TERMINAL_BY_LIMIT.fetch(limit.to_s, true) if code == KILLED
+        return TERMINAL_BY_LIMIT.fetch(limit.to_s, false) if code == KILLED
 
         TERMINAL.fetch(code) do
           raise ArgumentError, "unknown error code #{code.inspect}"
