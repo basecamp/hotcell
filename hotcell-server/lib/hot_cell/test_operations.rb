@@ -269,6 +269,18 @@ module HotCell
       before_worker_boot { CONFIGURED << "beta" }
     end
 
+    # Writes the first output and leaves the second alone, which is a positive total and reads as success to
+    # anything checking the aggregate.
+    class HalfWritten < HotCell::Operation
+      operation "test.half_written"
+
+      def perform(_inputs, outputs, _payload)
+        File.binwrite outputs.first.path, "only the first"
+
+        { wrote: 1 }
+      end
+    end
+
     class Rlimits < HotCell::Operation
       operation "test.rlimits"
 
