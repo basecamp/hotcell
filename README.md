@@ -1,41 +1,303 @@
 # HotCell
 
-Run untrusted media conversion outside the application, in an unprivileged sibling container with no
-network, and pass file descriptors to it rather than paths or bytes.
+Securely run untrusted code on untrusted inputs. HotCell moves the work out of the application and into
+an unprivileged sibling container with no network, and hands it open file descriptors rather than paths
+or bytes.
 
-The threat is untrusted content parsed by libraries that cannot be made safe: libvips, ImageMagick,
-LibreOffice, ffmpeg. Today they run inside the application process, where an exploit lands beside the
-database credentials, the session secret, and every host the application can reach. HotCell moves them into a
-container that holds nothing worth stealing.
+HotCell was created to perform safe media conversion. A web application that accepts uploads eventually
+hands a stranger's file to libvips, ImageMagick, LibreOffice or ffmpeg to make a thumbnail or a preview.
+Those libraries have long histories of exploitable parsing bugs, and running them inside the application
+process cannot be made secure. An exploited upload lands beside the database credentials, the session
+secret, and every host the application can reach.
+
+HotCell moves that work into a container that holds nothing worth stealing. Media conversion is only the
+first use case. An operation is any code, and an input is any file.
+
+## Usage
+
+A client class in the application and an operation class in the cell are never loaded in the same
+process, and they agree on two things only. The operation name routes the request, and the fixed
+signature — inputs, outputs, payload — is the whole contract for what crosses the socket. Descriptors
+travel as descriptors, the payload travels as one JSON object, and nothing else travels at all.
 
 ```ruby
-# in the application
+# In the application.
 class TransformImage < HotCell::Client
-  hotcell "images"
-  operation "active_storage.transform_image"
+  hotcell "images"                             # the cell that serves this call, by registered name
+  operation "active_storage.transform_image"   # the wire name an operation must answer to
 end
 
-TransformImage.perform_in_hotcell [ source ], [ destination ], format: "png",
-                                                              operations: { resize_to_limit: [ 800, 600 ] }
+# source and destination are Files the app opened — inputs read-only, outputs write-only. Their
+# descriptors cross the socket. The trailing keywords are Ruby collecting a Hash into the third
+# argument: that Hash is the payload, it crosses as one JSON object, and the worker double-splats it
+# back into perform's keyword arguments on the other side. This is a blocking call that waits for a
+# response from the cell.
+TransformImage.perform_in_hotcell source, destination,
+                                  format: "png",
+                                  operations: { resize_to_limit: [ 800, 600 ] }
 ```
 
 ```ruby
-# in the cell
-class TransformImage < HotCell::Operation
-  operation "active_storage.transform_image"
-  limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2
+# In the cell's image, loaded from /hotcell/operations at boot.
+require "active_support"
+require "active_support/core_ext/numeric"   # for 30.seconds and 1280.megabytes
 
-  before_fork        { require "image_processing/vips" }
-  before_worker_boot { Vips.concurrency_set 4 }
+class TransformImageOperation < HotCell::Operation
+  operation "active_storage.transform_image"   # the same wire name — establishes request routing
 
-  def perform(inputs, outputs, payload)
-    # inputs and outputs are descriptors the caller opened; asking one for its path stages it onto
-    # this worker's own scratch, and reading the descriptor directly never pays for the copy
+  # Ceilings for one request — deadline in seconds, memory and file_size in bytes — enforced by
+  # rlimits and the supervisor's clock, clamped to the cell's own.
+  limits deadline: 30.seconds, memory: 1280.megabytes, file_size: 48.megabytes
+
+  before_fork        { require "image_processing/vips" }   # once, in the supervisor
+  before_worker_boot { Vips.concurrency_set 4 }            # in each forked worker, before it serves a request
+
+  # The descriptors the caller passed, and the payload as keyword arguments — a missing or undeclared
+  # key raises, so the signature is the schema. Declare **payload instead to take the Hash whole.
+  def perform(inputs, outputs, format:, operations: {})
+    source, = inputs
+    destination, = outputs
+
+    # Asking an input for its path copies the bytes onto this worker's private scratch, so the tool
+    # gets a filename the caller never chose. Reading source.io directly skips the copy.
+    converted = ImageProcessing::Vips
+      .source(source.path)
+      .convert(format)
+      .apply(operations)
+      .call
+
+    # An output's path names a scratch file that is posted back through the descriptor on return.
+    IO.copy_stream converted.path, destination.path
+
+    # The result: one JSON object, which the caller receives as perform_in_hotcell's return value.
+    { format: format, bytes: File.size(destination.path) }
   end
 end
 ```
 
-The two are never both loaded. They are coupled only by an operation name on the wire.
+## The moving parts
+
+A **cell** is one deployment of the hot side: a supervisor, the workers it forks, and the operations they
+serve, reachable through two unix sockets in one directory. A cell is the unit of isolation and the unit of
+capacity — an application may register several, and `HotCell.register "images"` names one.
+
+The **supervisor** is pid 1 in the cell. It accepts connections, queues them, dispatches each to a worker,
+enforces the wall-clock deadline from outside, kills and reaps. It never reads a request and never evaluates
+a byte of image data — it hands the accepted connection itself to a worker over `SCM_RIGHTS` without ever
+calling `recvmsg`, so the caller's descriptors are still queued on it when the worker reads them.
+
+A **worker** is a child the supervisor forks. Every untrusted byte is touched there and nowhere else. It
+applies the cell's resource limits before touching the socket, serves `max_requests_per_worker` requests,
+and exits without running finalizers.
+
+A **slot** is the numbered workspace a worker borrows — two directories. `home` becomes the worker's
+`$HOME` and survives between requests, because LibreOffice's profile is expensive and warm is better.
+`scratch` holds one request's staged files, and is removed before the caller hears the answer.
+
+An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a wire name, its
+own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payload keys it wants as
+keyword arguments. By convention the class takes an `Operation`
+suffix — `TransformImageOperation` — while the client keeps the bare name, and the default wire name strips
+the suffix, so both sides derive `transform_image`. The set of operations a cell carries is its
+**consist** — logged at boot, advertised on the control socket.
+
+A **client** is the application-side mirror of an operation: a subclass of `HotCell::Client` that names
+the cell with `hotcell` and the operation with `operation`, and exposes `perform_in_hotcell`. That is a
+blocking call — it sends the request and waits for the cell's answer, up to the `timeout` the cell was
+registered with.
+
+A **tool** is a program an operation runs in a subprocess — `soffice`, `mutool`, `ffmpeg` — via `convert`,
+with a fully written environment and bounded capture of its output. The worker waits for it, and the tool
+sees only the environment its operation wrote for it.
+
+The **payload** is a `Hash` of options, riding the request as its one JSON object and arriving in
+`perform` as keyword arguments; the **result** is the `Hash` an operation returns, riding the response the
+same way. Neither carries file contents.
+
+**Inputs** and **outputs** are the open file descriptors a caller passes — inputs read-only, outputs
+write-only. They are the only way file contents enter or leave a cell. Asking one for its `path`
+materializes a temporary file on the worker's scratch that a tool can take. An input's bytes are copied
+there on the first ask, and an output's file is sent back through the descriptor when `perform` returns.
+An operation that reads or writes the descriptor directly never touches the disk.
+
+A failure carries a **code** — `unreadable`, `invalid`, `unsupported`, `failed`, `capacity`, `unavailable`,
+`timeout`, `protocol`, or `killed` with a cause — and each code is **permanent** or **transient**. Permanent
+means the input will fail this way every time, so the caller may record that verdict against it. Everything
+uncertain is transient, meaning it might succeed on a retry.
+
+## How a request works
+
+```mermaid
+sequenceDiagram
+    participant App as app process<br>(cold side, privileged)
+    participant Supervisor as supervisor, pid 1<br>(hot side, unprivileged)
+    participant Worker as worker<br>(forked per dispatch)
+
+    App->>Supervisor: one sendmsg — JSON request + N descriptors
+    note over Supervisor: never reads the request<br>queues it, or answers capacity
+    Supervisor->>Worker: forks, and passes the connection itself over SCM_RIGHTS
+    note over Worker: applies the cell's limits before touching the socket<br>reads the request, narrows to the operation's limits
+    Worker->>Worker: perform(inputs, outputs, **payload)<br>an input copies to scratch when asked for a path
+    Worker->>App: posts the outputs, flushes, answers with one JSON line
+    note over Supervisor,Worker: a worker past its deadline is killed as a process group,<br>and the supervisor answers killed
+    Worker->>Worker: exits, or waits for the next dispatch
+```
+
+1. The application calls `perform_in_hotcell inputs, outputs, payload` on a client class. The client wraps
+   each IO as an `Input` or `Output`, verifies its access mode — inputs read-only, outputs write-only —
+   validates the payload, and connects to the cell's `work.sock`.
+2. One `sendmsg` carries one JSON line and every descriptor.
+3. The supervisor accepts and dispatches, or answers `capacity` when the queue is full.
+4. The worker narrows to the operation's limits, clamped to the cell's, before reading any untrusted byte,
+   and re-runs `before_worker_boot` when the operation differs from the last one it served.
+5. `perform` runs on a fresh operation instance. An `Input` copies itself onto the slot's scratch the first
+   time the operation asks for its `path`; an operation that reads the descriptor directly never pays for
+   the copy. Outputs are posted back through their descriptors and flushed before success is reported.
+6. One JSON line answers: `ok` with the result and the timing, or a failure with its code.
+7. The supervisor enforces the deadline from outside, because a thread inside a C extension cannot be
+   interrupted from within. A worker past its deadline is killed as a process group, and the supervisor —
+   the only survivor holding the connection — answers `killed` with the cause.
+8. The client raises the exception class registered for that side of the permanent split, and publishes a
+   `perform.hot_cell` notification either way.
+
+## Building your own
+
+A cell is extended by deriving its image, not by changing these gems. Write an operation, copy it into the
+image, point a client at it.
+
+### Write the operation
+
+Declare the wire name and the limits, hook library loading, and perform:
+
+```ruby
+# operations/extract_text_operation.rb
+require "active_support"
+require "active_support/core_ext/numeric"
+
+class ExtractTextOperation < HotCell::Operation
+  operation "documents.extract_text"
+  limits deadline: 30.seconds, memory: 512.megabytes, file_size: 16.megabytes
+
+  before_fork { require "pdf/reader" }
+  unreadable PDF::Reader::MalformedPDFError
+
+  # This operation takes no options, so it declares no keywords at all — an empty payload
+  # double-splats into nothing.
+  def perform(inputs, outputs)
+    source, = inputs
+    destination, = outputs
+
+    reader = PDF::Reader.new(source.path)
+    File.write destination.path, reader.pages.map(&:text).join("\n")
+
+    { pages: reader.page_count }
+  end
+end
+```
+
+`before_fork` runs once in the supervisor and must never evaluate an image; `before_worker_boot` runs in the
+worker and is where a library gets sized. `unreadable` names the library exceptions that mean "this input
+cannot be decoded" — the one verdict an operation can make permanent. An operation that shells out calls
+`convert "mutool", "draw", ...` and gets the exit status and bounded output back; the tool sees only the
+environment the operation wrote.
+
+### Configure and build the cell
+
+The base image scans `/hotcell/operations` in sorted order, so a leading
+file configures scheduling before any operation loads:
+
+```ruby
+# operations/00_cell.rb
+require "active_support"
+require "active_support/core_ext/numeric"
+
+HotCell.limits concurrency: 4, queue_size: 8, deadline: 60.seconds, memory: 1536.megabytes
+```
+
+```dockerfile
+# TODO: point at the published hotcell base image once one exists
+FROM <the hotcell base image>
+
+# External tools and libraries come from apt; Ruby dependencies come from the bundle
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+COPY operations/ /hotcell/operations/
+```
+
+The base image's entrypoint is `hotcell`, which loads the consist and boots the supervisor on
+`HOTCELL_DIR`.
+
+### Deploy it with Kamal
+
+One accessory per cell. An accessory rather than an app role, because only an accessory can set
+`network: none` — and it targets the app's own hosts, because a descriptor cannot cross machines.
+
+```yaml
+accessories:
+  documents:
+    image: registry.example.com/myapp-hotcell-documents:latest
+    roles: [ web, jobs ]                       # a cell always lives on its caller's host
+    volumes:
+      - hotcell-documents:/run/hotcell/cell    # the socket directory, shared with the app
+    options:
+      network: none
+      read-only: true
+      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
+      memory: 2g
+      cap-drop: ALL
+```
+
+This is the short version. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) has the full flag set, why each flag
+matters, and the two volume-ownership mistakes that both fail as `EACCES` at boot.
+
+### Point a client at it
+
+Register the cell once, with the application's own exception classes for the two
+sides of the permanent split, then declare a client per operation:
+
+```ruby
+HotCell.root = ENV["HOTCELL_ROOT"]   # unset means every cell is off
+
+HotCell.register "documents",
+  permanent: MyApp::UnreadableDocument,
+  transient: MyApp::ConversionTemporarilyUnavailable
+
+class ExtractText < HotCell::Client
+  hotcell "documents"
+  operation "documents.extract_text"
+end
+
+result = ExtractText.perform_in_hotcell source, destination
+result[:pages]
+```
+
+`HotCell.root` names the directory that holds one subdirectory of sockets per cell, so this cell's live
+at `$HOTCELL_ROOT/documents`. In production that is the shared volume. The accessory above mounts
+`hotcell-documents` at `/run/hotcell/cell`, the app mounts the same volume at `/run/hotcell/documents`,
+and `HOTCELL_ROOT` is `/run/hotcell`. In development a cell runs uncontainerized, so use the app's own
+scratch space — set `HOTCELL_ROOT=tmp/hotcell` and boot the cell with
+`HOTCELL_DIR=tmp/hotcell/documents`. Leaving `HOTCELL_ROOT` unset turns every cell off — `enabled?`
+answers false, and `perform_in_hotcell` raises `HotCell::CellNotConfigured`. There is no automatic
+in-process fallback. A caller that wants one checks `enabled?` and takes its old path, which is how an
+application rolls this out as a configuration change rather than a release.
+
+### Watch it
+
+Every `perform_in_hotcell` call — success or failure — emits an Active Support notification named
+`perform.hot_cell`, carrying the operation, the cell, the failure code if any, bytes in and out, and the
+cell's own timing breakdown. Subscribe to it for logging and metrics:
+
+```ruby
+ActiveSupport::Notifications.subscribe "perform.hot_cell" do |event|
+  Rails.logger.info "hotcell #{event.payload[:operation]}: #{event.payload[:code] || "ok"} " \
+                    "in #{event.payload[:perform_ms]}ms"
+end
+```
+
+The cell itself answers on `control.sock`: `describe` reports the consist and the limits, and each client
+checks it at boot; `metrics` reports counters a scrape can read even while the work socket is saturated.
 
 ## The gems
 
@@ -55,102 +317,19 @@ for it to, and a smaller graph inside the blast radius is a smaller thing to aud
 about what a cell may run: an operation is free to require whatever it needs, because the container is the
 control rather than the contents.
 
-**`activestorage-hotcell-server` does not load Active Storage either**, despite the name. The name says which
-consumer it serves, not what it links against.
-
-Everything the application side defines lives under `ActiveStorage::HotCell::Client` and everything the cell
-side defines lives under `ActiveStorage::HotCell::Server`. That is not a tidying convention. The two gems are
-never both loaded in production — and a cell is forked from a process that may well have loaded the client,
-after which a shared name is a superclass mismatch while the cell boots. Two namespaces make that impossible
-rather than avoided.
-
 ## Active Storage
 
-```ruby
-config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Vips
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips
-config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
-                                     ActiveStorage::HotCell::Client::VideoPreviewer ]
-```
-
-Three things break the moment `variant_processor` is a class rather than a symbol, and the client gem exists to
-close them.
-
-**The analyzers go silent.** The built-in image analyzers gate `accept?` on `variant_processor` being `:vips` or
-`:mini_magick`, so a class value makes them all decline, `analyzer_class` falls through to `NullAnalyzer`, and
-the blob is marked analyzed with no dimensions at all.
-
-**The previewers answer `accept?` by shelling out.** `MuPDFPreviewer.accept?` runs `mutool` and
-`VideoPreviewer.accept?` runs `ffmpeg`, with `system`, from inside a web request. Once those binaries leave the
-application image both answer false, `previewable?` goes false with them, and previews stop existing with no
-exception and no alert.
-
-**The jobs retry nothing useful.** `TransformJob`, `AnalyzeJob`, `PreviewImageJob` and `CreateVariantsJob` each
-declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob does not retry by default. The
-railtie adds the transient class to all four, on the same policy they already use.
-
-## How it works
-
-```
-cold side (privileged)                     hot side (unprivileged), one per cell
-──────────────────────                     ─────────────────────────────────────
-app process                                supervisor                       pid 1
-  MyOperation < HotCell::Client              reads in operations, runs before_fork
-    wraps IOs as Input/Output                never evaluates image data
-    validates the payload                    accepts, queues, dispatches with a slot
-    connects to its cell's socket            times the deadline, kills, reaps, cleans up
-    sendmsg: JSON + N fds  ─────────────►
-                                           worker            serves `max_requests_per_worker` requests
-                                             reads the request, resolves the operation
-                                             applies limits, posts inputs to its scratch
-                                             runs perform
-                       ◄─────────────────     one JSON line, then exits or waits
-```
-
-The supervisor accepts a connection and hands the connection itself to a worker over `SCM_RIGHTS`, without
-ever calling `recvmsg` on it. The caller's descriptors stay queued until someone reads them, and the worker is
-the one who does — so the supervisor stays out of the request entirely.
-
-It has to. libvips starts its thread pool on the first evaluation, that pool does not survive `fork`, and a
-supervisor that has touched an image forks workers that block forever in `futex_do_wait`. Not the first
-worker: every worker.
-
-## Deployment
-
-One Kamal accessory per cell, `network: none`. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), which
-also covers the two volume-ownership mistakes that both fail as `EACCES` at boot, and the two
-exposures `cap-drop ALL` makes impossible to close.
+The two `activestorage-hotcell-*` gems are the shipped, worked example of building on HotCell — the five
+media operations, and the transformer, analyzer and previewers Rails is configured with. They are
+documented in [README-active-storage.md](README-active-storage.md).
 
 ## Status
 
 Under construction. Nothing here is released.
 
 Working: the wire protocol, the supervisor and its scheduling, worker recycling, resource limits, the
-wall-clock deadline, the control channel, the client and its classification, the container image, all five
-Active Storage operations converting real images, PDFs and video, and the transformer, analyzer and previewers
-Rails is configured with.
-
-`activestorage-hotcell-client` depends on
-[rails/rails#58384](https://github.com/rails/rails/pull/58384), which is merged and unreleased — so the
-Gemfile tracks `main` until 8.2 ships and the gemspec floor can name a version. It adds the `Class` arm the
-engine assigns `ActiveStorage.variant_transformer` from, and an `else` that raises at boot rather than
-leaving it `nil` for the first variant to die on.
-
-Not yet, in the order they matter:
-
-**A library-option allowlist.** `loader` and `saver` reach ImageProcessing exactly as Rails passes them, so a
-caller can set `loader: { unlimited: true }` and remove libvips' own denial-of-service limits. That is the
-capability Rails gives a caller today, and it is tolerable here only because the cell's limits are outside the
-library — `RLIMIT_DATA`, `RLIMIT_FSIZE` and the wall-clock deadline still apply, so the caller buys a killed
-worker. The fix is an explicit allowlist of the keys permitted inside each: `page`, `n`, `quality`, `strip`
-yes; `unlimited`, `access`, `fail-on`, `revalidate` no. Deriving that list is the work, and it must be one
-visible list rather than a filter hidden in a translation step.
-
-**An ImageMagick-compatible transformer and analyzer.** `Transformers::Vips` and
-`Analyzers::ImageAnalyzer::Vips` are named for their toolchain so these can sit beside them. Until they exist,
-URLs minted on `mini_magick` — carrying `coalesce`, or top-level `quality` and `strip` — are refused, exactly
-as they raise under Rails on vips. An application moving between the two rewrites them at its own boundary in
-the meantime, the way BC4 does.
+wall-clock deadline, the control channel, the client and its classification, the container image, and the
+Active Storage integration converting real images, PDFs and video.
 
 ## Development
 
