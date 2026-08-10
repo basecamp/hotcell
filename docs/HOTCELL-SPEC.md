@@ -718,7 +718,7 @@ The operation declares only what is not an argument.
 class TransformImageOperation < HotCell::Operation
   operation "active_storage.transform_image"     # defaults to the underscored class name, minus the suffix
 
-  limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256
+  limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256   # seconds, bytes, bytes, a count
 
   before_fork        { require "image_processing/vips" }
   before_worker_boot { Vips.concurrency_set 4; Vips.block_untrusted true; Vips.cache_set_max_mem 10 * 1024**2 }
@@ -739,9 +739,9 @@ wire name is never used to derive a constant.
 | Limit | Maps to | Notes |
 | --- | --- | --- |
 | `deadline` | none — the supervisor's clock | Wall-clock seconds this request may run. Not an rlimit. See below. |
-| `memory` | `RLIMIT_DATA` | Not `RLIMIT_AS`, and not an RSS bound. Floor of 1 GiB. See below. |
-| `file_size` | `RLIMIT_FSIZE` | Bounds **every** file the worker writes, which is the posted-in input copy as well as the output. One number, deliberately: the kernel does not distinguish them, so pretending the limit is only about outputs would just make it surprising. Size it for the larger of the two. |
-| `open_files` | `RLIMIT_NOFILE` | |
+| `memory` | `RLIMIT_DATA` | Bytes. Not `RLIMIT_AS`, and not an RSS bound. Floor of 1 GiB. See below. |
+| `file_size` | `RLIMIT_FSIZE` | Bytes. Bounds **every** file the worker writes, which is the posted-in input copy as well as the output. One number, deliberately: the kernel does not distinguish them, so pretending the limit is only about outputs would just make it surprising. Size it for the larger of the two. |
+| `open_files` | `RLIMIT_NOFILE` | A count. |
 
 **`memory` is `RLIMIT_DATA`, and the numbers are not intuitive.** All of the following was measured, on
 Linux 7.1 with libvips 8.18 and Ruby 3.4, against a real 806×926 → 1200×1200 JPEG variant whose peak RSS

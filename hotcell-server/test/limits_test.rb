@@ -26,6 +26,19 @@ class LimitsTest < HotCellServerTest
     assert_empty HotCell::Limits.new.declared
   end
 
+  # 30.seconds is an ActiveSupport::Duration, and the deadline travels as JSON in the worker's report —
+  # so it must land here as a plain number, without this gem depending on activesupport.
+  def test_an_active_support_duration_deadline_lands_as_plain_seconds
+    require "active_support"
+    require "active_support/core_ext/numeric"
+
+    limits = HotCell::Limits.new(deadline: 30.seconds, memory: 1280.megabytes, file_size: 48.megabytes)
+
+    assert_equal 30.0, limits.deadline
+    assert_equal 1280 * 1024**2, limits.memory
+    assert_equal 48 * 1024**2, limits.file_size
+  end
+
   def test_clamping_takes_the_smaller_of_each
     operation = HotCell::Limits.new(deadline: 30, file_size: 100, open_files: 500)
     cell = HotCell::Limits.new(deadline: 60, file_size: 50, open_files: 256)
