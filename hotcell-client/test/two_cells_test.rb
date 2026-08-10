@@ -92,14 +92,4 @@ class TwoCellsTest < HotCellClientTest
     rescue TemporarilyUnavailable
       true
     end
-
-    def wait_until(within: 5, what: "the condition")
-      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + within
-
-      until yield
-        flunk "#{what} did not happen within #{within}s" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-        sleep 0.01
-      end
-    end
 end
