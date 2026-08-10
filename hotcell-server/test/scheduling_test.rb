@@ -65,6 +65,16 @@ class SchedulingTest < HotCellServerTest
     ENV.delete "HOTCELL_SPAWNED_PID_PATH"
   end
 
+  # A reused worker is not one operation. Serving A, then B, then A left the shared library configured by B
+  # while A ran, because the memo asked "has this ever booted" rather than "is this what it is set up for".
+  def test_a_reused_worker_reconfigures_when_the_operation_changes
+    TestCell.boot(reuse: 3, concurrency: 1) do |cell|
+      assert_equal "alpha", assert_ok(cell.call("test.configures_alpha")).result[:configured_for]
+      assert_equal "beta", assert_ok(cell.call("test.configures_beta")).result[:configured_for]
+      assert_equal "alpha", assert_ok(cell.call("test.configures_alpha")).result[:configured_for]
+    end
+  end
+
   def test_a_deadline_breach_is_not_terminal
     TestCell.boot(deadline: 1) do |cell|
       refute_predicate assert_failed("killed", cell.call("test.uninterruptible", timeout: 20)), :terminal?

@@ -247,6 +247,28 @@ module HotCell
       end
     end
 
+    # Two operations that configure the same global, so a worker serving A, B, A can be asked what the
+    # global says at the moment each one ran.
+    CONFIGURED = []
+
+    class ConfiguresGlobal < HotCell::Operation
+      abstract_operation
+
+      def perform(_inputs, _outputs, _payload)
+        { configured_for: CONFIGURED.last }
+      end
+    end
+
+    class ConfiguresAlpha < ConfiguresGlobal
+      operation "test.configures_alpha"
+      before_worker_boot { CONFIGURED << "alpha" }
+    end
+
+    class ConfiguresBeta < ConfiguresGlobal
+      operation "test.configures_beta"
+      before_worker_boot { CONFIGURED << "beta" }
+    end
+
     class Rlimits < HotCell::Operation
       operation "test.rlimits"
 

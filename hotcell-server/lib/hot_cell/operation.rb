@@ -119,8 +119,13 @@ module HotCell
       # is the operation author's problem against the cell's own numbers.
       #
       # Configuration belongs here rather than in before_fork because it is global and singular. Two
-      # operations configuring the same library in the supervisor would silently disagree, with the last
-      # one registered winning. In a worker there is exactly one operation, so no conflict is possible.
+      # operations configuring the same library in the supervisor would silently disagree, with the last one
+      # registered winning.
+      #
+      # A worker is not one operation, which is what makes this the right place rather than a safe one. Above
+      # `reuse: 1` it can serve A, then B, then A, and these hooks re-run whenever the operation changes —
+      # so what the library is set up for always matches what is about to run. Write them to be re-entrant:
+      # they are setters against shared state, not one-time initialization.
       def before_worker_boot(&block)
         return collected(:@before_worker_boot) if block.nil?
 

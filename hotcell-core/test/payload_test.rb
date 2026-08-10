@@ -155,4 +155,19 @@ class PayloadTest < HotCellTest
 
     assert_match "result[:width] is a Symbol", error.message
   end
+
+  # Legal Ruby, two keys, and one JSON key space. `{"a":1,"a":2}` parses back as one pair, so a value
+  # disappears with nothing to say so — and this runs on results, where that would be the caller's data.
+  def test_a_hash_holding_both_a_symbol_and_a_string_of_one_name_is_refused
+    error = assert_raises(HotCell::SerializationError) do
+      HotCell::Payload.validate!({ a: 1, "a" => 2 }, "payload")
+    end
+
+    assert_match "which are one key in JSON", error.message
+  end
+
+  def test_the_same_name_at_different_depths_is_fine
+    assert HotCell::Payload.validate!({ a: { "a" => 1 } }, "payload")
+    assert HotCell::Payload.validate!({ a: 1, b: 2, "c" => 3 }, "payload")
+  end
 end

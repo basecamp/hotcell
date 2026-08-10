@@ -84,12 +84,15 @@ module HotCell
         "later request on it."
     end
 
-    # The longest this cell may take to answer, which the client compares its own timeout against. Derived
-    # here rather than reassembled there: a client adding up `queue_wait + deadline` plus its own guess at
-    # the kill-to-answer step cannot follow a change to any of them, and the error points the unsafe way —
-    # the client believes its timeout is generous and takes a transport failure instead of the cell's verdict.
+    # What this cell expects to answer within, and deliberately not a bound it can keep. Nothing enforces
+    # KILL_GRACE: a worker in uninterruptible sleep does not die when it is signalled, and the supervisor
+    # answers only after the reap. Treat it as the threshold a client's timeout should clear, not as a
+    # guarantee to build a correctness argument on.
     #
-    # A stage added later that costs a caller time belongs in this sum.
+    # Derived here rather than reassembled in the client: a client adding up `queue_wait + deadline` plus its
+    # own guess at the kill-to-answer step cannot follow a change to any of them, and the error points the
+    # unsafe way — the client believes its timeout is generous and takes a transport failure instead of the
+    # cell's verdict. A stage added later that costs a caller time belongs in this sum.
     def answer_within
       queue_wait + limits.deadline + KILL_GRACE
     end
