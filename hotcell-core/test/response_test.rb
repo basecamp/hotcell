@@ -103,4 +103,25 @@ class ResponseTest < HotCellTest
   def test_a_failed_response_with_no_error_object
     assert_raises(HotCell::MessageError) { HotCell::Response.parse('{"v":1,"ok":false}') }
   end
+
+  # `ok` is the field the whole taxonomy turns on, so it has to be the boolean it claims to be. Ruby's
+  # truthiness would read every one of these as success, on a response carrying no result at all.
+  def test_an_ok_that_is_not_a_boolean_is_refused
+    [ '"false"', "0", "[]", "null", '"yes"' ].each do |value|
+      line = %({"v":1,"ok":#{value},"result":{}}\n)
+
+      error = assert_raises(HotCell::MessageError, "expected #{value} to be refused") do
+        HotCell::Response.parse line
+      end
+      assert_match "must be true or false", error.message
+    end
+  end
+
+  # Permanent is the answer that cannot be taken back, so a garbled flag must not be able to say it. The
+  # code decides instead, which is what an older peer that never sent the field already gets.
+  def test_a_terminal_flag_that_is_not_a_boolean_is_derived_rather_than_believed
+    line = %({"v":1,"ok":false,"error":{"code":"capacity","terminal":"yes"}}\n)
+
+    refute_predicate HotCell::Response.parse(line).failure, :terminal?
+  end
 end
