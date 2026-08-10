@@ -359,7 +359,7 @@ and why.
 Invariant 2 is the awkward one. "A cell holds no application credentials" is a negative over a whole
 filesystem and cannot be asserted directly. It stays on the list anyway, because it is the property the
 whole design exists to hold. What the tests can reach is narrower: the built image contains no application
-source tree, and the canary harness (section 10) demonstrates that an exploit finds nothing worth having.
+source tree, and `docker/smoke` boots the hardened container and checks its flags directly.
 
 A cell could go further and enforce it, by reading an allowlist of environment variable names and refusing
 to boot on anything outside it. That is deferred, not rejected. It is a boot check that can be added at any
@@ -1909,15 +1909,17 @@ around a control answer. Neither is hard to test — each is untestable, because
 reaches it. Each note says what would make it reachable and what breaks when it does, so a later reader can
 tell defence in depth from dead code.
 
-### The canary harness
+### The canary harness, withdrawn
 
-Ship a harness that boots a cell with the accessory's hardening and plants **synthetic** canaries, an
-environment variable and a fake `/rails/config/master.key`, so an exploit attempt has something to find.
-The point is to demonstrate a proof of concept working before demonstrating it failing; a PoC that fails
-against a cell with nothing to steal proves nothing.
+An earlier draft of this section required a harness that booted a cell with the accessory's hardening,
+planted **synthetic** canaries — an environment variable and a fake `/rails/config/master.key` — and
+demonstrated a proof-of-concept exploit finding nothing worth having.
 
-The canaries are never real credentials and must never be replaced with real ones. State that in the
-harness itself, not only in the documentation.
+It was withdrawn before being built. The honest version needs a deliberately vulnerable operation
+checked into the source tree for the exploit to come in through, and what the demonstration proves —
+the container flags are on, and the environment holds nothing — is what `docker/smoke` and the
+environment tests already verify directly. A rehearsal of verified properties was not worth a shipped
+vulnerability.
 
 ## 11. Out of scope
 
