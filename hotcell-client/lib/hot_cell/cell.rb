@@ -99,11 +99,16 @@ module HotCell
         needed = described[:answer_within]
         return if needed.nil? || timeout.nil? || timeout >= needed
 
-        HotCell.logger.warn "hotcell #{name}: this client waits #{timeout}s and the cell says it may take " \
-                            "#{needed}s to answer (queue_wait #{described[:queue_wait]} + deadline " \
-                            "#{described[:deadline]} + the time to kill and reply), so a saturated cell will " \
-                            "arrive here as a transport failure rather than as its own verdict. Deliberate " \
-                            "on a synchronous path; a mistake for a background job."
+        HotCell.logger.warn "hotcell #{name}: this client waits #{seconds timeout} and the cell says it may " \
+                            "take #{seconds needed} to answer (queue_wait #{seconds described[:queue_wait]} + " \
+                            "deadline #{seconds described[:deadline]} + the time to kill and reply), so a " \
+                            "saturated cell will arrive here as a transport failure rather than as its own " \
+                            "verdict. Deliberate on a synchronous path; a mistake for a background job."
+      end
+
+      # The cell reports seconds as floats, and "41.0s" is a worse sentence than "41s".
+      def seconds(value)
+        "#{format("%g", value)}s"
       end
 
       def warn_about_missing_operations(described)

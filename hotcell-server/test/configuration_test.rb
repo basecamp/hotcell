@@ -19,6 +19,16 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_equal 1024, configuration.limits.file_size
   end
 
+  # queue_wait appears in describe's JSON, so a duration must land as a plain number here too.
+  def test_an_active_support_duration_unwraps_in_scheduling_values
+    require "active_support"
+    require "active_support/core_ext/numeric"
+
+    configuration = HotCell::Configuration.new(queue_wait: 10.seconds)
+
+    assert_equal 10.0, configuration.queue_wait
+  end
+
   def test_an_unknown_setting_is_refused_rather_than_ignored
     error = assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(concurency: 2) }
 

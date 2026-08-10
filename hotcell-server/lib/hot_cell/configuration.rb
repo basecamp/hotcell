@@ -42,6 +42,11 @@ module HotCell
 
       SCHEDULING.each { |key, default| instance_variable_set :"@#{key}", options.fetch(key, default) }
 
+      # The two second-valued settings, coerced for the same reason Limits coerces deadline: they appear
+      # in describe's JSON, and they may arrive as Active Support durations.
+      @queue_wait = @queue_wait.to_f
+      @control_deadline = @control_deadline.to_f
+
       # A nil is not "use the default" here, it is a missing number. A cell whose deadline is nil accepts
       # every request and then dies on the first arithmetic the supervisor does with it, so an explicit nil
       # has to be refused where it is written rather than where it is used.

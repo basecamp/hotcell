@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module HotCell
-  # What a worker may consume, and what a cell will let an operation ask for.
+  # What a worker may consume, and what a cell will let an operation ask for. `deadline` is seconds;
+  # `memory` and `file_size` are bytes; `open_files` is a count. Active Support's helpers work —
+  # `1280.megabytes` is a plain Integer already, and a `30.seconds` duration flattens to one on arrival.
   #
   # There is deliberately no RLIMIT_CPU. The deadline strictly covers it — anything that burns CPU also
   # burns wall clock, and the deadline additionally catches a worker blocked on a wedged subprocess,
@@ -34,11 +36,13 @@ module HotCell
 
     attr_reader(*KEYS)
 
+    # to_f and to_i, because these travel as JSON and 30.seconds is an ActiveSupport::Duration until it
+    # is asked to be a number.
     def initialize(deadline: nil, memory: nil, file_size: nil, open_files: nil)
-      @deadline = deadline
-      @memory = memory
-      @file_size = file_size
-      @open_files = open_files
+      @deadline = deadline&.to_f
+      @memory = memory&.to_i
+      @file_size = file_size&.to_i
+      @open_files = open_files&.to_i
 
       verify_positive!
       verify_memory_floor!
