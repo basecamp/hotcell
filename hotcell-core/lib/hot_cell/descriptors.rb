@@ -23,6 +23,7 @@ module HotCell
       @io = io
       verify_regular_file!
       verify_access_mode!
+      verify_position!
     end
 
     def to_io
@@ -45,6 +46,17 @@ module HotCell
 
         raise AccessModeError, "#{self.class.name} needs a #{MODES.fetch(self.class::ACCESS_MODE)} " \
                                "descriptor, and this one is #{MODES.fetch(mode, "mode #{mode}")}"
+      end
+
+      # O_APPEND is a caller bug of the same shape as handing over a read-write descriptor, and it fails as
+      # quietly: every write lands at the end whatever the cell does, so a conversion is appended to
+      # whatever the file already held and the caller reads its old bytes followed by new ones. Like the
+      # access mode this is fixed at open, so the only thing a cell can do about it is decline.
+      def verify_position!
+        return unless (io.fcntl(Fcntl::F_GETFL) & Fcntl::O_APPEND).positive?
+
+        raise AccessModeError, "#{self.class.name} was opened with O_APPEND, so a conversion would be " \
+                               "appended to what the file already holds rather than becoming its contents"
       end
 
       # A pipe as an output can deadlock a single streaming write against a cold side that is not

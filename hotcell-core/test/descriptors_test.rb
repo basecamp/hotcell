@@ -135,4 +135,22 @@ class DescriptorsTest < HotCellTest
       end
     end
   end
+
+  # The same class of caller bug as a read-write descriptor, and just as quiet: every write lands at the end
+  # whatever the cell does, so the caller reads its old bytes followed by the conversion.
+  def test_an_output_opened_for_append_is_refused
+    with_file("already here") do |path|
+      File.open(path, "ab") do |appending|
+        error = assert_raises(HotCell::AccessModeError) { HotCell::Output.new(appending) }
+
+        assert_match "O_APPEND", error.message
+      end
+    end
+  end
+
+  def test_an_ordinary_write_only_output_is_fine
+    with_file do |path|
+      writing(path) { |io| assert HotCell::Output.new(io) }
+    end
+  end
 end
