@@ -294,7 +294,7 @@ options:
   memory: 2g
   memory-swap: 2g
   cpus: 2
-  pids-limit: 512
+  pids-cause: 512
   cap-drop: ALL
   security-opt: no-new-privileges:true
   user: 10001:10001
@@ -796,8 +796,8 @@ something the supervisor reports from an exit signal, not only something a worke
 write the same verdict:
 
 - The worker rescues `NoMemoryError`, `Errno::ENOMEM`, and a `Vips::Error` matching out-of-memory, and
-  answers `killed` with `limit: "memory"` and the library's own message as detail.
-- The supervisor maps `SEGV`, `ABRT`, `TRAP`, and `KILL` to `killed` with `limit: "memory"` and the signal
+  answers `killed` with `cause: "memory"` and the library's own message as detail.
+- The supervisor maps `SEGV`, `ABRT`, `TRAP`, and `KILL` to `killed` with `cause: "memory"` and the signal
   as a field. Same code, signal as data, so the cold side never parses a message to decide.
 
 One message deserves naming because it is the commonest near-limit result and reads like something else:
@@ -878,14 +878,14 @@ A cell is configured once, and everything about scheduling lives there rather th
 
 ```ruby
 # the cell's own config, read at boot
-HotCell.limits concurrency: 4, queue_factor: 2, deadline: 60, queue_wait: 10, max_requests_per_worker: 1,
+HotCell.limits concurrency: 4, queue_size: 8, deadline: 60, queue_wait: 10, max_requests_per_worker: 1,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 
 | Key | Meaning |
 | --- | --- |
 | `concurrency` | Workers running at once. Also the number of slots. |
-| `queue_factor` | Accepted-but-not-running connections, as a multiple of `concurrency`. Above `concurrency * queue_factor` the answer is `capacity`. |
+| `queue_size` | Accepted-but-not-running connections. Above `concurrency + queue_size` the answer is `capacity`. |
 | `queue_wait` | Seconds a queued connection may wait before it is answered `capacity` instead. |
 | `deadline` | Maximum wall-clock seconds a **request** may run. An operation may declare a shorter one; this clamps it. The supervisor kills the worker and answers `killed`. |
 | `max_requests_per_worker` | Requests a worker serves before it is discarded. `1` is fork-per-request; `:unlimited` is a persistent pool. Small values already recover most of the cost. See "Worker max_requests_per_worker". |
@@ -1023,8 +1023,8 @@ unless it has a measured reason not to: it is a place one request's image data c
 
 ### Queueing
 
-`queue_factor` exists so that saturation shows up as latency before it shows up as failure. At
-`concurrency: 4, queue_factor: 2` the cell runs 4 and holds 8 waiting; the ninth waiter is refused. A
+`queue_size` exists so that saturation shows up as latency before it shows up as failure. At
+`concurrency: 4, queue_size: 8` the cell runs 4 and holds 8 waiting; the thirteenth is refused. A
 cell that only ever refused would go from healthy to erroring with nothing in between and nothing to
 alarm on.
 
@@ -1339,7 +1339,7 @@ metrics.
 
 ```json
 {"v":1,"op":"hotcell.describe","inputs":0,"outputs":0,"payload":{}}
-{"v":1,"ok":true,"result":{"v":1,"deadline":60,"queue_wait":10,"concurrency":4,"queue_factor":2,
+{"v":1,"ok":true,"result":{"v":1,"deadline":60,"queue_wait":10,"concurrency":4,"queue_size":8,
                            "operations":["active_storage.transform_image","…"]}}
 ```
 
@@ -1561,7 +1561,7 @@ job is to map codes onto them and to say what is served:
 | `unreadable` | permanent | placeholder | cacheable |
 | `killed` with `limit` `fsize`/`memory` | permanent | placeholder | cacheable |
 | `failed` | permanent by default, overridable | placeholder | cacheable |
-| `killed` with `limit: deadline`/`crashed`, `capacity`, `unavailable`, `timeout`, `unsupported` | transient | placeholder | **`no-store`** |
+| `killed` with `cause: deadline`/`crashed`, `capacity`, `unavailable`, `timeout`, `unsupported` | transient | placeholder | **`no-store`** |
 | `protocol` | permanent, **and report contract skew** | placeholder | `no-store` |
 | `invalid` | neither — a caller bug | raise | — |
 
@@ -1843,7 +1843,7 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   when `kernel.yama.ptrace_scope` is `0`.
 - A converter subprocess's `/proc/<pid>/environ` contains only what the operation wrote, proving
   `unsetenv_others`.
-- Concurrency: at `concurrency: 2, queue_factor: 1`, two requests run together, a third waits and
+- Concurrency: at `concurrency: 2, queue_size: 1`, two requests run together, a third waits and
   reports a non-zero `queued_ms`, and a fourth is answered `capacity`. Two requests on the same slot
   see the same `$HOME`; two running concurrently see different ones.
 - The deadline, and **not with `sleep`**. A Ruby `sleep` is interruptible, so a deadline test built on one

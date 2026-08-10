@@ -25,9 +25,9 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_match "unknown setting concurency", error.message
   end
 
-  def test_the_queue_holds_a_multiple_of_the_concurrency
-    assert_equal 8, HotCell::Configuration.new(concurrency: 4, queue_factor: 2).queue_size
-    assert_equal 0, HotCell::Configuration.new(concurrency: 4, queue_factor: 0).queue_size
+  def test_the_queue_is_configured_directly
+    assert_equal 8, HotCell::Configuration.new(concurrency: 4).queue_size
+    assert_equal 0, HotCell::Configuration.new(concurrency: 4, queue_size: 0).queue_size
   end
 
   def test_reuse_counts_requests_before_a_worker_is_discarded
@@ -49,7 +49,7 @@ class ConfigurationTest < RegistryIsolatedTest
 
   def test_nonsense_scheduling_is_refused
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(concurrency: 0) }
-    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_factor: -1) }
+    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_size: -1) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_wait: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: :forever) }

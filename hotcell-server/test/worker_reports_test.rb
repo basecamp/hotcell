@@ -78,7 +78,7 @@ class WorkerReportsTest < HotCellServerTest
   # without bound — under exactly the host pressure the fork rescue exists to survive.
   def test_the_queue_is_capped_even_when_nothing_can_be_forked
     supervisor = HotCell::Supervisor.new(directory: Dir.mktmpdir("hotcell-admission"), log: HotCell::Log.null,
-                                         configuration: HotCell::Configuration.new(concurrency: 2, queue_factor: 1))
+                                         configuration: HotCell::Configuration.new(concurrency: 2, queue_size: 2))
     queue = supervisor.instance_variable_get(:@queue)
 
     20.times { supervisor.send :admit?, queue.size }

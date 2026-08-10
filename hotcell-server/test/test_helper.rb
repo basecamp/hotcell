@@ -27,11 +27,11 @@ class HotCellServerTest < Minitest::Test
       response
     end
 
-    def assert_failed(code, response, limit: nil)
+    def assert_failed(code, response, cause: nil)
       assert response, "expected a response and got none"
       refute response.ok?, "expected #{code} and the response was ok: #{response.result.inspect}"
       assert_equal code, response.failure.code
-      assert_equal limit, response.failure.limit if limit
+      assert_equal cause, response.failure.cause if cause
 
       response.failure
     end

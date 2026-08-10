@@ -81,7 +81,7 @@ module HotCell
         rescue MessageError, AccessModeError => error
           response = refuse("invalid", error, timing)
         rescue NoMemoryError, Errno::ENOMEM, MemoryExhausted => error
-          response = refuse(Codes::KILLED, error, timing, limit: Codes::MEMORY)
+          response = refuse(Codes::KILLED, error, timing, cause: Codes::MEMORY)
         rescue StandardError => error
           response = refuse("failed", error, timing)
         end
@@ -233,8 +233,8 @@ module HotCell
                              **response.timing
       end
 
-      def refuse(code, detail, timing, limit: nil)
-        Response.failed Failure.for(code, detail, limit: limit), timing: timing.to_h
+      def refuse(code, detail, timing, cause: nil)
+        Response.failed Failure.for(code, detail, cause: cause), timing: timing.to_h
       end
   end
 end

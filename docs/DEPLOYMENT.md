@@ -21,7 +21,7 @@ accessories:
       memory: 2g
       memory-swap: 2g
       cpus: 2
-      pids-limit: 512
+      pids-cause: 512
       cap-drop: ALL
       security-opt: no-new-privileges:true
       user: 10001:10001
@@ -125,7 +125,7 @@ Files in `/hotcell/operations` load in sorted order at boot, so a leading one co
 
 ```ruby
 # operations/00_cell.rb
-HotCell.limits concurrency: 4, queue_factor: 2, deadline: 30, queue_wait: 10, max_requests_per_worker: 1,
+HotCell.limits concurrency: 4, queue_size: 8, deadline: 30, queue_wait: 10, max_requests_per_worker: 1,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 

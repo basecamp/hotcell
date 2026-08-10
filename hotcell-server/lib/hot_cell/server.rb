@@ -24,7 +24,7 @@ module HotCell
 
     # A cell is configured once, and everything about scheduling lives here rather than on an operation.
     #
-    #   HotCell.limits concurrency: 4, queue_factor: 2, deadline: 60, queue_wait: 10, max_requests_per_worker: 1,
+    #   HotCell.limits concurrency: 4, queue_size: 8, deadline: 60, queue_wait: 10, max_requests_per_worker: 1,
     #                  memory: 1536 * 1024**2, file_size: 48 * 1024**2
     def limits(**options)
       return configuration if options.empty?

@@ -15,15 +15,15 @@ module HotCell
   class Failure
     MAX_MESSAGE_BYTES = 512
 
-    attr_reader :code, :message, :error_class, :limit, :signal
+    attr_reader :code, :message, :error_class, :cause, :signal
 
-    def initialize(code:, permanent: nil, message: nil, error_class: nil, limit: nil, signal: nil)
+    def initialize(code:, permanent: nil, message: nil, error_class: nil, cause: nil, signal: nil)
       @code = code.to_s
-      @limit = limit&.to_s
+      @cause = cause&.to_s
       @signal = signal&.to_s
       @error_class = error_class&.to_s
       @message = self.class.sanitize(message)
-      @permanent = permanent.nil? ? Codes.permanent?(@code, limit: @limit) : permanent
+      @permanent = permanent.nil? ? Codes.permanent?(@code, cause: @cause) : permanent
     end
 
     def permanent?
@@ -35,22 +35,22 @@ module HotCell
     # `permanent` is the exception and survives, because compact drops only nil.
     def to_h
       { code: code, permanent: permanent? }
-        .merge(limit: limit, signal: signal, class: error_class, message: message).compact
+        .merge(cause: cause, signal: signal, class: error_class, message: message).compact
     end
 
     def to_s
-      [ code, limit, error_class, message ].compact.join(": ")
+      [ code, cause, error_class, message ].compact.join(": ")
     end
 
     class << self
       # Builds from either a message String or an Exception. An Exception has to become two wire fields, and
       # that rule was written out at three call sites across two gems — the worker, the supervisor's control
       # answer, and the client's transport.
-      def for(code, detail, limit: nil)
+      def for(code, detail, cause: nil)
         if detail.is_a?(Exception)
-          new code: code, limit: limit, error_class: detail.class.name, message: detail.message
+          new code: code, cause: cause, error_class: detail.class.name, message: detail.message
         else
-          new code: code, limit: limit, message: detail
+          new code: code, cause: cause, message: detail
         end
       end
 
@@ -64,10 +64,10 @@ module HotCell
         permanent = if [ true, false ].include?(wire[:permanent])
           wire[:permanent]
         else
-          Codes.known?(wire[:code]) && Codes.permanent?(wire[:code], limit: wire[:limit])
+          Codes.known?(wire[:code]) && Codes.permanent?(wire[:code], cause: wire[:cause])
         end
 
-        new code: wire[:code], permanent: permanent, limit: wire[:limit], signal: wire[:signal],
+        new code: wire[:code], permanent: permanent, cause: wire[:cause], signal: wire[:signal],
             error_class: wire[:class], message: wire[:message]
       end
 

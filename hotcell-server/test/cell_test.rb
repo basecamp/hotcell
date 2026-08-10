@@ -160,7 +160,7 @@ class CellTest < HotCellServerTest
   # decompression-bomb case and a caller must be able to act on it without parsing a message.
   def test_running_out_of_memory_is_killed_rather_than_failed
     TestCell.boot do |cell|
-      failure = assert_failed "killed", cell.call("test.hungry"), limit: "memory"
+      failure = assert_failed "killed", cell.call("test.hungry"), cause: "memory"
 
       assert_predicate failure, :permanent?
     end
@@ -264,7 +264,7 @@ class CellTest < HotCellServerTest
   # deadline.
   def test_a_worker_that_dies_without_answering_is_reported_and_is_not_permanent
     TestCell.boot do |cell|
-      failure = assert_failed "killed", cell.call("test.vanishes"), limit: "crashed"
+      failure = assert_failed "killed", cell.call("test.vanishes"), cause: "crashed"
 
       refute_predicate failure, :permanent?
       assert_nil failure.signal
@@ -273,7 +273,7 @@ class CellTest < HotCellServerTest
 
   def test_the_cell_serves_normally_after_a_worker_vanishes
     TestCell.boot(concurrency: 1) do |cell|
-      assert_failed "killed", cell.call("test.vanishes"), limit: "crashed"
+      assert_failed "killed", cell.call("test.vanishes"), cause: "crashed"
 
       assert_ok cell.call("test.echo")
     end

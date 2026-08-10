@@ -15,7 +15,7 @@ module HotCell
   class Configuration
     SCHEDULING = {
       concurrency:      4,   # workers running at once, and therefore the number of slots
-      queue_factor:     2,   # accepted-but-not-running connections, as a multiple of concurrency
+      queue_size:       8,   # connections that may be accepted and waiting for one
       queue_wait:       10,  # seconds a queued connection may wait before it is answered `capacity`
       max_requests_per_worker:            1,   # requests a worker serves before it is discarded
       control_deadline: 5,   # seconds a control connection may take to send its request
@@ -53,12 +53,6 @@ module HotCell
       @limits = Limits.new(**LIMITS.merge(declared))
 
       verify!
-    end
-
-    # Saturation shows up as latency before it shows up as failure. A cell that only ever refused would
-    # go from healthy to erroring with nothing in between and nothing to alarm on.
-    def queue_size
-      concurrency * queue_factor
     end
 
     def unlimited_requests?
@@ -124,8 +118,8 @@ module HotCell
         positive! :queue_wait
         positive! :control_deadline
 
-        unless queue_factor.is_a?(Integer) && !queue_factor.negative?
-          raise ConfigurationError, "queue_factor: #{queue_factor} must not be negative"
+        unless queue_size.is_a?(Integer) && !queue_size.negative?
+          raise ConfigurationError, "queue_size: #{queue_size} must not be negative"
         end
 
         unless unlimited_requests? || (max_requests_per_worker.is_a?(Integer) && max_requests_per_worker.positive?)

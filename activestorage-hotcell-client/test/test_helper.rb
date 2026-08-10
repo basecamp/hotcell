@@ -61,8 +61,8 @@ class ActiveStorageHotCellClientTest < Minitest::Test
                        transient: TemporarilyUnavailable, transport: CannedTransport.new(response), **register
     end
 
-    def failed(code, limit: nil, message: "no")
-      HotCell::Response.failed HotCell::Failure.new(code: code, limit: limit, message: message),
+    def failed(code, cause: nil, message: "no")
+      HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, message: message),
                                timing: { perform_ms: 1 }
     end
 
