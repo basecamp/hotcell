@@ -17,7 +17,7 @@ module ActiveStorage
       # hostile input, in this worker. So does parsing its stdout. Neither happens here, and the suite asserts the
       # declarations rather than trusting these paragraphs.
       class ConverterOperation < ::HotCell::Operation
-        abstract
+        abstract_operation
 
         untrusted_input :subprocess
 

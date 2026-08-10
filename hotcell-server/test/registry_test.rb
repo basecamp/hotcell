@@ -14,25 +14,25 @@ class RegistryTest < RegistryIsolatedTest
   # is advertised by describe and accepted on the wire, where it reaches a perform that raises
   # NotImplementedError — so a caller is told `failed`, as though its document were the problem.
   def test_an_abstract_operation_is_not_reachable
-    Class.new(HotCell::Operation) { abstract; operation "registry_test.base" }
+    Class.new(HotCell::Operation) { abstract_operation; operation "registry_test.base" }
 
     assert_nil HotCell::Registry.lookup("registry_test.base")
     refute_includes HotCell::Registry.names, "registry_test.base"
   end
 
   def test_a_subclass_of_an_abstract_operation_is_reachable
-    base = Class.new(HotCell::Operation) { abstract; operation "registry_test.base" }
+    base = Class.new(HotCell::Operation) { abstract_operation; operation "registry_test.base" }
     concrete = Class.new(base) { operation "registry_test.concrete" }
 
-    refute_predicate concrete, :abstract?
+    refute_predicate concrete, :abstract_operation?
     assert_equal concrete, HotCell::Registry.lookup("registry_test.concrete")
   end
 
   # Two abstract classes derive no name and would otherwise collide on it the moment anything asked what the
   # cell carries.
   def test_abstract_operations_do_not_contest_a_name
-    Class.new(HotCell::Operation) { abstract; operation "registry_test.shared" }
-    Class.new(HotCell::Operation) { abstract; operation "registry_test.shared" }
+    Class.new(HotCell::Operation) { abstract_operation; operation "registry_test.shared" }
+    Class.new(HotCell::Operation) { abstract_operation; operation "registry_test.shared" }
 
     assert_kind_of Array, HotCell::Registry.names
   end

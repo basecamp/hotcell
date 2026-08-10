@@ -35,7 +35,7 @@ module HotCell
       private
         def index
           @index ||= operations.each_with_object({}) do |operation, names|
-            next if operation.abstract?
+            next if operation.abstract_operation?
 
             name = operation.operation_name
 

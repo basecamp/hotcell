@@ -29,13 +29,13 @@ module HotCell
       #
       # Deliberately not inherited: a subclass of an abstract operation is concrete unless it says otherwise,
       # and a class-level instance variable is not visible to a subclass, so that falls out for free.
-      def abstract
-        @abstract = true
+      def abstract_operation
+        @abstract_operation = true
         Registry.reload!
       end
 
-      def abstract?
-        @abstract == true
+      def abstract_operation?
+        @abstract_operation == true
       end
 
       # Writes the name the wire uses, defaulting to the underscored class name with namespaces as dots.

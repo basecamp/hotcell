@@ -26,7 +26,7 @@ module ActiveStorage
     module Server
       # Everything that parses an image with libvips, which happens in the worker's own address space.
       class VipsOperation < ::HotCell::Operation
-        abstract
+        abstract_operation
 
         # libvips parses here, in this process, so `reuse` is a security setting for these operations and not
         # only a performance one.
