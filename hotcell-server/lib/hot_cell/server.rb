@@ -31,5 +31,15 @@ module HotCell
 
       @configuration = Configuration.new(**options)
     end
+
+    # Boots a cell's code: the configuration file first, explicitly, then every operation file in sorted
+    # order. A derived image adds these by copying files in, never by changing this gem, and a cell with
+    # no config.rb takes every default.
+    def load!(config: ENV.fetch("HOTCELL_CONFIG", "/hotcell/config.rb"),
+              operations: ENV.fetch("HOTCELL_OPERATIONS", "/hotcell/operations"))
+      require config if File.exist?(config)
+
+      Dir.glob(File.join(operations, "**", "*.rb")).sort.each { |file| require file }
+    end
   end
 end

@@ -164,8 +164,9 @@ sequenceDiagram
 
 Everything about a cell lives in a `hotcell/` directory in the application root, apart from the client
 configuration in the application itself. That directory holds three things: a `Gemfile` for what the
-operations need, a `Dockerfile` that builds the cell's image, and an `operations/` directory of Ruby
-files the cell loads at boot. `bin/rails hotcell:install` creates all three.
+operations need, a `Dockerfile` that builds the cell's image, a `config.rb` for the cell's own
+settings, and an `operations/` directory of Ruby files the cell loads at boot. `bin/rails
+hotcell:install` creates all of them.
 
 ### Write an operation
 
@@ -205,8 +206,8 @@ environment the operation wrote.
 
 ### Configure and build the cell
 
-`bin/rails hotcell:install` writes the `hotcell/` directory — the `Dockerfile`, the `Gemfile`, and
-`operations/00_cell.rb`. There is no published base image to inherit from. The installed Dockerfile is
+`bin/rails hotcell:install` writes the `hotcell/` directory — the `Dockerfile`, the `Gemfile`,
+`config.rb`, and an empty `operations/` directory. There is no published base image to inherit from. The installed Dockerfile is
 the complete recipe, and it is yours to customize. A file you have already edited is never overwritten.
 
 Two customization points matter most. In the Dockerfile, install the tools your operations run — and
@@ -219,18 +220,18 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 ```
 
-And the cell loads every Ruby file under `operations/` in sorted order at boot, so the leading file
-configures the cell before any operation is defined:
+And `config.rb` loads at boot before any operation, so the cell's own settings live there:
 
 ```ruby
-# hotcell/operations/00_cell.rb
+# hotcell/config.rb
 require "active_support"
 require "active_support/core_ext/numeric"
 
 HotCell.limits concurrency: 4, queue_size: 8, deadline: 60.seconds, memory: 1536.megabytes
 ```
 
-The image's entrypoint is `hotcell`, which loads those files and boots the supervisor on `HOTCELL_DIR`.
+The image's entrypoint is `hotcell`, which loads `config.rb`, then the operations in sorted order, and
+boots the supervisor on `HOTCELL_DIR`.
 
 ### Run it in development
 
@@ -245,7 +246,7 @@ to `Procfile.dev`:
 
 ```procfile
 web: HOTCELL_ROOT=tmp/hotcell bin/rails server
-cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell/documents bundle exec hotcell
+cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_CONFIG=hotcell/config.rb HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell/documents bundle exec hotcell
 ```
 
 `bin/dev` boots both. The app finds the sockets under `tmp/hotcell`, and the cell keeps its own bundle

@@ -21,7 +21,7 @@ module HotCell
 
       private
         def templates
-          Dir.glob("#{TEMPLATES}/**/*.tt").sort
+          Dir.glob("#{TEMPLATES}/**/*.tt", File::FNM_DOTMATCH).sort
         end
 
         def install(template, destination, label, out)

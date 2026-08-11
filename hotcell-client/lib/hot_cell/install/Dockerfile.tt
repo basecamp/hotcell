@@ -35,6 +35,7 @@ COPY --chown=hotcell:hotcell Gemfile* ./
 USER hotcell
 RUN bundle install
 
+COPY --chown=hotcell:hotcell config.rb /hotcell/config.rb
 COPY --chown=hotcell:hotcell operations/ /hotcell/operations/
 
 CMD ["bundle", "exec", "hotcell"]

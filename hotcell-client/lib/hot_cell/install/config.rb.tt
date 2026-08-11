@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-# Files in this directory load in sorted order when the cell boots, so this one runs first and
-# configures the cell before any operation is defined.
+# Loaded when the cell boots, before any operation.
 #
 # deadline and queue_wait are seconds; memory and file_size are bytes.
 HotCell.limits concurrency: 4, queue_size: 8, deadline: 60, memory: 1536 * 1024**2

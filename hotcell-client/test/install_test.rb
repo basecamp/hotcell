@@ -18,9 +18,11 @@ class InstallTest < HotCellClientTest
       gemfile = File.read(File.join(root, "hotcell", "Gemfile"))
       assert_match "hotcell-server", gemfile
 
-      cell = File.read(File.join(root, "hotcell", "operations", "00_cell.rb"))
-      assert_match "HotCell.limits", cell
+      config = File.read(File.join(root, "hotcell", "config.rb"))
+      assert_match "HotCell.limits", config
 
+      assert File.exist?(File.join(root, "hotcell", "operations", ".keep")),
+             "the operations directory must exist for the Dockerfile's COPY"
       assert_match "create  hotcell/Dockerfile", out.string
     end
   end
