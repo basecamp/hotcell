@@ -8,7 +8,7 @@ require "digest"
 #
 # They ship rather than sitting in this gem's own test directory, for the reason hot_cell/test_cell.rb does:
 # hotcell-client boots a real cell and needs a consist to point it at. It had written its own, and five of
-# those answered to wire names these already claim — so `test.uppercase` meant one thing when the client
+# those answered to routing names these already claim — so `test.uppercase` meant one thing when the client
 # suite proved it and another when this one did.
 #
 # Namespaced because this is a shipped file and `Fixtures` at the top level belongs to the application. Both

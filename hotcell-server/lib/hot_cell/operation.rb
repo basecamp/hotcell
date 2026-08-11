@@ -40,7 +40,7 @@ module HotCell
         @abstract_operation == true
       end
 
-      # Writes the name the wire uses, defaulting to the underscored class name with namespaces as dots.
+      # Writes the routing name, defaulting to the underscored class name with namespaces as dots.
       def operation(name = nil)
         return operation_name if name.nil?
 

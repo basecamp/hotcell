@@ -24,7 +24,7 @@ travel as descriptors, the payload travels as one JSON object, and nothing else 
 # In the application.
 class TransformImage < HotCell::Client
   hotcell "images"                             # the cell that serves this call, by registered name
-  operation "active_storage.transform_image"   # the wire name an operation must answer to
+  operation "active_storage.transform_image"   # the routing name an operation must answer to
 end
 
 # source and destination are Files the app opened — inputs read-only, outputs write-only. Their
@@ -43,7 +43,7 @@ require "active_support"
 require "active_support/core_ext/numeric"   # for 30.seconds and 1280.megabytes
 
 class TransformImageOperation < HotCell::Operation
-  operation "active_storage.transform_image"   # the same wire name — establishes request routing
+  operation "active_storage.transform_image"   # the same routing name — the only coupling between the two classes
 
   # Ceilings for one request — deadline in seconds, memory and file_size in bytes — enforced by
   # rlimits and the supervisor's clock, clamped to the cell's own.
@@ -94,10 +94,10 @@ A **slot** is the numbered workspace a worker borrows — two directories. `home
 `$HOME` and survives between requests, because LibreOffice's profile is expensive and warm is better.
 `scratch` holds one request's staged files, and is removed before the caller hears the answer.
 
-An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a wire name, its
+An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a routing name, its
 own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payload keys it wants as
 keyword arguments. By convention the class takes an `Operation`
-suffix — `TransformImageOperation` — while the client keeps the bare name, and the default wire name strips
+suffix — `TransformImageOperation` — while the client keeps the bare name, and the default routing name strips
 the suffix, so both sides derive `transform_image`. The set of operations a cell carries is its
 **consist** — logged at boot, advertised on the control socket.
 
@@ -167,9 +167,9 @@ configuration in the application itself. That directory holds three things: a `G
 operations need, a `Dockerfile` that derives the cell's image, and an `operations/` directory of Ruby
 files the cell loads at boot.
 
-### Write the operation
+### Write an operation
 
-Declare the wire name and the limits, hook library loading, and perform:
+Declare the routing name and the limits, hook library loading, and perform:
 
 ```ruby
 # hotcell/operations/extract_text_operation.rb
