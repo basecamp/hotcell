@@ -215,10 +215,6 @@ class SchedulingTest < HotCellServerTest
   end
 
   private
-    def request_line(op, **payload)
-      HotCell::Request.new(op: op, payload: payload).to_line
-    end
-
     def in_parallel(count, &block)
       count.times.map { Thread.new(&block) }.map(&:value)
     end

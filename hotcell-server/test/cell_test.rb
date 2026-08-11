@@ -321,6 +321,30 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # A worker that exits with a dispatch queued unread on its control socket resets it, and the
+  # supervisor's read raised Errno::ECONNRESET through the run loop — one dead worker ended the cell
+  # and every in-flight request with it. A reset says what end of stream says: the worker is gone. The
+  # reap answers the request it was holding, and the verdict is transient.
+  def test_a_worker_that_exits_with_a_dispatch_queued_does_not_take_the_cell_down
+    with_file do |pid_path|
+      TestCell.boot(deadline: 30, concurrency: 1, max_requests_per_worker: 3) do |cell|
+        hijacked = cell.connect
+
+        begin
+          hijacked.send_message request_line("test.early_idle", pid_path: pid_path, exit_after: 2)
+          wait_until(what: "the worker to report idle early") { File.size?(pid_path) }
+
+          failure = assert_failed "killed", cell.call("test.echo", timeout: 10), cause: "crashed"
+
+          refute_predicate failure, :permanent?
+          assert_ok cell.call("test.echo")
+        ensure
+          hijacked.close
+        end
+      end
+    end
+  end
+
   # The supervisor renames rather than deletes, because how long a recursive delete takes is chosen by
   # whatever filled the directory — and it would run inside the loop enforcing every other deadline. The
   # unlinking lands on the next worker for this slot, which has a deadline of its own.

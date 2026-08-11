@@ -447,7 +447,16 @@ module HotCell
         child = @children.each_value.find { |candidate| candidate.control.socket == socket }
         return if child.nil?
 
-        chunk = socket.read_nonblock(Worker::DISPATCH_BYTES, exception: false)
+        # `exception: false` maps a would-block and end of stream to values, and nothing else: a worker
+        # that exits with a dispatch still queued unread on this socket resets it, and the read raised
+        # Errno::ECONNRESET — which nothing above here rescued, so one dead worker unwound the run loop and
+        # ended the cell with every in-flight request. Any errno on this socket says what end of stream
+        # says: the worker is gone.
+        chunk = begin
+          socket.read_nonblock(Worker::DISPATCH_BYTES, exception: false)
+        rescue SystemCallError
+          nil
+        end
         return if chunk == :wait_readable
 
         # End of stream means the worker is gone. Retire it as well as closing, or it stays eligible for the

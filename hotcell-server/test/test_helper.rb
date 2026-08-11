@@ -35,6 +35,10 @@ class HotCellServerTest < Minitest::Test
 
       response.failure
     end
+
+    def request_line(op, **payload)
+      HotCell::Request.new(op: op, payload: payload).to_line
+    end
 end
 
 # The registry is process-wide, and the fixture operations are registered once at load. A test that adds or
