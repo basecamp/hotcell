@@ -9,8 +9,8 @@ module HotCell
   # on the client — so TransformImage in the application and TransformImageOperation in the cell both
   # derive "transform_image", the way Rails strips Controller from a controller's route name.
   #
-  # This runs in one direction only. A wire name is never turned back into a constant: it is looked up in a
-  # registry that only ever holds classes the cell already loaded.
+  # This runs in one direction only. A name that arrived on the wire is never turned back into a constant:
+  # it is looked up in a registry that only ever holds classes the cell already loaded.
   module Naming
     class << self
       def default_operation_name(klass)

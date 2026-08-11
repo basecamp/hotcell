@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module HotCell
-  # The `op` field on the wire is looked up here. A wire name is never used to derive a constant, so the
+  # The `op` field on the wire is looked up here. A name that arrived on the wire is never used to derive a constant, so the
   # index only ever holds classes this cell already loaded.
   module Registry
     class << self

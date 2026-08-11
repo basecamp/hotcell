@@ -25,8 +25,8 @@ class OperationTest < RegistryIsolatedTest
     assert_equal "test.uppercase", Fixtures::Uppercase.operation_name
   end
 
-  # A wire name is never used to derive a constant, so an anonymous class has nothing to derive from and
-  # must say what it answers to.
+  # A name that arrives on the wire is never used to derive a constant, so an anonymous class has nothing
+  # to derive a routing name from and must say what it answers to.
   def test_an_anonymous_operation_needs_a_name
     anonymous = Class.new(HotCell::Operation)
 

@@ -734,7 +734,7 @@ end
 ```
 
 `operation` writes the name into a registry, and the `op` field on the wire is looked up in it. A
-wire name is never used to derive a constant.
+name that arrived on the wire is never used to derive a constant.
 
 | Limit | Maps to | Notes |
 | --- | --- | --- |
@@ -1208,7 +1208,7 @@ ArchiveFolder.perform_in_hotcell(inputs, outputs, payload)
 Routing is a class-level declaration rather than a call-site argument, so call sites stay free of
 deployment detail and several clients may name the same cell. The operation name defaults to the
 underscored class name, minus a trailing `Operation`, and can be overridden — so a client named
-`ArchiveFolder` and a cell-side `ArchiveFolderOperation` derive the same wire name. An unregistered
+`ArchiveFolder` and a cell-side `ArchiveFolderOperation` derive the same routing name. An unregistered
 server name raises at call time.
 
 `HotCell::Client#perform_in_hotcell` accepts a bare IO wherever an array of one is meant — most call
@@ -1399,7 +1399,7 @@ The payload carries what you need to answer a latency or capacity question witho
 
 | Key | Why |
 | --- | --- |
-| `operation` | The wire name. |
+| `operation` | The routing name. |
 | `cell` | The server name, so per-cell latency is separable. |
 | `code` | `nil` on success, otherwise the `error.code`. |
 | `bytes_in`, `bytes_out` | Cost correlates with size far more than with operation. |
