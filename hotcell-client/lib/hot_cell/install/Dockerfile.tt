@@ -38,4 +38,8 @@ RUN bundle install
 COPY --chown=hotcell:hotcell config.rb /hotcell/config.rb
 COPY --chown=hotcell:hotcell operations/ /hotcell/operations/
 
+# Probes the supervisor's control socket from inside the container, where network: none does not apply.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["bundle", "exec", "hotcell-health"]
+
 CMD ["bundle", "exec", "hotcell"]

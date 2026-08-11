@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
 
   spec.files = Dir[ "lib/**/*", "exe/**/*", "MIT-LICENSE", "README.md" ]
   spec.bindir = "exe"
-  spec.executables = [ "hotcell" ]
+  spec.executables = [ "hotcell", "hotcell-health" ]
 
   spec.add_dependency "hotcell-core", HotCell::SERVER_VERSION
 end

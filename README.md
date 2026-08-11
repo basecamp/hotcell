@@ -309,18 +309,109 @@ application rolls this out as a configuration change rather than a release.
 ### Watch it
 
 Every `perform_in_hotcell` call — success or failure — emits an Active Support notification named
-`perform.hot_cell`, carrying the operation, the cell, the failure code if any, bytes in and out, and the
-cell's own timing breakdown. Subscribe to it for logging and metrics:
+`perform.hot_cell`, and the cell answers `metrics` on its control socket even while the work socket is
+saturated. The [Observability](#observability) section covers both, with the metrics worth collecting and
+the failure modes worth alerting on.
+
+## Observability
+
+The signals come from three places, and a broken cell shows up differently in each.
+
+The **application** emits a `perform.hot_cell` notification on every call, success or failure, carrying
+the cell, the operation, the failure code if any, bytes in and out, and the cell's own timing breakdown.
+This is the only signal that survives a dead cell — an unreachable socket comes back as code
+`unavailable` — so the primary alarm lives here.
+
+The **cell** writes one JSON line per event on stdout. A successful request is `worker.forked`, `request`
+with the code and timing, and `worker.reaped`. The events worth alerting on by presence alone:
+`worker.crashed`, `worker.unforkable`, `control.unanswerable`, and `worker.killed` with its cause. A
+repeating `cell.boot` is a crash-looping accessory.
+
+The **control socket** answers `metrics` with counters only the supervisor can know: `running`, `queued`,
+`queue_high_water`, `cancelled` (callers that hung up before the answer — a floor, not a total),
+`killed_by` cause, requests by code, and `uptime_s`. The socket is host-local, so whatever reads it must
+run on the same host as the cell.
+
+### Metrics with Yabeda
+
+Both halves fit [Yabeda](https://github.com/yabeda-rb/yabeda). The subscriber counts every call from the
+process that made it, and the `collect` block polls the local cell's control socket at scrape time — in
+every process, on every host, which matches the topology exactly: each host runs its own cell, and only
+a neighbor can reach it.
 
 ```ruby
+Yabeda.configure do
+  group :hotcell
+
+  counter   :requests, comment: "Calls through perform_in_hotcell, by outcome", tags: %i[ cell operation code ]
+  histogram :perform_seconds, comment: "Time the cell spent performing", unit: :seconds,
+            tags: %i[ cell operation ], buckets: [ 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 120 ]
+
+  gauge :up, comment: "1 when the local cell answers its control socket", tags: %i[ cell ], aggregation: :most_recent
+  gauge :running, comment: "Workers busy right now", tags: %i[ cell ], aggregation: :most_recent
+  gauge :queued, comment: "Connections waiting for a worker", tags: %i[ cell ], aggregation: :most_recent
+  gauge :queue_high_water, comment: "Deepest the queue has been since boot", tags: %i[ cell ], aggregation: :most_recent
+  gauge :cancelled, comment: "Callers that gave up before the cell answered (a floor)", tags: %i[ cell ], aggregation: :most_recent
+  gauge :killed, comment: "Workers killed since boot, by cause", tags: %i[ cell cause ], aggregation: :most_recent
+  gauge :uptime_seconds, comment: "Seconds since the supervisor booted", tags: %i[ cell ], aggregation: :most_recent
+
+  collect do
+    HotCell.cells.each_value do |cell|
+      next unless cell.enabled?
+
+      response = cell.metrics
+      hotcell.up.set({ cell: cell.name }, response.ok? ? 1 : 0)
+      next unless response.ok?
+
+      counters = response.result
+      hotcell.running.set({ cell: cell.name }, counters[:running])
+      hotcell.queued.set({ cell: cell.name }, counters[:queued])
+      hotcell.queue_high_water.set({ cell: cell.name }, counters[:queue_high_water])
+      hotcell.cancelled.set({ cell: cell.name }, counters[:cancelled])
+      hotcell.uptime_seconds.set({ cell: cell.name }, counters[:uptime_s])
+      counters[:killed_by].each { |cause, count| hotcell.killed.set({ cell: cell.name, cause: cause }, count) }
+    end
+  end
+end
+
 ActiveSupport::Notifications.subscribe "perform.hot_cell" do |event|
-  Rails.logger.info "hotcell #{event.payload[:operation]}: #{event.payload[:code] || "ok"} " \
-                    "in #{event.payload[:perform_ms]}ms"
+  labels = { cell: event.payload[:cell], operation: event.payload[:operation] }
+
+  Yabeda.hotcell.requests.increment(labels.merge(code: event.payload[:code] || "ok"))
+  Yabeda.hotcell.perform_seconds.measure(labels, (event.payload[:perform_ms] || 0) / 1000.0)
 end
 ```
 
-The cell itself answers on `control.sock`: `describe` reports the inventory and the limits, and each client
-checks it at boot; `metrics` reports counters a scrape can read even while the work socket is saturated.
+### The healthcheck
+
+`hotcell-health` ships with `hotcell-server` and probes the supervisor's control socket. The installed
+Dockerfile wires it up as the container's `HEALTHCHECK`, which execs inside the container — the one
+place a probe can reach a cell that has no network:
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["bundle", "exec", "hotcell-health"]
+```
+
+Healthy means the supervisor is alive and answering, not that a worker is free. Docker surfaces the
+status in `docker ps` and `docker events`; nothing restarts an unhealthy accessory on its own.
+
+### What to alert on
+
+| Failure mode | Signal | Alert |
+| --- | --- | --- |
+| Cell down or unreachable | `up` gauge; `unavailable` code | `up == 0` on any host; sustained `unavailable` |
+| Saturation | `queued`, `queue_high_water`, `capacity` code, `cancelled` | `queued` at `queue_size`; `capacity` above ~0 |
+| Wedged or slow tools | `killed` cause `deadline`; `timeout` code; `perform_seconds` p95 | rising kill rate; p95 above the operation's budget |
+| Decompression bombs | `killed` cause `memory` or `fsize` | above ~0 |
+| Cell bugs | `worker.crashed` in the logs; `killed` cause `crashed` | any occurrence |
+| A library regression condemning inputs | `unreadable` code rate | a spike after an image deploy — these verdicts are permanent |
+| Deploy skew | `protocol` code; the client's boot warnings | any occurrence |
+| Accessory crash-loop | `uptime_seconds` resets; repeated `cell.boot` lines | more than one boot per deploy |
+
+One trap specific to background jobs: a dead cell on a job host disappears into transient retries with
+backoff, which is silence by design. The `up` gauge catches it at the next scrape, and the job queue's
+own latency alarms catch it regardless of cause.
 
 ## The gems
 
