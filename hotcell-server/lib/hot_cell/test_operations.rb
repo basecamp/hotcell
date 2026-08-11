@@ -223,10 +223,10 @@ module HotCell
       operation "test.environment"
 
       def perform(_inputs, _outputs, env: {}, canary: nil)
-        converted = convert "env", env: env
+        result = run_tool "env", env: env
 
-        { seen: converted.out.lines.map(&:chomp).sort, worker_saw: ENV[canary.to_s],
-          ok: converted.ok? }
+        { seen: result.out.lines.map(&:chomp).sort, worker_saw: ENV[canary.to_s],
+          ok: result.ok? }
       end
     end
 
@@ -238,9 +238,9 @@ module HotCell
       def perform(_inputs, _outputs, stream: "out")
         stream = stream == "err" ? "STDERR" : "STDOUT"
         script = "40.times { #{stream}.write('x' * 1_000_000) }"
-        converted = convert "ruby", "-e", script, capture: 1024
+        result = run_tool "ruby", "-e", script, capture: 1024
 
-        { out: converted.out.bytesize, err: converted.err.bytesize, ok: converted.ok? }
+        { out: result.out.bytesize, err: result.err.bytesize, ok: result.ok? }
       end
     end
 

@@ -96,7 +96,7 @@ decisions and not just scheduling ones.
 **A sibling's environment is readable.** `/proc/<pid>/environ` needs only `PTRACE_MODE_READ`, which Yama does
 not restrict, and a forked worker's environ is fixed at exec time so `ENV.delete` changes nothing. Two things
 replace it: keep anything worth stealing out of a cell's environment, and spawn tools with
-`unsetenv_others`, which `HotCell::Operation#convert` does. An exec'd child is the one process in this picture
+`unsetenv_others`, which `HotCell::Operation#run_tool` does. An exec'd child is the one process in this picture
 whose environ we actually control.
 
 `hidepid=2` on `/proc` would remove the sysctl dependency by hiding sibling processes entirely. It is not

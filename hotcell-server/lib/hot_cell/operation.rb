@@ -120,7 +120,7 @@ module HotCell
       raise NotImplementedError, "#{self.class} must implement perform(inputs, outputs, <keywords>)"
     end
 
-    Converted = Struct.new(:status, :out, :err) do
+    ToolResult = Struct.new(:status, :out, :err) do
       def ok?
         status.success?
       end
@@ -142,14 +142,14 @@ module HotCell
     # returns and nothing else: an input that makes a tool print gigabytes of diagnostics had already
     # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
     # verdict, which is permanent, for a document whose only crime was being noisy.
-    def convert(*command, env: {}, capture: 64 * 1024)
+    def run_tool(*command, env: {}, capture: 64 * 1024)
       require "open3"
 
       Open3.popen3(tool_environment(env), *command, unsetenv_others: true) do |stdin, out, err, thread|
         stdin.close
         captured = drain(out, err, capture)
 
-        Converted.new thread.value, captured[out], captured[err]
+        ToolResult.new thread.value, captured[out], captured[err]
       end
     end
 

@@ -582,7 +582,7 @@ slow. See "Instrumentation".
 collector, so anything it knows about its own internals has to travel back in the response or not at all:
 
 ```json
-"timing":{"queued_ms":0,"convert_ms":44,"writeback_ms":2,"perform_ms":47}
+"timing":{"queued_ms":0,"operation_ms":44,"writeback_ms":2,"perform_ms":47}
 ```
 
 Those phases sum to roughly `perform_ms` and cost nothing to collect. The client turns them into child spans
