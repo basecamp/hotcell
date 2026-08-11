@@ -8,16 +8,21 @@ module HotCell
   # leasing: a slot is always free when a worker starts, because the thing that bounds workers is the same
   # thing that counts slots. A request never waits for a slot, it waits in the cell's queue.
   #
-  # The home is reused between requests on purpose. Some tools cannot share one — LibreOffice keeps a
-  # profile under $HOME and corrupts itself when two instances share it — and because a per-slot home
-  # survives, that expensive profile is created once and is warm afterwards. This is the pre-warming
-  # benefit without a warming pass and without the supervisor spawning anything.
+  # The home survives on purpose, and it survives across worker processes, not merely between the requests
+  # one worker serves: it is created once at boot and removed by nothing, so a slot's home is the same
+  # directory whichever worker holds the slot next. Some tools cannot share one — LibreOffice keeps a
+  # profile under $HOME and corrupts itself when two instances share it — and a surviving per-slot home
+  # gives that expensive profile a warm copy without a warming pass and without the supervisor spawning
+  # anything. Reusing a worker is a separate axis: it amortizes a process's first-request cost, and the
+  # home is warm at `max_requests_per_worker: 1` all the same.
   #
-  # It is also the one place in this design where two requests are not fully isolated from each other: one
-  # can leave a file the next reads. What bounds it is that nothing sensitive belongs in a tool's
-  # home, and that scratch is separate and per-request. The danger is what an earlier request wrote into
-  # the home rather than what a later one reads out of it — for LibreOffice the user layer composes last,
-  # so a write there can disable the tool's own hardening for every later request on that slot.
+  # This is a trade-off we accept rather than a channel we close. It is the one place two requests are not
+  # fully isolated from each other: one can leave a file in the slot's home that a later request on that
+  # slot reads. Scratch is separate and per-request, so a request's own bytes do not leak this way; what
+  # leaks is what a tool chose to persist. The exposure is a write, not a read — for LibreOffice the user
+  # layer composes last, so a write there can disable the tool's own hardening for every later request on
+  # that slot. We keep the warm home because the alternatives cost more than the exposure is worth, and
+  # adr/0002 records that reasoning and the option to revisit it.
   #
   # The filesystem behaviour belongs here rather than in the two processes that call it. Scratch is removed
   # from both — the worker before it answers, the supervisor at finish and at reap — so the guard and the
