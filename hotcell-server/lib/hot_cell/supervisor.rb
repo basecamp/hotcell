@@ -219,7 +219,13 @@ module HotCell
         reap
       end
 
+      # `sources` drops the listeners once `@stopping` is set, but a listener already readable in the same
+      # IO.select batch as the stop signal is still handled this pass. Refusing here rather than admitting a
+      # connection the stopping cell will never pump is what closes that one-batch window. The connection is
+      # left in the backlog and reset when the listener closes at shutdown, which the caller reads as transient.
       def accept_work
+        return if @stopping
+
         socket = @work.accept_nonblock(exception: false)
         return if socket == :wait_readable
 
@@ -234,6 +240,8 @@ module HotCell
       end
 
       def accept_control
+        return if @stopping
+
         socket = @control.accept_nonblock(exception: false)
         return if socket == :wait_readable
 
@@ -269,12 +277,16 @@ module HotCell
 
         pending.buffer << chunk
 
-        if pending.buffer.include?("\n")
+        # Size before newline, so a complete line over the limit is refused rather than parsed. Checking the
+        # newline first handed an oversized-but-terminated message to the parser whenever its newline arrived
+        # in a later read, which is the limit the read is here to enforce.
+        if pending.buffer.bytesize > MAX_REQUEST_BYTES
+          @control_pending.delete pending
+          answer pending.connection,
+                 Failure.new(code: "invalid", message: "control message over #{MAX_REQUEST_BYTES} bytes")
+        elsif pending.buffer.include?("\n")
           @control_pending.delete pending
           answer_control pending.connection, pending.buffer.force_encoding(Encoding::UTF_8)
-        elsif pending.buffer.bytesize > MAX_REQUEST_BYTES
-          @control_pending.delete pending
-          answer pending.connection, Failure.new(code: "invalid", message: "control message with no newline")
         end
       end
 
@@ -343,9 +355,11 @@ module HotCell
                                            error: error.class.name
 
         # Released rather than finished: this is the only path that hands the connection back to be answered
-        # here, so it must not be closed on the way out.
+        # here, so the client connection must not be closed on the way out. `retire` closes the worker's
+        # control socket, which is a different socket — without it the worker stays blocked in await_dispatch,
+        # never frees its slot, and shutdown waits on it forever.
         child.released
-        child.retired = true
+        retire child
         answer connection, Failure.new(code: Codes::KILLED, cause: Codes::CRASHED, message: error.message)
         false
       end
@@ -439,8 +453,17 @@ module HotCell
 
         child.buffer << chunk
 
+        # A complete line over the limit is dropped rather than parsed. The trailing size check catches a
+        # buffer that never terminates; a line whose newline arrived in a later read is complete, so its size
+        # is checked here or the limit is one the parser never sees.
         while (newline = child.buffer.index("\n"))
-          apply_report child, child.buffer.slice!(0, newline + 1).force_encoding(Encoding::UTF_8)
+          line = child.buffer.slice!(0, newline + 1).force_encoding(Encoding::UTF_8)
+
+          if line.bytesize > Worker::DISPATCH_BYTES
+            unreadable_report child, "report is #{line.bytesize} bytes, over the #{Worker::DISPATCH_BYTES} byte limit"
+          else
+            apply_report child, line
+          end
         end
 
         return if child.buffer.bytesize <= Worker::DISPATCH_BYTES
@@ -480,11 +503,22 @@ module HotCell
       end
 
       def finish(child, code)
-        counters.record code
+        counters.record outcome_code(code)
         child.finished
         child.slot.discard_scratch
 
         retire child if configuration.retire?(child.served)
+      end
+
+      # The outcome code rides an untrusted worker report and becomes both a counter key and a Symbol, so it
+      # is bounded to a code this cell mints before either happens. Without this a report of `code: []` raised
+      # NoMethodError on `to_sym` past `apply_report`'s rescue and took the cell down, and a stream of unique
+      # strings grew the counters without bound. An unknown code is recorded, so a misreporting worker is
+      # visible rather than silent, but under one fixed bucket.
+      def outcome_code(reported)
+        return reported if reported.is_a?(String) && (reported == "ok" || Codes.known?(reported))
+
+        "unknown"
       end
 
       # Closing the control socket is the retirement: the worker's next await_dispatch sees end of stream
