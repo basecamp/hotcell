@@ -189,6 +189,25 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # A worker puts every tool it spawns in its own process group, so the supervisor can sweep the group when
+  # the worker is gone. A tool that outlived its worker would run with nothing watching it and no deadline,
+  # holding CPU and memory until the cgroup ended the cell.
+  def test_a_spawned_process_does_not_outlive_its_worker
+    spawned = nil
+
+    TestCell.boot do |cell|
+      spawned = assert_ok(cell.call("test.orphaner")).result.fetch(:spawned)
+
+      wait_until(what: "the orphaned process to be swept") { !process_running?(spawned) }
+    end
+  ensure
+    begin
+      Process.kill :KILL, spawned if spawned
+    rescue SystemCallError
+      nil
+    end
+  end
+
   def test_a_result_that_is_not_an_object
     TestCell.boot do |cell|
       assert_match "result is a String", assert_failed("failed", cell.call("test.bad_result")).message

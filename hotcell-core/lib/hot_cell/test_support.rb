@@ -48,6 +48,16 @@ module HotCell
         Dir.children("/proc/self/fd").size
       end
 
+      # True while the process exists and is not a zombie. A killed process lingers as a zombie until its
+      # parent reaps it, and a zombie is dead for a caller watching for a sweep. The state is the first
+      # token after the final `)` of /proc/<pid>/stat, which is where the comm field ends.
+      def process_running?(pid)
+        state = File.read("/proc/#{pid}/stat")[/\)\s+(\S)/, 1]
+        !state.nil? && state != "Z"
+      rescue Errno::ENOENT
+        false
+      end
+
       # A cell writes its log and removes its scratch after it has answered, so a few properties are
       # genuinely asynchronous with respect to the caller. Bounded polling says so; a sleep would not.
       def wait_until(within: 5, what: "the condition")
