@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Exits 0 when the local cell answers describe on its control socket, and 1 with a reason otherwise.
+#
+# Made for a Docker HEALTHCHECK, which execs inside the container — the one place a probe can reach a
+# cell that has no network. The control socket answers even when the work socket is saturated, so
+# healthy means the supervisor is alive and answering, not that a worker is free.
+
+require "hot_cell/core"
+require "socket"
+
+def unhealthy(reason)
+  puts "unhealthy: #{reason}"
+  exit 1
+end
+
+directory = ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell")
+deadline = HotCell::Clock.now + Float(ENV.fetch("HOTCELL_HEALTH_TIMEOUT", "5"))
+
+begin
+  socket = UNIXSocket.new(File.join(directory, "control.sock"))
+  connection = HotCell::Connection.new(socket)
+
+  connection.write_line HotCell::Request.new(op: HotCell::DESCRIBE).to_line
+  response = HotCell::Response.parse(connection.read_line(deadline: deadline))
+
+  unhealthy "the cell answered #{response.failure}" unless response.ok?
+rescue SystemCallError, IOError, HotCell::Error => error
+  unhealthy "#{error.class}: #{error.message}"
+end
+
+puts "healthy"

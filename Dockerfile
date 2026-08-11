@@ -40,6 +40,10 @@ COPY --chown=hotcell:hotcell hotcell-server hotcell-server
 USER hotcell
 RUN bundle install
 
+# Probes the supervisor's control socket from inside the container, where network: none does not apply.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["bundle", "exec", "hotcell-health"]
+
 # The bundle is deliberately not frozen: a derived image adds operations with their own Gemfile and has to be
 # able to resolve again.
 CMD ["bundle", "exec", "hotcell"]
