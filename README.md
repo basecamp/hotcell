@@ -2,7 +2,8 @@
 
 Securely run untrusted code on untrusted inputs. HotCell moves the work out of the application and into
 an unprivileged sibling container with no network, and hands it open file descriptors rather than paths
-or bytes.
+or bytes. Each call is a remote procedure call ("RPC"): the application calls an ordinary Ruby method,
+the work runs in the container, and the result comes back as the return value.
 
 HotCell was created to perform safe media conversion. A web application that accepts uploads eventually
 hands a stranger's file to libvips, ImageMagick, LibreOffice or ffmpeg to make a thumbnail or a preview.
