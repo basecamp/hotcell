@@ -27,7 +27,15 @@ class TestCell < HotCell::TestCell
 
   def send_line(line, descriptors: [], timeout: 10)
     connect do |connection|
-      connection.send_message line, descriptors: descriptors
+      begin
+        connection.send_message line, descriptors: descriptors
+      # A cell that refuses without reading writes its answer and closes first, so a send that loses that
+      # race fails with the verdict already queued on the socket. The verdict is what the suite asserts
+      # on, so read it rather than surfacing the failed write.
+      rescue SystemCallError, IOError
+        nil
+      end
+
       answer connection, timeout
     end
   end
