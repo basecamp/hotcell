@@ -77,7 +77,14 @@ module HotCell
 
         begin
           line, received = connection.receive_message
-          response = handle(line, received, timing) unless line.nil?
+          response = if line.nil?
+            # The caller closed before sending a request. Transient, so it is never written against a blob,
+            # and named rather than left nil — a nil response reported idle `"ok"`, counting a success nobody
+            # received.
+            refuse("unavailable", "the connection closed before a request arrived", timing)
+          else
+            handle(line, received, timing)
+          end
         rescue MessageError, AccessModeError => error
           response = refuse("invalid", error, timing)
         rescue NoMemoryError, Errno::ENOMEM, MemoryExhausted => error
