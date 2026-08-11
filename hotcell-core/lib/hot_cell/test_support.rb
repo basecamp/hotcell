@@ -51,10 +51,12 @@ module HotCell
       # True while the process exists and is not a zombie. A killed process lingers as a zombie until its
       # parent reaps it, and a zombie is dead for a caller watching for a sweep. The state is the first
       # token after the final `)` of /proc/<pid>/stat, which is where the comm field ends.
+      # ESRCH alongside ENOENT: the entry can be torn down between the open and the read, and a caller
+      # polling for a kill is exactly who reads during the teardown.
       def process_running?(pid)
         state = File.read("/proc/#{pid}/stat")[/\)\s+(\S)/, 1]
         !state.nil? && state != "Z"
-      rescue Errno::ENOENT
+      rescue Errno::ENOENT, Errno::ESRCH
         false
       end
 

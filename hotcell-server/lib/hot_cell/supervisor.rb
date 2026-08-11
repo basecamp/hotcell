@@ -21,9 +21,9 @@ module HotCell
     # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
     # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired, :buffer, keyword_init: true) do
+                       :retired_at, :buffer, keyword_init: true) do
       def self.build(slot:, pid:, control:, deadline:)
-        new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, retired: false, buffer: "".b
+        new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b
       end
 
       def dispatched(connection, deadline, at:)
@@ -52,7 +52,7 @@ module HotCell
       end
 
       def available?
-        !busy? && !retired
+        !busy? && retired_at.nil?
       end
 
       # A child already killed for its deadline stops being a timer, and that guard is load-bearing rather
@@ -68,6 +68,21 @@ module HotCell
 
       def expires_at
         dispatched_at + deadline if busy? && killed_for.nil?
+      end
+
+      # The retirement analogue of `overdue?`, and the only timer that can reach a worker whose idle
+      # report was early: `finish` clears what `overdue?` reads, so a worker still running what it
+      # reported finished answers to this and nothing else. A retired worker has nothing left to do but
+      # exit — its closed control socket ends its await_dispatch — so the wait for it is bounded where an
+      # available worker's is not. Busy is excluded because a busy retired child is a worker that already
+      # died mid-request, which the reap answers for. `killed_for` is the same one-kill latch `overdue?`
+      # reads.
+      def lingering?(now, grace)
+        !busy? && killed_for.nil? && !retired_at.nil? && now - retired_at >= grace
+      end
+
+      def lingers_until(grace)
+        retired_at + grace if !busy? && killed_for.nil? && !retired_at.nil?
       end
     end
 
@@ -153,6 +168,7 @@ module HotCell
         Array(readable).each { |source| handle source }
 
         enforce_deadlines
+        enforce_retirements
         expire_queue
         expire_control
         retire_idle if @stopping
@@ -182,6 +198,7 @@ module HotCell
       def wait_for
         now = Clock.now
         nearest = [ *@children.each_value.filter_map(&:expires_at),
+                    *@children.each_value.filter_map { |child| child.lingers_until(Configuration::KILL_GRACE) },
                     *@queue.map { |(_, queued_at)| queued_at + configuration.queue_wait },
                     *@control_pending.map { |pending| pending.accepted_at + configuration.control_deadline } ].min
         return nil if nearest.nil?
@@ -461,10 +478,7 @@ module HotCell
 
         # End of stream means the worker is gone. Retire it as well as closing, or it stays eligible for the
         # next dispatch until the reap catches up.
-        if chunk.nil?
-          child.retired = true
-          return child.control.close
-        end
+        return retire(child) if chunk.nil?
 
         child.buffer << chunk
 
@@ -496,7 +510,9 @@ module HotCell
       #
       # `idle` is only believed from a worker that is actually serving something. A premature one used to
       # clear `dispatched_at`, which is what `overdue?` reads — so a worker could answer "I am done" and buy
-      # itself an unbounded deadline on a request it was still holding.
+      # itself an unbounded deadline on a request it was still holding. One from a busy worker is still
+      # believed, because no check here can see the difference — what it buys is bounded instead: the next
+      # dispatch restores a deadline, and retirement, where every worker ends, is enforced.
       def apply_report(child, line)
         message = Payload.parse(line)
         return unreadable_report child, "report is a #{message.class} and must be an object" unless message.is_a?(Hash)
@@ -537,9 +553,11 @@ module HotCell
       end
 
       # Closing the control socket is the retirement: the worker's next await_dispatch sees end of stream
-      # and exits. The slot stays taken until the process is actually gone.
+      # and exits. The slot stays taken until the process is actually gone — and `retired_at` is what
+      # bounds that wait, in enforce_retirements. It only ever moves forward from nil, so retiring an
+      # already-retired child does not buy it a fresh grace.
       def retire(child)
-        child.retired = true
+        child.retired_at ||= Clock.now
         child.control.close
       end
 
@@ -559,6 +577,24 @@ module HotCell
           kill_group child
 
           log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline: child.deadline
+        end
+      end
+
+      # The deadline cannot reach a worker that is not busy, so a retired worker that never exited was
+      # timed by nothing: it held its slot until it left on its own, and it held `stopped?` false forever —
+      # a stopping cell waited on it until the runtime force-killed the container. KILL_GRACE is the
+      # budget, because a retired worker's next act is exiting, and one still here after that is not going
+      # to leave on its own.
+      def enforce_retirements
+        now = Clock.now
+
+        @children.each_value.select { |child| child.lingering?(now, Configuration::KILL_GRACE) }.each do |child|
+          # The latch rather than a verdict: a lingering child is never busy, so no caller hears this cause.
+          child.killed_for = Codes::CRASHED
+
+          kill_group child
+
+          log.write "worker.lingered", pid: child.pid, slot: child.slot.number, grace: Configuration::KILL_GRACE
         end
       end
 
