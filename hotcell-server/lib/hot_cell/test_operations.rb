@@ -133,6 +133,18 @@ module HotCell
       end
     end
 
+    # Spawns a process and does not wait for it, the way a worker that crashed mid-request would leave a
+    # tool behind. The spawned process inherits the worker's process group, so the supervisor's group sweep
+    # at reap is what must kill it — nothing else is watching it, and it has no deadline. Returns the pid so
+    # a test can watch for it.
+    class Orphaner < HotCell::Operation
+      operation "test.orphaner"
+
+      def perform(_inputs, _outputs)
+        { spawned: Process.spawn("sleep", "300") }
+      end
+    end
+
     class BadResult < HotCell::Operation
       operation "test.bad_result"
 

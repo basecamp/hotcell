@@ -553,6 +553,22 @@ module HotCell
         end
       end
 
+      # Sweeps whatever the reaped worker left in its process group — a tool it spawned outlives it on any
+      # death that was not the deadline kill, a crash or a SIGKILL from outside, and would then run with no
+      # deadline until the cgroup ended the cell. The deadline path already swept a live worker's group; this
+      # covers every other death.
+      #
+      # Only the group kill applies here, never `kill_group`'s fallback to the bare pid: the leader was
+      # reaped a few lines up, so the bare pid is either gone or, after enough churn, another process — and
+      # the sweep must not signal it. An empty group is the common case, so ESRCH is expected. It is safe to
+      # kill the group by the leader's pid even though the leader is reaped, because the supervisor is single
+      # threaded and mints group leaders only in `spawn`, which cannot run between the `wait2` above and here.
+      def sweep_group(child)
+        Process.kill :KILL, -child.pid
+      rescue Errno::ESRCH
+        nil
+      end
+
       # The whole process group, which is the worker and everything it started. Negative pid is the group.
       # Falls back to the worker alone if the group is already gone, so a worker that died between the check
       # and the signal is not an error.
@@ -605,6 +621,7 @@ module HotCell
             child_reported child.control.socket
           end
 
+          sweep_group child
           @children.delete child.slot.number
           answer_for child, status
           child.slot.discard_scratch
