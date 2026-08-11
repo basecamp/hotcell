@@ -6,7 +6,7 @@
 # the applications that will write them are Ruby applications — an operation that cannot be written in the
 # language of the code it replaces will not be written.
 #
-# It carries no converter. Which toolchain a cell holds is the thing that decides its blast radius, so that
+# It carries no tool. Which toolchain a cell holds is the thing that decides its blast radius, so that
 # is a derived image's decision. See docs/DEPLOYMENT.md.
 
 ARG RUBY_VERSION=3.4
