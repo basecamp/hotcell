@@ -59,7 +59,7 @@ class RegistryTest < RegistryIsolatedTest
     assert_match "both answer to \"registry_test.contested\"", error.message
   end
 
-  def test_the_consist_is_reportable_in_a_stable_order
+  def test_the_inventory_is_reportable_in_a_stable_order
     names = HotCell::Registry.names
 
     assert_includes names, "test.uppercase"

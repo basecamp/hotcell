@@ -211,11 +211,15 @@ class IntegrationTest < HotCellClientTest
     assert_nil HotCell.describe_cells["test"]
   end
 
+  # Counts lag responses — the worker answers the caller before the supervisor reads its idle report and
+  # increments the counter — so the wait is the assertion, exactly as in the server suite's metrics test.
   def test_metrics_come_back_through_the_registration
     with_cell do
       Echo.perform_in_hotcell [], [], {}
 
-      assert_equal 1, HotCell.cell("test").metrics.result[:requests][:total]
+      wait_until(what: "the supervisor to count the request") do
+        HotCell.cell("test").metrics.result[:requests][:total] == 1
+      end
     end
   end
 
