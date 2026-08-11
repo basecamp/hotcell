@@ -164,10 +164,14 @@ sequenceDiagram
 ## How to get started
 
 Everything about a cell lives in a `hotcell/` directory in the application root, apart from the client
-configuration in the application itself. That directory holds three things: a `Gemfile` for what the
-operations need, a `Dockerfile` that builds the cell's image, a `config.rb` for the cell's own
-settings, and an `operations/` directory of Ruby files the cell loads at boot. `bin/rails
-hotcell:install` creates all of them.
+configuration in the application itself. That directory holds:
+
+- a `Gemfile` for what the operations need,
+- a `Dockerfile` that builds the cell's image,
+- a `config.rb` for the cell's own settings, and
+- an `operations/` directory of Ruby files the cell loads at boot.
+
+Running `bin/rails hotcell:install` creates all of them.
 
 ### Write an operation
 
