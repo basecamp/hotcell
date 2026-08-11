@@ -160,17 +160,19 @@ sequenceDiagram
 8. The client raises the exception class registered for that side of the permanent split, and publishes a
    `perform.hot_cell` notification either way.
 
-## Building your own
+## How to get started
 
-A cell is extended by deriving its image, not by changing these gems. Write an operation, copy it into the
-image, point a client at it.
+Everything about a cell lives in a `hotcell/` directory in the application root, apart from the client
+configuration in the application itself. That directory holds three things: a `Gemfile` for what the
+operations need, a `Dockerfile` that derives the cell's image, and an `operations/` directory of Ruby
+files the cell loads at boot.
 
 ### Write the operation
 
 Declare the wire name and the limits, hook library loading, and perform:
 
 ```ruby
-# operations/extract_text_operation.rb
+# hotcell/operations/extract_text_operation.rb
 require "active_support"
 require "active_support/core_ext/numeric"
 
@@ -207,7 +209,7 @@ The base image scans `/hotcell/operations` in sorted order, so a leading
 file configures scheduling before any operation loads:
 
 ```ruby
-# operations/00_cell.rb
+# hotcell/operations/00_cell.rb
 require "active_support"
 require "active_support/core_ext/numeric"
 
@@ -215,6 +217,7 @@ HotCell.limits concurrency: 4, queue_size: 8, deadline: 60.seconds, memory: 1536
 ```
 
 ```dockerfile
+# hotcell/Dockerfile
 # TODO: point at the published hotcell base image once one exists
 FROM <the hotcell base image>
 
