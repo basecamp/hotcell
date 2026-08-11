@@ -229,6 +229,25 @@ COPY operations/ /hotcell/operations/
 The base image's entrypoint is `hotcell`, which loads the consist and boots the supervisor on
 `HOTCELL_DIR`.
 
+### Run it in development
+
+A cell can run in development either as a container or as a plain, uncontainerized process. The
+container route works only on Linux — on macOS the containers run in a VM, and descriptor passing
+will not work. The resource limits and the deadline apply either way.
+
+We recommend the uncontainerized process in development, managed by foreman beside the Rails server,
+so there is one setup to document and one to debug. Give the cell its own directory in the app
+repository, with its own `Gemfile` — the same one the image build copies — and add one line per cell
+to `Procfile.dev`:
+
+```procfile
+web: HOTCELL_ROOT=tmp/hotcell bin/rails server
+cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell/documents bundle exec hotcell
+```
+
+`bin/dev` boots both. The app finds the sockets under `tmp/hotcell`, and the cell keeps its own bundle
+so the two sides stay separate in development the way they are in production.
+
 ### Deploy it with Kamal
 
 One accessory per cell. An accessory rather than an app role, because only an accessory can set
