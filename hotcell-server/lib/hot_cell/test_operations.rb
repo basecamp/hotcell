@@ -350,6 +350,32 @@ module HotCell
       end
     end
 
+    # Reports itself idle while its request is still running, so the report and the truth disagree from
+    # that moment on. The control socket is private to the Worker, but it lives in the operation's own
+    # process, so reaching it takes one ObjectSpace walk. With `exit_after`, the worker then exits without
+    # ever reading its control socket again, so whatever the supervisor wrote there in the meantime is
+    # queued and unread when it goes.
+    class EarlyIdle < HotCell::Operation
+      operation "test.early_idle"
+
+      def perform(_inputs, _outputs, pid_path:, exit_after: nil)
+        # The one with an open control socket, not `.first`: a suite that builds a Worker in its own
+        # process leaves it on the heap for the fork to inherit, with its sockets closed by teardown.
+        worker = ObjectSpace.each_object(HotCell::Worker).find do |candidate|
+          !candidate.instance_variable_get(:@control).socket.closed?
+        end
+        worker.instance_variable_get(:@control).write_line JSON.generate(idle: true, code: "ok") << "\n"
+        File.write pid_path, Process.pid.to_s
+
+        if exit_after
+          sleep exit_after
+          exit! 0
+        else
+          sleep 300
+        end
+      end
+    end
+
     class Blocking < HotCell::Operation
       operation "test.blocking"
 
