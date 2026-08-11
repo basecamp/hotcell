@@ -99,7 +99,7 @@ own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payl
 keyword arguments. By convention the class takes an `Operation`
 suffix — `TransformImageOperation` — while the client keeps the bare name, and the default routing name strips
 the suffix, so both sides derive `transform_image`. The set of operations a cell carries is its
-**consist** — logged at boot, advertised on the control socket.
+**inventory** — logged at boot, advertised on the control socket.
 
 A **client** is the application-side mirror of an operation: a subclass of `HotCell::Client` that names
 the cell with `hotcell` and the operation with `operation`, and exposes `perform_in_hotcell`. That is a
@@ -319,7 +319,7 @@ ActiveSupport::Notifications.subscribe "perform.hot_cell" do |event|
 end
 ```
 
-The cell itself answers on `control.sock`: `describe` reports the consist and the limits, and each client
+The cell itself answers on `control.sock`: `describe` reports the inventory and the limits, and each client
 checks it at boot; `metrics` reports counters a scrape can read even while the work socket is saturated.
 
 ## The gems

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The consist this suite points a real cell at. It comes from hotcell-server rather than being written again
+# The inventory this suite points a real cell at. It comes from hotcell-server rather than being written again
 # here: five of the operations this file used to define answered to routing names those already claim, so
 # `test.uppercase` meant one thing when this suite proved it and another when the server suite did.
 require "hot_cell/test_operations"

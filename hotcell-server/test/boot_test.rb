@@ -59,7 +59,7 @@ class BootTest < RegistryIsolatedTest
     assert_match "is above this process's hard limit", error.message
   end
 
-  def test_a_cell_logs_its_consist_and_its_limits_at_boot
+  def test_a_cell_logs_its_inventory_and_its_limits_at_boot
     TestCell.boot(concurrency: 2) do |cell|
       cell.stop
       booted = cell.log_events("cell.boot").first

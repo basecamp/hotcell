@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-# A deployment runs one or more cells, each an independent process on its own socket, with its own consist,
+# A deployment runs one or more cells, each an independent process on its own socket, with its own inventory,
 # concurrency limit, deadline, and image. A cell does not know it has siblings; multiplicity is entirely a
 # cold-side and deployment concern.
 #

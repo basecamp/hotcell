@@ -194,7 +194,7 @@ for invariant 1 has been withdrawn. An operation is free to require whatever it 
 ### Cells
 
 A deployment runs one or more cells, each an independent process on its own Unix socket, with its own
-consist of operations, its own concurrency limit, its own deadline, and its own image. A cell does not
+inventory of operations, its own concurrency limit, its own deadline, and its own image. A cell does not
 know it has siblings; multiplicity is entirely a cold-side and deployment concern.
 
 This is how toolchains stay apart. A vips-only cell carries neither ffmpeg nor mutool, so code
@@ -327,7 +327,7 @@ an outage. Each side gets its own concurrency allowance and its own deadline, wh
 numbers — a scrape is milliseconds, a conversion is seconds. And the socket a connection arrived on is
 itself the discriminator, so routing costs nothing and cannot be confused by a payload.
 
-It is also the place any later control message belongs — drain before a reboot, reload the consist, quiesce
+It is also the place any later control message belongs — drain before a reboot, reload the inventory, quiesce
 a slot — none of which is in scope now, and all of which would otherwise want inventing a channel under
 time pressure.
 
@@ -866,7 +866,7 @@ force-loads a class to pin the order.
 **`before_fork` runs once, at boot.** Puma forks its whole worker pool up front, so there "before the
 fork" and "at boot" are the same moment. A hotcell forks per request, continuously, so they are not.
 `before_fork` must not be read as running before each fork: the supervisor does exactly one pass over
-its consist at startup and then never runs operation code again. Anything that happens per request
+its inventory at startup and then never runs operation code again. Anything that happens per request
 belongs in `before_worker_boot` or in `perform`. Putting per-request work in the supervisor is what
 invariant 3 forbids, and it is the failure that deadlocks every subsequent worker.
 
@@ -1045,7 +1045,7 @@ applications carrying different policies.
 ### Supervisor
 
 1. Read in every registered operation and run its `before_fork`. Create the slot homes.
-2. Create both listening sockets. Log the consist and the cell's limits.
+2. Create both listening sockets. Log the inventory and the cell's limits.
 3. Wait for any of: a connection on either socket, a dead child, or the nearest deadline.
 4. On a work connection: dispatch it to an idle worker, forking one first if none is idle and a slot is
    free. Otherwise queue it, or answer `capacity` and close if the queue is full. Record the dispatch time
