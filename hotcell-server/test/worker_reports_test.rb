@@ -6,8 +6,9 @@ require "test_helper"
 #
 # The worker is the one process in this design that runs untrusted code, and it writes these reports over a
 # socket the supervisor reads inside the loop enforcing every request's deadline. So this is the one input
-# where "a compromised peer" is the case to design for rather than a hypothetical, and it is exercised
-# directly: an operation cannot reach its worker's control socket, so nothing end to end can send these.
+# where "a compromised peer" is the case to design for rather than a hypothetical. It is exercised directly
+# because the direct form reaches every malformed shape without a fixture apiece — an operation can send
+# these end to end, since the control socket lives in its own process, and Fixtures::EarlyIdle does.
 class WorkerReportsTest < HotCellServerTest
   def setup
     @supervisor = HotCell::Supervisor.new(directory: Dir.mktmpdir("hotcell-reports"), log: HotCell::Log.null)
@@ -118,7 +119,7 @@ class WorkerReportsTest < HotCellServerTest
     result = @supervisor.send :dispatch, @child, HotCell::Connection.new(client.first), 0
 
     refute result, "dispatch reports the failure to the caller"
-    assert @child.retired, "the worker is retired"
+    assert @child.retired_at, "the worker is retired"
     assert_predicate @child.control.socket, :closed?, "the control socket is closed, so await_dispatch returns EOF"
     refute_predicate @child, :busy?, "the connection was handed back to be answered here"
   end

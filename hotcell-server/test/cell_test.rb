@@ -345,6 +345,71 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # An early idle report is believed — the supervisor cannot see that the worker is still running — and
+  # `finish` clears what `overdue?` reads, so the worker had no deadline left and nothing ever killed
+  # it: it held its slot until it exited on its own. Retirement is the bound instead: a retired worker's
+  # next act is exiting, so one still running after the grace is killed, group and all.
+  def test_a_retired_worker_that_never_exits_is_killed_after_the_grace
+    worker = nil
+
+    with_file do |pid_path|
+      TestCell.boot(deadline: 30, concurrency: 1) do |cell|
+        lingerer = cell.connect
+
+        begin
+          lingerer.send_message request_line("test.early_idle", pid_path: pid_path)
+          wait_until(what: "the worker to report idle early") { File.size?(pid_path) }
+          worker = Integer(File.read(pid_path))
+
+          wait_until(what: "the lingering worker to be killed") { cell.log_events("worker.lingered").any? }
+          wait_until(what: "the killed worker to be gone") { !process_running?(worker) }
+
+          assert_ok cell.call("test.echo")
+        ensure
+          lingerer.close
+        end
+      end
+    end
+  ensure
+    begin
+      Process.kill :KILL, worker if worker
+    rescue SystemCallError
+      nil
+    end
+  end
+
+  # `stopped?` waits for `@children.empty?`, so one worker that reported idle and kept running held a
+  # stopping cell open forever: retiring it closed its control socket, and nothing enforced what that
+  # means. A rolling deploy would stall until the runtime force-killed the container.
+  def test_a_stopping_cell_does_not_wait_forever_for_a_worker_that_reported_idle_and_kept_running
+    worker = nil
+
+    with_file do |pid_path|
+      TestCell.boot(deadline: 30, concurrency: 1, max_requests_per_worker: 3) do |cell|
+        lingerer = cell.connect
+
+        begin
+          lingerer.send_message request_line("test.early_idle", pid_path: pid_path)
+          wait_until(what: "the worker to report idle early") { File.size?(pid_path) }
+          worker = Integer(File.read(pid_path))
+
+          cell.stop
+
+          assert_equal 1, cell.log_events("cell.stopped").size, "the cell never finished stopping"
+          refute process_running?(worker), "the lingering worker outlived the cell"
+        ensure
+          lingerer.close
+        end
+      end
+    end
+  ensure
+    begin
+      Process.kill :KILL, worker if worker
+    rescue SystemCallError
+      nil
+    end
+  end
+
   # The supervisor renames rather than deletes, because how long a recursive delete takes is chosen by
   # whatever filled the directory — and it would run inside the loop enforcing every other deadline. The
   # unlinking lands on the next worker for this slot, which has a deadline of its own.

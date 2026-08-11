@@ -30,7 +30,8 @@ module HotCell
 
     UNLIMITED = :unlimited
 
-    # Noticing an overdue worker, signalling it, reaping it, and writing the answer.
+    # Noticing an overdue worker, signalling it, reaping it, and writing the answer. Also the budget a
+    # retired worker gets to exit before the supervisor kills its group — see Supervisor#enforce_retirements.
     KILL_GRACE = 1
 
     attr_reader(*SCHEDULING.keys)
@@ -68,10 +69,10 @@ module HotCell
       !unlimited_requests? && served >= max_requests_per_worker
     end
 
-    # What this cell expects to answer within, and deliberately not a bound it can keep. Nothing enforces
-    # KILL_GRACE: a worker in uninterruptible sleep does not die when it is signalled, and the supervisor
-    # answers only after the reap. Treat it as the threshold a client's timeout should clear, not as a
-    # guarantee to build a correctness argument on.
+    # What this cell expects to answer within, and deliberately not a bound it can keep: a worker in
+    # uninterruptible sleep does not die when it is signalled, and the supervisor answers only after the
+    # reap. Treat it as the threshold a client's timeout should clear, not as a guarantee to build a
+    # correctness argument on.
     #
     # Derived here rather than reassembled in the client: a client adding up `queue_wait + deadline` plus its
     # own guess at the kill-to-answer step cannot follow a change to any of them, and the error points the
