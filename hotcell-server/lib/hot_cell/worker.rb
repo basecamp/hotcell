@@ -87,7 +87,11 @@ module HotCell
           end
         rescue MessageError, AccessModeError => error
           response = refuse("invalid", error, timing)
-        rescue NoMemoryError, Errno::ENOMEM, MemoryExhausted => error
+        # NoMemoryError and MemoryExhausted are this input driving this worker past its own memory, which is
+        # permanent. Errno::ENOMEM is deliberately not here: a fork or mmap that cannot get memory is host
+        # pressure the input did not cause, so it falls through to `failed` with EMFILE and ENOSPC and is
+        # transient. Adding it back would condemn a blob for the cell's own bad moment.
+        rescue NoMemoryError, MemoryExhausted => error
           response = refuse(Codes::KILLED, error, timing, cause: Codes::MEMORY)
         rescue StandardError => error
           response = refuse("failed", error, timing)

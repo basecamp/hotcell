@@ -178,6 +178,17 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # A spawn that fails with ENOMEM is the host out of memory, not the input being a bomb, so it must be
+  # transient. Recording it as permanent memory would condemn a blob for the cell's own bad moment, the way
+  # ENOSPC or EMFILE would if they were not already transient.
+  def test_a_spawn_starved_of_memory_is_transient_rather_than_a_memory_verdict
+    TestCell.boot do |cell|
+      failure = assert_failed "failed", cell.call("test.starved_spawn")
+
+      refute_predicate failure, :permanent?
+    end
+  end
+
   def test_a_result_that_is_not_an_object
     TestCell.boot do |cell|
       assert_match "result is a String", assert_failed("failed", cell.call("test.bad_result")).message
