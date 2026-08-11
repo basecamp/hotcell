@@ -3,11 +3,7 @@
 
 require "hot_cell/server"
 
-# A derived image adds operations by copying files into a directory the base image scans, rather than by
-# changing this gem. Files load in sorted order, so a leading one can call HotCell.limits to configure the
-# cell before any operation is defined.
-operations = ENV.fetch("HOTCELL_OPERATIONS", "/hotcell/operations")
-Dir.glob(File.join(operations, "**", "*.rb")).sort.each { |file| require file }
+HotCell.load!
 
 HotCell::Supervisor
   .new(directory: ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell"), workspace: ENV["HOTCELL_WORKSPACE"])
