@@ -22,19 +22,25 @@ module HotCell
     end
 
     # A log line is never worth the cell. This runs inside the loop that enforces every request's deadline,
-    # and the sink is a pipe to a runtime that can go away or stop draining — EPIPE from a closed reader, or
-    # ENOSPC from whatever is behind it. Losing the line is the correct trade against losing the process.
+    # and the sink is a pipe to a runtime that can go away or stop draining. Losing the line is the correct
+    # trade against losing the process.
     def write(event, **fields)
-      @io.write line(event, fields)
+      emit line(event, fields)
     rescue JSON::GeneratorError
-      write_or_drop line(event, unloggable: fields.keys)
-    rescue SystemCallError, IOError
-      nil
+      emit line(event, unloggable: fields.keys)
     end
 
     private
-      def write_or_drop(line)
-        @io.write line
+      # Never blocks. A closed reader is EPIPE and a full disk behind the driver is ENOSPC, both rescued —
+      # but a reader that is alive and not draining is neither: a blocking write would simply park the
+      # deadline loop until the runtime resumed. A non-blocking write answers `:wait_writable` for the full
+      # pipe instead, and the line is dropped like any other.
+      #
+      # A short count would be a torn line, which a write at or under PIPE_BUF cannot produce. The one line
+      # that can exceed it is cell.boot's inventory, written once before the loop enforces anything and
+      # against an empty pipe.
+      def emit(line)
+        @io.write_nonblock line, exception: false
       rescue SystemCallError, IOError
         nil
       end
