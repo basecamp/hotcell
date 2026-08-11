@@ -10,3 +10,4 @@ one gets its own record and marks the earlier one superseded.
 | # | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-reuse-workers-across-requests.md) | A worker may serve more than one request, and serves one by default | Accepted |
+| [0002](0002-keep-the-warm-slot-home.md) | Keep the warm slot home, as an accepted trade-off | Accepted |
