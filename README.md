@@ -16,10 +16,10 @@ first use case. An operation is any code, and an input is any file.
 
 ## Usage
 
-A client class in the application and an operation class in the cell are never loaded in the same
-process, and they agree on two things only. The operation name routes the request, and the fixed
-signature — inputs, outputs, payload — is the whole contract for what crosses the socket. Descriptors
-travel as descriptors, the payload travels as one JSON object, and nothing else travels at all.
+Two classes cooperate to run code in the cell. The client in the application and the operation in the
+cell share a routing name, and the fixed signature — inputs, outputs, payload — is the whole contract
+for what crosses the socket. Descriptors travel as descriptors, the payload travels as one JSON object,
+and nothing else travels at all.
 
 ```ruby
 # In the application.
