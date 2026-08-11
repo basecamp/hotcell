@@ -26,9 +26,12 @@ module HotCell
     # **`failed` is what an unclassified exception becomes, so it cannot be permanent.**
     #
     # A worker rescues StandardError around the whole request and calls it `failed`. Errno::ENOSPC is a
-    # StandardError, and so are EMFILE, EIO and ENOENT. A shared tmpfs filled by concurrent requests, a full
-    # disk under the caller's own output, a descriptor table exhausted by load, a tool missing during a
-    # broken deploy — every one of those raises inside staging or writeback and arrives here.
+    # StandardError, and so are EMFILE, EIO, ENOENT and ENOMEM. A shared tmpfs filled by concurrent requests,
+    # a full disk under the caller's own output, a descriptor table exhausted by load, a fork that cannot get
+    # memory under host pressure, a tool missing during a broken deploy — every one of those raises inside
+    # staging or writeback and arrives here. ENOMEM is the one that looks like the input's fault and is not:
+    # the worker's own out-of-memory, where the input drove it past its limit, is a NoMemoryError, which the
+    # worker classifies `killed`/`memory` instead.
     #
     # Terminal meant each of them was written down against a customer's file and served from a cache forever,
     # for a condition that would have succeeded on retry. Permanence has to be claimed, never inferred from

@@ -122,6 +122,17 @@ module HotCell
       end
     end
 
+    # A tool spawn that fails because the host is out of memory. fork raises Errno::ENOMEM under host
+    # pressure, before the tool has read a byte of the input, so this is the cell having a bad moment
+    # rather than a decompression bomb — and it must not be recorded as a permanent memory verdict.
+    class StarvedSpawn < HotCell::Operation
+      operation "test.starved_spawn"
+
+      def perform(_inputs, _outputs)
+        raise Errno::ENOMEM, "Cannot allocate memory - fork(2)"
+      end
+    end
+
     class BadResult < HotCell::Operation
       operation "test.bad_result"
 

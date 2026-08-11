@@ -79,6 +79,12 @@ module HotCell
     # RLIMIT_FSIZE, and SEGV, ABRT and TRAP are how libvips and GLib die on their own allocation failures —
     # libvips dereferences null after printing the correct diagnostic, and g_malloc aborts.
     #
+    # These three are the worker hitting its own per-worker RLIMIT_DATA, which is a property of the input
+    # this worker held, so the same bytes do it again and the verdict is permanent. `Codes` says a signal
+    # tells how a process died and never why, so a signal is transient by default — and that is not in
+    # conflict with a permanent verdict here, because aggregate pressure the worker did not cause arrives as
+    # SIGKILL, not as these. The two are different signals, and SIGKILL is excluded below.
+    #
     # SIGKILL is deliberately absent, and its absence is the point. The supervisor's own deadline kill is
     # already named by `killed_for`, so a SIGKILL reaching this table came from somewhere this process
     # cannot see: a cgroup OOM chosen on aggregate pressure, or a sibling worker, which shares a uid and is
