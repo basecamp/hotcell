@@ -106,7 +106,7 @@ the cell with `hotcell` and the operation with `operation`, and exposes `perform
 blocking call — it sends the request and waits for the cell's answer, up to the `timeout` the cell was
 registered with.
 
-A **tool** is a program an operation runs in a subprocess — `soffice`, `mutool`, `ffmpeg` — via `convert`,
+A **tool** is a program an operation runs in a subprocess — `soffice`, `mutool`, `ffmpeg` — via `run_tool`,
 with a fully written environment and bounded capture of its output. The worker waits for it, and the tool
 sees only the environment its operation wrote for it.
 
@@ -201,7 +201,7 @@ end
 `before_fork` runs once in the supervisor and must never evaluate an image; `before_worker_boot` runs in the
 worker and is where a library gets sized. `unreadable` names the library exceptions that mean "this input
 cannot be decoded" — the one verdict an operation can make permanent. An operation that shells out calls
-`convert "mutool", "draw", ...` and gets the exit status and bounded output back; the tool sees only the
+`run_tool "mutool", "draw", ...` and gets the exit status and bounded output back; the tool sees only the
 environment the operation wrote.
 
 ### Configure and build the cell

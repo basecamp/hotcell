@@ -11,7 +11,7 @@ module HotCell
   # here, when `performing` is called.
   #
   # Phases accumulate as they complete, so a refusal reports the ones that finished before the failure. An
-  # `unreadable` verdict that arrives with no `convert_ms` says exactly where it got to.
+  # `unreadable` verdict that arrives with no `operation_ms` says exactly where it got to.
   class Timing
     attr_reader :queued_ms, :started
 

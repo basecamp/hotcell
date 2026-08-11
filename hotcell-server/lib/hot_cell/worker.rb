@@ -118,13 +118,13 @@ module HotCell
         narrow operation
         report_deadline operation
 
-        convert operation, inputs, outputs, request.payload, timing
+        perform operation, inputs, outputs, request.payload, timing
       end
 
-      def convert(operation, inputs, outputs, payload, timing)
+      def perform(operation, inputs, outputs, payload, timing)
         timing.performing
 
-        result = timing.measure(:convert_ms) { operation.new.perform(inputs, outputs, **payload) }
+        result = timing.measure(:operation_ms) { operation.new.perform(inputs, outputs, **payload) }
         written = timing.measure(:writeback_ms) { outputs.map(&:post) }
 
         return unwritten(outputs, written, timing) if written.any?(&:zero?)

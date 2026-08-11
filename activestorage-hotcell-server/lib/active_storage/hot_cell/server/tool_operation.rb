@@ -26,11 +26,11 @@ module ActiveStorage
           # `unreadable`. The tool's own stderr is the only useful diagnostic, and it is attacker-influenced,
           # so it is capped and scrubbed on its way onto the wire like any other error message.
           def run!(*command)
-            converted = convert(*command)
-            return converted if converted.ok?
+            result = run_tool(*command)
+            return result if result.ok?
 
-            raise UnreadableDocument, "#{command.first} exited #{converted.status.exitstatus}: " \
-                                      "#{converted.err.to_s.strip[0, 200]}"
+            raise UnreadableDocument, "#{command.first} exited #{result.status.exitstatus}: " \
+                                      "#{result.err.to_s.strip[0, 200]}"
           end
 
           def refuse!(message)

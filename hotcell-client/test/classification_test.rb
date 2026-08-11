@@ -119,13 +119,13 @@ class ClassificationTest < HotCellClientTest
   end
 
   def test_the_event_carries_no_code_on_success
-    register_with HotCell::Response.ok(result: {}, timing: { perform_ms: 12, convert_ms: 9 })
+    register_with HotCell::Response.ok(result: {}, timing: { perform_ms: 12, operation_ms: 9 })
 
     event = events_for { Anything.perform_in_hotcell [], [], {} }.first.payload
 
     assert_nil event[:code]
     assert_equal 12, event[:perform_ms]
-    assert_equal({ perform_ms: 12, convert_ms: 9 }, event[:timing])
+    assert_equal({ perform_ms: 12, operation_ms: 9 }, event[:timing])
   end
 
   # The client never reconnects and never retries. A silent retry doubles a cell's load at the moment it is

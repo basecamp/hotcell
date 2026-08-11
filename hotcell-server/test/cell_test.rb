@@ -20,10 +20,10 @@ class CellTest < HotCellServerTest
       with_files do |source, destination|
         timing = assert_ok(cell.call("test.uppercase", inputs: [ source ], outputs: [ destination ])).timing
 
-        [ :queued_ms, :convert_ms, :writeback_ms, :perform_ms ].each do |key|
+        [ :queued_ms, :operation_ms, :writeback_ms, :perform_ms ].each do |key|
           assert timing.key?(key), "expected #{key} in #{timing.inspect}"
         end
-        assert_operator timing[:perform_ms], :>=, timing[:convert_ms]
+        assert_operator timing[:perform_ms], :>=, timing[:operation_ms]
       end
     end
   end
@@ -154,14 +154,14 @@ class CellTest < HotCellServerTest
   end
 
   # A refusal reports only the phases that finished before it, so a verdict says where the request got to
-  # rather than only that it failed. Converting never finished here, and posting never started.
+  # rather than only that it failed. The operation never finished here, and posting never started.
   def test_a_refusal_reports_only_the_phases_that_completed
     TestCell.boot do |cell|
       with_files do |source, destination|
         response = cell.call "test.declared_unreadable", inputs: [ source ], outputs: [ destination ]
         assert_failed "unreadable", response
 
-        refute response.timing.key?(:convert_ms), "converting never finished, so it must not be reported"
+        refute response.timing.key?(:operation_ms), "the operation never finished, so it must not be reported"
         refute response.timing.key?(:writeback_ms), "posting never started, so it must not be reported"
         assert response.timing.key?(:perform_ms), "expected perform_ms in #{response.timing.inspect}"
       end

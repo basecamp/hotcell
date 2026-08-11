@@ -141,7 +141,7 @@ class IntegrationTest < HotCellClientTest
       event = events_for { Echo.perform_in_hotcell [], [], {} }.first.payload
 
       assert_operator event[:perform_ms], :>=, 0
-      [ :queued_ms, :convert_ms, :perform_ms ].each do |key|
+      [ :queued_ms, :operation_ms, :perform_ms ].each do |key|
         assert event[:timing].key?(key), "expected #{key} in #{event[:timing].inspect}"
       end
     end
