@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "securerandom"
 
 module HotCell
   # Slots are a consequence of the concurrency limit rather than something to configure. At most
@@ -55,12 +56,18 @@ module HotCell
     # A rename within one filesystem is O(1) and takes the tree out of the way. A worker sweeps it later,
     # after it has answered and before it reports itself idle — see Worker#serve, which is the one window
     # where the unlinking costs nobody's latency.
+    #
+    # The destination carries a random suffix rather than a counter, because the tool that filled the
+    # directory runs as this user and can write to the slot's workspace. A predictable name lets it
+    # pre-create a colliding entry, fail the rename, and send the supervisor into the recursive delete the
+    # rename exists to avoid. On any rename failure the tree is left where it is, for a later worker's own
+    # cleanup to remove off the hot path. The supervisor never deletes a tree inline, whatever goes wrong.
     def discard_scratch
       return unless Dir.exist?(scratch)
 
-      File.rename scratch, "#{scratch}.discarded-#{Process.pid}-#{(@discarded = @discarded.to_i + 1)}"
+      File.rename scratch, "#{scratch}.discarded-#{Process.pid}-#{SecureRandom.hex(8)}"
     rescue SystemCallError
-      remove_scratch
+      nil
     end
 
     # The home survives between requests on purpose, so it is created once; scratch must not, so anything
