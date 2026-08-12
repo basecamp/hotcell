@@ -5,7 +5,9 @@ require "active_storage"
 require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/transformers/vips"
+require "active_storage/hot_cell/client/transformers/image_magick"
 require "active_storage/hot_cell/client/analyzers/image_analyzer/vips"
+require "active_storage/hot_cell/client/analyzers/image_analyzer/image_magick"
 require "active_storage/hot_cell/client/analyzers/media_analyzer"
 require "active_storage/hot_cell/client/previewers"
 require "active_storage/hot_cell/client/railtie" if defined?(::Rails::Railtie)
@@ -36,7 +38,8 @@ module ActiveStorage
       # the jobs must retry. Deliberately not HotCell.clients: that records every client the process loaded,
       # including an application's own for unrelated cells, and Active Storage's jobs have no business
       # retrying those.
-      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewVideo, ProbeMedia ].freeze
+      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewVideo, ProbeMedia,
+                  MagickTransformImage, MagickAnalyzeImage ].freeze
 
       class << self
         # The railtie calls this from a to_prepare block. Applied once at boot it would not survive a code

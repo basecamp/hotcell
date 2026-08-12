@@ -238,8 +238,9 @@ class TransformImageTest < ActiveStorageHotCellTest
         cell.answer connection
       end
 
-      assert_equal %w[ active_storage.analyze_image active_storage.preview_pdf active_storage.preview_video
-                       active_storage.probe_media active_storage.transform_image ],
+      assert_equal %w[ active_storage.analyze_image active_storage.analyze_image_imagemagick
+                       active_storage.preview_pdf active_storage.preview_video active_storage.probe_media
+                       active_storage.transform_image active_storage.transform_image_imagemagick ],
                    assert_ok(described).result[:operations]
     end
   end

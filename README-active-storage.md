@@ -47,8 +47,9 @@ are permitted, and which keys inside `loader`/`saver` (`page`, `n`, `quality`, `
 `access`, `fail-on`, `revalidate` no). It must be one visible list rather than a filter hidden in a
 translation step, and it is deliberately not present yet.
 
-**An ImageMagick-compatible transformer and analyzer.** `Transformers::Vips` and
-`Analyzers::ImageAnalyzer::Vips` are named for their toolchain so these can sit beside them. Until they exist,
-URLs minted on `mini_magick` — carrying `coalesce`, or top-level `quality` and `strip` — are refused, exactly
-as they raise under Rails on vips. An application moving between the two rewrites them at its own boundary in
-the meantime, the way BC4 does.
+**Cell-side allowlist enforcement.** Rails' ImageMagick transformer enforces
+`supported_image_processing_methods` and an argument blocklist, and the client `Transformers::ImageMagick`
+keeps that check where Rails runs it — in the application, before a request crosses to the cell. The vips
+path has no such allowlist, in Rails or here. A future enhancement moves an explicit allowlist into the cell
+itself, so the boundary rather than the caller's configuration is what bounds the operation set; until then
+the cell applies what it is sent, bounded by its resource limits.
