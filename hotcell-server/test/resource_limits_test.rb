@@ -8,7 +8,13 @@ class ResourceLimitsTest < HotCellServerTest
   CELL_MEMORY = 1200 * 1024**2
   CELL_FILE_SIZE = 8 * 1024 * 1024
 
+  # macOS/XNU rejects a finite RLIMIT_DATA, so the cell runs unclamped there and the memory-clamp assertions
+  # below cannot hold. They skip where the clamp is not enforceable.
+  MEMORY_UNENFORCED = "RLIMIT_DATA is not settable on this platform, so the cell runs unclamped"
+
   def test_a_worker_runs_under_the_cells_limits
+    skip MEMORY_UNENFORCED unless memory_clamp_enforced?
+
     boot do |cell|
       limits = assert_ok(cell.call("test.rlimits")).result
 
@@ -22,6 +28,8 @@ class ResourceLimitsTest < HotCellServerTest
   # lets a reused worker widen back for an operation with a different budget. Setting both would make the
   # first request the tightest the worker could ever be.
   def test_an_operation_narrows_the_soft_limit_and_leaves_the_hard_one_alone
+    skip MEMORY_UNENFORCED unless memory_clamp_enforced?
+
     boot do |cell|
       limits = assert_ok(cell.call("test.frugal")).result
 
@@ -35,6 +43,8 @@ class ResourceLimitsTest < HotCellServerTest
   # declares, and unclamped this does not merely get too much — it asks for a soft limit above its own hard
   # limit, which is EINVAL, and the worker dies before it can answer.
   def test_an_operation_asking_for_more_than_the_cell_allows_gets_the_cells_numbers
+    skip MEMORY_UNENFORCED unless memory_clamp_enforced?
+
     boot do |cell|
       limits = assert_ok(cell.call("test.extravagant")).result
 
@@ -94,6 +104,8 @@ class ResourceLimitsTest < HotCellServerTest
   # tempting to report as an ordinary failure. It is the decompression-bomb case, so it belongs with the
   # other resource verdicts where a caller can act on it without parsing a message.
   def test_allocating_past_the_memory_limit_is_killed_rather_than_failed
+    skip MEMORY_UNENFORCED unless memory_clamp_enforced?
+
     boot do |cell|
       failure = assert_failed "killed", cell.call("test.greedy", payload: { megabytes: 900 }, timeout: 30),
                               cause: "memory"
@@ -111,5 +123,15 @@ class ResourceLimitsTest < HotCellServerTest
   private
     def boot(**options, &block)
       TestCell.boot(memory: CELL_MEMORY, file_size: CELL_FILE_SIZE, **options, &block)
+    end
+
+    # Whether a finite RLIMIT_DATA can be set here, probed without lasting effect. macOS returns EINVAL.
+    def memory_clamp_enforced?
+      soft, hard = Process.getrlimit(Process::RLIMIT_DATA)
+      Process.setrlimit(Process::RLIMIT_DATA, CELL_MEMORY, hard)
+      Process.setrlimit(Process::RLIMIT_DATA, soft, hard)
+      true
+    rescue Errno::EINVAL
+      false
     end
 end
