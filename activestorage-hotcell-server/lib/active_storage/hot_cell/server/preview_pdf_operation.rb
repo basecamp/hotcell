@@ -35,7 +35,7 @@ module ActiveStorage
           resolution = positive_integer!(:resolution, resolution, MAX_RESOLUTION)
 
           run! "mutool", "draw", "-F", "png", "-r", resolution.to_s, "-o", destination.path,
-               source.path, page.to_s
+               source.fd_path, page.to_s, pass: [ source.to_io ]
 
           { format: "png", content_type: "image/png", page: page, resolution: resolution,
             bytes: produced!(destination.path, "mutool") }

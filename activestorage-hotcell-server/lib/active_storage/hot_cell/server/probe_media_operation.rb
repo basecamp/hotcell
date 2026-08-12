@@ -39,13 +39,14 @@ module ActiveStorage
         def perform(inputs, _outputs)
           source, = inputs
           probed = JSON.parse(run!("ffprobe", "-v", "quiet", "-print_format", "json",
-                                   "-show_format", "-show_streams", source.path).out)
+                                   "-show_format", "-show_streams", source.fd_path,
+                                   pass: [ source.to_io ]).out)
 
           video = stream_of(probed, "video")
           audio = stream_of(probed, "audio")
 
           { duration: number(probed.dig("format", "duration")),
-            bytes: File.size(source.path) }
+            bytes: source.to_io.stat.size }
             .merge(video ? video_metadata(video) : {})
             .merge(audio ? audio_metadata(audio) : {})
             .compact

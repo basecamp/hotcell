@@ -240,6 +240,20 @@ module HotCell
       limits deadline: 300
     end
 
+    # Hands an exec'd tool the input descriptor and has it read the bytes back through /dev/fd, so a test
+    # can prove run_tool's `pass:` exposes a descriptor to a tool without staging it. Reports whether the
+    # input was copied onto scratch, which must be false.
+    class ReadThroughFd < HotCell::Operation
+      operation "test.read_through_fd"
+
+      def perform(inputs, _outputs)
+        source, = inputs
+        result = run_tool "cat", source.fd_path, pass: [ source.to_io ]
+
+        { content: result.out, ok: result.ok?, staged: source.staged? }
+      end
+    end
+
     # Reports what an exec'd tool can see of its environment, and what the worker itself can see, so a
     # test can prove the canary was really there before proving the tool never got it.
     class Environment < HotCell::Operation

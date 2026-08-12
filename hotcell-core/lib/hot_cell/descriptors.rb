@@ -31,6 +31,18 @@ module HotCell
       io
     end
 
+    # The path that reads or writes this descriptor in place, without a copy onto scratch. `/dev/fd/N`
+    # names the open file behind fd N: the worker itself may open it (libvips does), and a spawned tool
+    # sees it too when the worker hands the fd across the exec at the same number — see Operation#run_tool.
+    #
+    # This is what keeps a multi-gigabyte input off a small tmpfs: the descriptor is the caller's own file,
+    # readable at any size, where staging it would be a write and RLIMIT_FSIZE bounds writes. Reopening
+    # `/dev/fd/N` gives a fresh file description at offset zero, so a read here does not disturb the
+    # descriptor the supervisor still holds.
+    def fd_path
+      "/dev/fd/#{io.fileno}"
+    end
+
     def close
       io.close unless io.closed?
     end
@@ -80,13 +92,14 @@ module HotCell
   class Input < Descriptor
     ACCESS_MODE = Fcntl::O_RDONLY
 
-    # Copies the bytes onto the worker's own scratch on the first call and returns the filename. Every
-    # subprocess tool wants a filename, and image_processing is filename-in and filename-out, so
-    # this is the general model rather than a workaround. RLIMIT_FSIZE bounds this copy as well as the
-    # output, which is why one number covers both.
+    # Copies the bytes onto the worker's own scratch on the first call and returns the filename. This is the
+    # fallback, for an operation that genuinely needs a real file. Prefer `fd_path`, which reads the
+    # descriptor in place: staging is a write, so RLIMIT_FSIZE bounds it, and an input larger than the
+    # operation's file_size dies here as a permanent `fsize` verdict — a ceiling Rails does not have. The
+    # Active Storage operations all read `fd_path` for exactly that reason; nothing should reach for `path`
+    # without a specific need for a distinct on-disk copy.
     #
-    # On call rather than up front, so an operation that can consume the descriptor directly — ffprobe
-    # reads only a container header — never pays to copy a multi-gigabyte input onto a small tmpfs.
+    # On call rather than up front, so an operation that never asks for a staged path never pays for the copy.
     def path
       @path ||= copied_to(scratch_path)
     end

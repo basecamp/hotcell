@@ -24,10 +24,10 @@ module ActiveStorage
 
         def perform(inputs, _outputs)
           source, = inputs
-          image = ::Vips::Image.new_from_file(source.path, access: :sequential)
+          image = ::Vips::Image.new_from_file(source.fd_path, access: :sequential)
 
           { **dimensions_of(image), **frames_of(image),
-            bytes: File.size(source.path), tracked_mem_highwater: vips_highwater }
+            bytes: source.to_io.stat.size, tracked_mem_highwater: vips_highwater }
         end
 
         private

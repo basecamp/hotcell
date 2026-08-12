@@ -37,6 +37,18 @@ class ProbeMediaTest < ActiveStorageHotCellTest
     end
   end
 
+  # ffprobe reads the input through a passed descriptor, not a scratch copy, so probing is not bounded by
+  # file_size — the write limit. A media file larger than that limit is probed rather than killed while
+  # being staged. This exercises the same run_tool descriptor passing that both previewers use.
+  def test_an_input_larger_than_the_write_limit_is_still_probed
+    Cell.boot(file_size: 4 * 1024) do |cell|
+      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
+
+      assert result[:audio]
+      assert_equal "mp3", result[:audio_codec]
+    end
+  end
+
   def test_something_that_is_not_media_is_unreadable
     Cell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("active_storage.probe_media",

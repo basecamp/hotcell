@@ -24,8 +24,8 @@ module ActiveStorage
           # Runs the tool with unsetenv_others and a written environment, and turns a non-zero exit into
           # `unreadable`. The tool's own stderr is the only useful diagnostic, and it is attacker-influenced,
           # so it is capped and scrubbed on its way onto the wire like any other error message.
-          def run!(*command)
-            result = run_tool(*command)
+          def run!(*command, pass: [])
+            result = run_tool(*command, pass: pass)
             return result if result.ok?
 
             raise UnreadableDocument, "#{command.first} exited #{result.status.exitstatus}: " \

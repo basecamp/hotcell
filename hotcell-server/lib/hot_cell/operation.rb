@@ -142,10 +142,18 @@ module HotCell
     # returns and nothing else: an input that makes a tool print gigabytes of diagnostics had already
     # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
     # verdict, which is permanent, for a document whose only crime was being noisy.
-    def run_tool(*command, env: {}, capture: 64 * 1024)
+    # `pass` hands the tool a set of the worker's own descriptors — an input to read, an output to write —
+    # at their existing fd numbers, so the tool reaches them as `/dev/fd/N` (Descriptor#fd_path) and no
+    # byte is copied onto scratch to give it a filename. A fd handed to a child this way loses its
+    # close-on-exec, which is exactly the inheritance wanted, and only for these; the worker's other
+    # descriptors are untouched. Passing an fd at its own number cannot collide with the stdio pipes popen3
+    # installs on 0, 1 and 2, because a received descriptor is never one of those.
+    def run_tool(*command, env: {}, capture: 64 * 1024, pass: [])
       require "open3"
 
-      Open3.popen3(tool_environment(env), *command, unsetenv_others: true) do |stdin, out, err, thread|
+      inherit = pass.to_h { |io| [ io.fileno, io.fileno ] }
+
+      Open3.popen3(tool_environment(env), *command, unsetenv_others: true, **inherit) do |stdin, out, err, thread|
         stdin.close
         captured = drain(out, err, capture)
 

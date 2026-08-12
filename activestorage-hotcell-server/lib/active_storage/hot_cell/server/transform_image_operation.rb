@@ -26,7 +26,7 @@ module ActiveStorage
           destination, = outputs
 
           format = format.to_s
-          produced = pipeline(source.path, format, operations).call
+          produced = pipeline(source.fd_path, format, operations).call
 
           begin
             IO.copy_stream produced.path, destination.path
