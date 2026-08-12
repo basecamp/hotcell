@@ -16,10 +16,9 @@ module ActiveStorage
         abstract_operation
 
         # A tool that exits non-zero on a document it cannot read is the commonest failure on this path, and
-        # it is the input's fault rather than the operation's.
+        # it is the input's fault rather than the operation's. No `unreadable` declaration is needed:
+        # UnreadableInput is always in the rescue list, and this descends from it.
         class UnreadableDocument < ::HotCell::UnreadableInput; end
-
-        unreadable UnreadableDocument
 
         private
           # Runs the tool with unsetenv_others and a written environment, and turns a non-zero exit into

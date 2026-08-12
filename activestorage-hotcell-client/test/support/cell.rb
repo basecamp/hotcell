@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "hot_cell/test_cell"
-
 # A real cell in a genuinely separate process, started the way a container starts one.
 #
 # The shipped `HotCell::TestCell` forks, which is right for a suite whose process holds nothing. This one spawns
@@ -23,9 +21,8 @@ class Cell
 
   attr_reader :name, :directory, :socket_root, :log_path
 
-  def self.boot(name: "active_storage", **options)
-    cell = new(name: name, **options).start
-    return cell unless block_given?
+  def self.boot
+    cell = new.start
 
     begin
       yield cell
@@ -35,9 +32,8 @@ class Cell
     end
   end
 
-  def initialize(name: "active_storage", boot: BOOT)
+  def initialize(name: "active_storage")
     @name = name
-    @boot = boot
     @root = Dir.mktmpdir "hotcell-client-test"
     @socket_root = @root
     @directory = File.join(@root, name)
@@ -47,7 +43,7 @@ class Cell
 
   def start
     FileUtils.mkdir_p [ @directory, @operations ]
-    File.write File.join(@operations, "00_boot.rb"), @boot
+    File.write File.join(@operations, "00_boot.rb"), BOOT
 
     @pid = Process.spawn(environment, RbConfig.ruby, *LIBS.flat_map { |lib| [ "-I", lib ] }, EXE,
                          out: @log_path, err: @log_path)
