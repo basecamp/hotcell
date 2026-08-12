@@ -24,6 +24,19 @@ class ProbeMediaTest < ActiveStorageHotCellTest
     end
   end
 
+  def test_probing_audio_returns_its_codec_and_sample_rate_and_no_dimensions
+    Cell.boot do |cell|
+      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
+
+      assert result[:audio]
+      assert_equal "mp3", result[:audio_codec]
+      assert_equal 44_100, result[:sample_rate]
+      assert_in_delta 1.0, result[:duration], 0.2
+      refute result.key?(:width)
+      refute result.key?(:height)
+    end
+  end
+
   def test_something_that_is_not_media_is_unreadable
     Cell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("active_storage.probe_media",
