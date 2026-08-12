@@ -82,6 +82,20 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
+  # Rails' default preview arguments choose the first keyframe or scene change rather than the literal first
+  # frame, because so many videos open on black. A drop-in replacement has to keep that choice: fade_in.mp4
+  # opens on half a second of black before a hard cut, and its preview must come from after the cut.
+  def test_a_video_that_opens_on_black_previews_as_the_scene_rather_than_the_black
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("fade_in.mp4") ],
+                                                            outputs: [ destination ])
+
+        assert_operator brightness(destination), :>, 0.1, "the preview is the black opening frame"
+      end
+    end
+  end
+
   # video_preview_arguments is a shell string an application can set, and Rails splits it with Shellwords. A cell
   # exists so that nobody but the operation chooses what a tool runs, so the payload carries one number.
   def test_a_caller_cannot_choose_what_ffmpeg_runs
@@ -124,4 +138,14 @@ class PreviewersTest < ActiveStorageHotCellTest
       end
     end
   end
+
+  private
+    # Mean intensity over the whole image, 0 black to 1 white, from ImageMagick so the claim does not come
+    # from the toolchain that produced the bytes.
+    def brightness(path)
+      value = `magick identify -format '%[fx:mean]' #{path.shellescape} 2>/dev/null`
+      skip "ImageMagick is not installed" if value.empty?
+
+      Float(value)
+    end
 end
