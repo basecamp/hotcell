@@ -21,6 +21,13 @@ module ActiveStorage
 
         MAX_SEEK = 86_400
 
+        # Rails' own frame selection, verbatim from the 7.0 defaults: frame 0, keyframes, and scene changes
+        # over 0.015 are selected, and the loop/trim pair yields the second of those with the first as the
+        # fallback — so a video that opens on black previews as its first scene rather than as the black.
+        # Fixed here rather than taken from the caller, because `video_preview_arguments` is the shell string
+        # this operation exists to not accept.
+        RELEVANT_FRAME = 'select=eq(n\,0)+eq(key\,1)+gt(scene\,0.015),loop=loop=-1:size=2,trim=start_frame=1'
+
         def perform(inputs, outputs, seek: 0)
           source, = inputs
           destination, = outputs
@@ -33,6 +40,7 @@ module ActiveStorage
           # -ss before -i seeks by keyframe, which is orders of magnitude cheaper on a long file than decoding up
           # to the point. -nostdin because ffmpeg reads the terminal otherwise, and a worker has no terminal.
           run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s, "-i", source.path,
+               "-vf", RELEVANT_FRAME,
                "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.path
 
           { format: "jpg", content_type: "image/jpeg", seek: seek,
