@@ -171,11 +171,16 @@ class WorkerReportsTest < HotCellServerTest
     pending = HotCell::Supervisor::Pending.new(HotCell::Connection.new(server_side), HotCell::Clock.now, "".b)
     @supervisor.instance_variable_get(:@control_pending) << pending
 
-    client_side.write %({"v":#{HotCell::PROTOCOL_VERSION},"op":"#{HotCell::METRICS}",) +
-                      %("inputs":0,"outputs":0,"payload":{"pad":"#{"x" * 9000}"}}\n)
+    writer = Thread.new do
+      client_side.write %({"v":#{HotCell::PROTOCOL_VERSION},"op":"#{HotCell::METRICS}",) +
+                        %("inputs":0,"outputs":0,"payload":{"pad":"#{"x" * 9000}"}}\n)
+    rescue IOError, Errno::EPIPE
+    end
     drain_control pending
 
     assert_failed "invalid", HotCell::Response.parse(client_side.gets)
+  ensure
+    writer&.kill
   end
 
   # `running < concurrency ||` short-circuited the cap. That reads like a fast path and is a hole: when fork
