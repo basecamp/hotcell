@@ -76,8 +76,33 @@ module HotCell
       RESOURCES.each do |key, resource|
         soft = self[key]
         next if soft.nil?
+        next if key == :memory && !self.class.memory_enforceable?
 
-        Process.setrlimit resource, soft, ceiling[key] || soft
+        begin
+          Process.setrlimit resource, soft, ceiling[key] || soft
+        rescue Errno::EINVAL
+          raise unless key == :memory
+
+          self.class.memory_unenforceable!
+        end
+      end
+    end
+
+    # macOS/XNU has no finite RLIMIT_DATA and returns EINVAL for any value, so the memory clamp cannot be set
+    # there. Rather than crash every worker, warn once and run unclamped — the memory limit is a Linux property
+    # and production is Linux. The suite skips the enforcement assertions off Linux.
+    @memory_enforceable = true
+
+    class << self
+      def memory_enforceable?
+        @memory_enforceable
+      end
+
+      def memory_unenforceable!
+        return unless @memory_enforceable
+
+        @memory_enforceable = false
+        warn "hotcell: RLIMIT_DATA is not settable on #{RUBY_PLATFORM}; the cell's memory limit is not enforced"
       end
     end
 
