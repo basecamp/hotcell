@@ -25,14 +25,18 @@ module ActiveStorage
       # application image, because the window between those two events fails silently.
       module Previewing
         private
-          def render_through(client, input, extension, content_type, payload = {})
-            Tempfile.create([ "hotcell-preview", extension ], binmode: true) do |output|
-              File.open(input.path, "rb") do |readable|
-                File.open(output.path, "wb") { |writable| client.perform_in_hotcell [ readable ], [ writable ], payload }
+          # The filename extension and content type come from the cell's own result rather than being
+          # restated here, so the operation is the one source of truth for what it produced. The scratch
+          # tempfile's name never reaches Rails — only the yielded filename does.
+          def render_through(client, input)
+            Tempfile.create("hotcell-preview", binmode: true) do |output|
+              result = File.open(input.path, "rb") do |readable|
+                File.open(output.path, "wb") { |writable| client.perform_in_hotcell [ readable ], [ writable ] }
               end
 
               File.open(output.path, "rb") do |io|
-                yield io: io, filename: "#{blob.filename.base}#{extension}", content_type: content_type
+                yield io: io, filename: "#{blob.filename.base}.#{result[:format]}",
+                      content_type: result[:content_type]
               end
             end
           end
@@ -49,7 +53,7 @@ module ActiveStorage
 
         def preview(**options)
           download_blob_to_tempfile do |input|
-            render_through(PreviewPdf, input, ".png", "image/png") do |attachable|
+            render_through(PreviewPdf, input) do |attachable|
               yield(**attachable, **options)
             end
           end
@@ -66,7 +70,7 @@ module ActiveStorage
 
         def preview(**options)
           download_blob_to_tempfile do |input|
-            render_through(PreviewVideo, input, ".jpg", "image/jpeg") do |attachable|
+            render_through(PreviewVideo, input) do |attachable|
               yield(**attachable, **options)
             end
           end
