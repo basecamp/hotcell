@@ -149,10 +149,18 @@ class ConnectionTest < HotCellTest
     assert_nil cold.read_line
   end
 
+  # The write runs in its own thread because it is larger than a socket's send buffer, and on a platform whose
+  # buffer is smaller than the message a single-threaded write blocks before the reader on the next line ever
+  # runs. In production the two ends are separate processes, so the reader drains while the writer writes.
   def test_an_oversized_response_is_refused
-    hot.socket.write "x" * (HotCell::MAX_RESPONSE_BYTES + 1)
+    writer = Thread.new do
+      hot.socket.write "x" * (HotCell::MAX_RESPONSE_BYTES + 1)
+    rescue IOError, Errno::EPIPE
+    end
 
     assert_raises(HotCell::MessageError) { cold.read_line }
+  ensure
+    writer&.kill
   end
 
   # A stream socket may send less than it was given. When the short send is the one carrying the ancillary
