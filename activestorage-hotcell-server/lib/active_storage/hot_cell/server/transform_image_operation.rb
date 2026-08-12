@@ -26,13 +26,16 @@ module ActiveStorage
           destination, = outputs
 
           format = format.to_s
-          produced = pipeline(source.fd_path, format, operations).call
 
-          begin
-            IO.copy_stream produced.path, destination.path
-          ensure
-            produced.close!
-          end
+          # ImageProcessing chooses its saver from the destination's extension, and a scratch path has none,
+          # so encode to a suffixed name on the slot's own scratch and rename it into place. That is one
+          # rename rather than the copy-out-of-Dir.tmpdir that a destination-less `call` would do, and it
+          # keeps ImageProcessing's own saver — quality, strip, format defaults — rather than reaching past
+          # it to a Vips::Target, which cannot reproduce those without restating them. Output#post makes the
+          # one remaining copy, out through the caller's descriptor.
+          encoded = "#{destination.path}.#{format}"
+          pipeline(source.fd_path, format, operations).call(destination: encoded)
+          File.rename encoded, destination.path
 
           describe destination.path, format
         end
