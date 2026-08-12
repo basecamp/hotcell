@@ -6,17 +6,22 @@ previewers Rails is configured with:
 
 ```ruby
 config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Vips
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips
+config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips,
+                                        ActiveStorage::HotCell::Client::Analyzers::VideoAnalyzer,
+                                        ActiveStorage::HotCell::Client::Analyzers::AudioAnalyzer
 config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
                                      ActiveStorage::HotCell::Client::VideoPreviewer ]
 ```
 
 Those declarations are the only thing an application writes; a railtie does the rest, including adding the
-transient class to the four Active Storage jobs' retry policies. The client gem exists because three things
-break the moment `variant_processor` is a class rather than a symbol: the built-in analyzers decline and
-blobs are marked analyzed with no dimensions, the built-in previewers answer `accept?` by shelling out to
-binaries that have left the image, and the jobs retry nothing useful. Each is closed in the gem, where the
-breakage is documented.
+transient class to the four Active Storage jobs' retry policies. The client gem exists because the built-in
+classes break the moment their tools leave the image: the image analyzers decline once `variant_processor`
+is a class and blobs are marked analyzed with no dimensions; the video and audio analyzers answer `accept?`
+by shelling out to ffprobe and go silent when it is gone; the previewers do the same with mutool and ffmpeg;
+and the jobs retry nothing useful. Each is closed in the gem, where the breakage is documented. The video
+and audio analyzers present exactly Rails' metadata, with one deliberate exception — Rails writes a media
+file's raw container `tags` into the database, and the cell refuses them, because those bytes are
+attacker-controlled.
 
 **`activestorage-hotcell-server` does not load Active Storage**, despite the name. The name says which
 consumer it serves, not what it links against. Everything application-side lives under
