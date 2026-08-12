@@ -11,10 +11,6 @@ require "fileutils"
 
 require "active_storage/hot_cell/client"
 
-# The cell side, so these tests run the real thing end to end: a Rails transformer, over a Unix socket, into a
-# forked worker that actually runs libvips.
-require "hot_cell/test_cell"
-
 require_relative "support/cell"
 require_relative "support/blob"
 
@@ -45,25 +41,25 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     end
 
     # Boots a real cell carrying the real operations, and registers it the way an application's initializer does.
-    def with_cell(name: ActiveStorage::HotCell::Client::CELL, register: {}, **options)
-      Cell.boot(name: name, **options) do |cell|
+    def with_cell
+      Cell.boot do |cell|
         HotCell.root = cell.socket_root
-        HotCell.register name, permanent: Unprocessable, transient: TemporarilyUnavailable, **register
+        HotCell.register ActiveStorage::HotCell::Client::CELL, permanent: Unprocessable,
+                         transient: TemporarilyUnavailable
 
         yield cell
       end
     end
 
     # For the cases about classification, where booting a cell to produce one verdict would be theatre.
-    def with_canned_response(response, register: {})
+    def with_canned_response(response)
       HotCell.root = "/nowhere"
       HotCell.register ActiveStorage::HotCell::Client::CELL, permanent: Unprocessable,
-                       transient: TemporarilyUnavailable, transport: CannedTransport.new(response), **register
+                       transient: TemporarilyUnavailable, transport: CannedTransport.new(response)
     end
 
-    def failed(code, cause: nil, message: "no")
-      HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, message: message),
-                               timing: { perform_ms: 1 }
+    def failed(code)
+      HotCell::Response.failed HotCell::Failure.new(code: code, message: "no"), timing: { perform_ms: 1 }
     end
 
     # Both built-in previewers memoize the answer to "is the binary there", so setting that memo says the binary

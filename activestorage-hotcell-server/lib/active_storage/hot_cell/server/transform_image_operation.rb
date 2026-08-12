@@ -44,6 +44,8 @@ module ActiveStorage
         # Bounding what may appear inside them is a planned feature — see the allowlist note in the README.
         PIPELINE = %w[ loader saver ].freeze
 
+        ALLOWED = (OPERATIONS + PIPELINE).freeze
+
         def perform(inputs, outputs, format:, operations: {})
           source, = inputs
           destination, = outputs
@@ -77,14 +79,10 @@ module ActiveStorage
             refuse! "operations must be an object, and this is a #{declared.class}" unless declared.is_a?(Hash)
 
             declared.filter_map do |name, argument|
-              refuse! "#{name} is not one of #{allowed.join(", ")}" unless allowed.include?(name.to_s)
+              refuse! "#{name} is not one of #{ALLOWED.join(", ")}" unless ALLOWED.include?(name.to_s)
 
               [ name, argument ] unless argument.nil? || argument == false
             end
-          end
-
-          def allowed
-            @allowed ||= (OPERATIONS + PIPELINE).freeze
           end
 
           # Read back what was just written. Several callers need it: an analyzer returns metadata and no bytes at
