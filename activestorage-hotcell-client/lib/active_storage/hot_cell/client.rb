@@ -6,6 +6,7 @@ require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/transformers/vips"
 require "active_storage/hot_cell/client/analyzers/image_analyzer/vips"
+require "active_storage/hot_cell/client/analyzers/media_analyzer"
 require "active_storage/hot_cell/client/previewers"
 require "active_storage/hot_cell/client/railtie" if defined?(::Rails::Railtie)
 

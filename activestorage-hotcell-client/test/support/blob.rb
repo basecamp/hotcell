@@ -35,6 +35,10 @@ class Blob
     content_type.start_with? "video/"
   end
 
+  def audio?
+    content_type.start_with? "audio/"
+  end
+
   # Yields a copy, as the real one does: Blob#open downloads to a tempfile rather than handing out the original.
   def open(tmpdir: nil, &block)
     Tempfile.create([ "blob", File.extname(path) ], tmpdir, binmode: true) do |file|
@@ -54,6 +58,7 @@ class Blob
       when ".svg" then "image/svg+xml"
       when ".pdf" then "application/pdf"
       when ".mp4" then "video/mp4"
+      when ".mp3" then "audio/mpeg"
       else "application/octet-stream"
       end
     end

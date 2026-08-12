@@ -3,37 +3,40 @@
 require "test_helper"
 
 class ProbeMediaTest < ActiveStorageHotCellTest
-  def test_probing_a_video_returns_its_shape
+  def test_probing_a_video_returns_the_shape_rails_records
     Cell.boot do |cell|
       result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp4") ])).result
 
-      assert_equal 64, result[:width]
-      assert_equal 48, result[:height]
-      assert_equal "h264", result[:video_codec]
+      assert_in_delta 64.0, result[:width], 0.01
+      assert_in_delta 48.0, result[:height], 0.01
+      assert_equal [ 4, 3 ], result[:display_aspect_ratio]
+      assert result[:video]
+      refute result[:audio]
       assert_in_delta 1.0, result[:duration], 0.2
       assert_equal File.size(fixture("sample.mp4")), result[:bytes]
     end
   end
 
-  def test_a_file_with_no_audio_says_nothing_about_audio
+  # Rails reports dimensions as floats, and a stream with no rotation carries no angle at all.
+  def test_dimensions_are_floats_and_an_unrotated_video_reports_no_angle
     Cell.boot do |cell|
       result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp4") ])).result
 
-      refute result.key?(:audio)
-      refute result.key?(:audio_codec)
+      assert_kind_of Float, result[:width]
+      refute result.key?(:angle)
     end
   end
 
-  def test_probing_audio_returns_its_codec_and_sample_rate_and_no_dimensions
+  def test_probing_audio_returns_the_shape_rails_records
     Cell.boot do |cell|
       result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
 
       assert result[:audio]
-      assert_equal "mp3", result[:audio_codec]
+      refute result[:video]
       assert_equal 44_100, result[:sample_rate]
+      assert_equal 64_000, result[:bit_rate]
       assert_in_delta 1.0, result[:duration], 0.2
       refute result.key?(:width)
-      refute result.key?(:height)
     end
   end
 
@@ -45,7 +48,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
       result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
 
       assert result[:audio]
-      assert_equal "mp3", result[:audio_codec]
+      assert_equal 44_100, result[:sample_rate]
     end
   end
 
@@ -58,18 +61,22 @@ class ProbeMediaTest < ActiveStorageHotCellTest
     end
   end
 
-  # Everything ffprobe reports is attacker-controlled, including title and artist tags, which arrive as arbitrary
-  # bytes that need not be valid UTF-8. Only numbers and codec names matching a conservative pattern come back,
-  # so a hostile string cannot ride a response that is supposed to carry facts about pixels into a database.
+  # Everything ffprobe reports is attacker-controlled, and a title or artist tag arrives as arbitrary bytes.
+  # Only numbers and codec names come back, so a hostile string cannot ride a response about pixels into a
+  # database. `tags`, which Rails stores raw, are never returned.
   CODEC = /\A[a-z0-9_]{1,32}\z/
 
   def test_only_numbers_and_recognisable_codec_names_come_back
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp4") ])).result
+      [ "sample.mp4", "sample.mp3" ].each do |name|
+        result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture(name) ])).result
 
-      result.each do |key, value|
-        assert value.is_a?(Numeric) || value == true || value.to_s.match?(CODEC),
-               "#{key} came back as #{value.inspect}, which is neither a number nor a codec name"
+        refute result.key?(:tags)
+        result.each do |key, value|
+          assert value.is_a?(Numeric) || value == true || value == false ||
+                 (value.is_a?(Array) && value.all?(Integer)) || value.to_s.match?(CODEC),
+                 "#{key} came back as #{value.inspect}, which is neither a number nor a codec name"
+        end
       end
     end
   end
