@@ -50,9 +50,10 @@ module ActiveStorage
         def retry_transient_failures!(jobs: JOBS)
           transients = CLIENTS.filter_map { |client| client.cell.transient if ::HotCell.cells.key?(client.hotcell) }
                               .uniq
+          return [] if transients.empty?
 
           jobs.filter_map { |name| Object.const_get(name) if Object.const_defined?(name) }
-              .each { |job| transients.each { |transient| job.retry_on transient, **RETRY } }
+              .each { |job| job.retry_on(*transients, **RETRY) }
         end
       end
     end
