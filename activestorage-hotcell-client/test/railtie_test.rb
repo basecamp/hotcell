@@ -16,8 +16,8 @@ require "active_storage/hot_cell/client/railtie" if defined?(Rails::Railtie)
 # save in development. Booting a real (if minimal) Rails application is the only way to hold either fact.
 class RailtieTest < ActiveStorageHotCellClientTest
   class RecordingJob
-    def self.retry_on(error, **options)
-      retried << [ error, options ]
+    def self.retry_on(*errors, **options)
+      retried << [ errors, options ]
     end
 
     def self.retried
@@ -40,13 +40,13 @@ class RailtieTest < ActiveStorageHotCellClientTest
 
     application.initialize!
 
-    assert_equal [ TemporarilyUnavailable ], RecordingJob.retried.map(&:first),
+    assert_equal [ TemporarilyUnavailable ], RecordingJob.retried.flat_map(&:first),
                  "boot did not teach the job to retry the transient class"
 
     RecordingJob.forget
     application.reloader.prepare!
 
-    assert_equal [ TemporarilyUnavailable ], RecordingJob.retried.map(&:first),
+    assert_equal [ TemporarilyUnavailable ], RecordingJob.retried.flat_map(&:first),
                  "a code reload lost the retry"
   ensure
     ActiveStorage.send :remove_const, :AnalyzeJob

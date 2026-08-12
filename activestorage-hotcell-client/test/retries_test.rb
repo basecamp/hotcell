@@ -10,7 +10,7 @@ class RetriesTest < ActiveStorageHotCellClientTest
 
     ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "RetriesTest::FakeJob" ]
 
-    assert_equal [ TemporarilyUnavailable ], FakeJob.retried.map(&:first)
+    assert_equal [ TemporarilyUnavailable ], FakeJob.retried.flat_map(&:first)
   ensure
     FakeJob.forget
   end
@@ -31,7 +31,7 @@ class RetriesTest < ActiveStorageHotCellClientTest
 
     ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "RetriesTest::FakeJob" ]
 
-    refute_includes FakeJob.retried.map(&:first), Unprocessable
+    refute_includes FakeJob.retried.flat_map(&:first), Unprocessable
   ensure
     FakeJob.forget
   end
@@ -57,7 +57,8 @@ class RetriesTest < ActiveStorageHotCellClientTest
 
     ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "RetriesTest::FakeJob" ]
 
-    assert_equal [ TemporarilyUnavailable, VideoUnavailable ], FakeJob.retried.map(&:first)
+    assert_equal [ [ TemporarilyUnavailable, VideoUnavailable ] ], FakeJob.retried.map(&:first),
+                 "both classes belong in one retry_on call"
   ensure
     ActiveStorage::HotCell::Client::PreviewVideo.hotcell ActiveStorage::HotCell::Client::CELL
     FakeJob.forget
@@ -72,8 +73,8 @@ class RetriesTest < ActiveStorageHotCellClientTest
   end
 
   class FakeJob
-    def self.retry_on(error, **options)
-      retried << [ error, options ]
+    def self.retry_on(*errors, **options)
+      retried << [ errors, options ]
     end
 
     def self.retried
