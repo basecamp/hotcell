@@ -63,6 +63,18 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # Rails deep-symbolizes the keys of a variation and leaves the values alone, so an application that wrote
+  # `crop: :attention` into a variant works on stock Rails-on-vips. A Symbol value cannot ride JSON, but that
+  # is this gem's transport detail rather than the application's problem — Symbol values become Strings on
+  # their way to the cell.
+  def test_a_symbol_transformation_value_travels_as_the_string_rails_would_pass_to_vips
+    with_cell do
+      transform({ resize_to_fill: [ 30, 30, { crop: :attention } ] }, "colour.png") do |output|
+        assert_equal({ width: 30, height: 30 }, identify(output.path).slice(:width, :height))
+      end
+    end
+  end
+
   def test_a_loader_reaches_the_cell_and_keeps_every_frame
     with_cell do
       transform({ loader: { n: -1 } }, "animated.gif", format: "gif") do |output|

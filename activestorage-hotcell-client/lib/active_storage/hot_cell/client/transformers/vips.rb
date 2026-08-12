@@ -29,15 +29,19 @@ module ActiveStorage
           private
             # Returns an open, rewound Tempfile, which is the contract.
             #
-            # The transformations travel to the cell as they arrived. Rails hands this a symbol-keyed hash with
-            # :format already removed — Variation deep-symbolizes on the way in and builds the transformer with
-            # `transformations.except(:format)` — so there is nothing to normalize here, and deciding which keys
-            # are allowed belongs to the operation rather than to this side of the socket.
+            # The transformations travel to the cell almost as they arrived. Rails hands this a symbol-keyed hash
+            # with :format already removed — Variation deep-symbolizes on the way in and builds the transformer
+            # with `transformations.except(:format)` — so the keys need nothing, and deciding which keys are
+            # allowed belongs to the operation rather than to this side of the socket. Values are another matter:
+            # Variation symbolizes only keys, so `crop: :attention` reaches here as the application wrote it, and
+            # stock Rails-on-vips accepts it. A Symbol value cannot ride JSON, which is this gem's transport
+            # detail rather than the application's problem — so Symbol values go over as the Strings vips would
+            # have been handed anyway.
             def process(file, format:)
               output = Tempfile.new([ "hotcell", ".#{format}" ], binmode: true)
 
               begin
-                convert file, output, format: format.to_s, operations: transformations
+                convert file, output, format: format.to_s, operations: stringified(transformations)
                 output.tap(&:rewind)
               rescue StandardError
                 output.close!
@@ -54,6 +58,18 @@ module ActiveStorage
                 File.open(output.path, "wb") do |writable|
                   TransformImage.perform_in_hotcell [ readable ], [ writable ], payload
                 end
+              end
+            end
+
+            # Only Symbol values, and only to String. Anything else unserializable is refused by the payload
+            # check as ever, because for everything but a Symbol there is no value Rails would have accepted
+            # in its place.
+            def stringified(value)
+              case value
+              when Symbol then value.to_s
+              when Hash   then value.transform_values { |nested| stringified(nested) }
+              when Array  then value.map { |nested| stringified(nested) }
+              else value
               end
             end
         end
