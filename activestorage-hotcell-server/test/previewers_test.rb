@@ -113,6 +113,21 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
+  # ffmpeg writes the frame straight through the caller's descriptor, so the slot's output scratch is never
+  # created. Proves the output is not staged and copied.
+  def test_a_video_preview_is_written_through_the_descriptor_not_scratch
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("sample.mp4") ],
+                                                            outputs: [ destination ])
+
+        assert_operator File.size(destination), :>, 0, "the frame reached the caller's file"
+        assert_empty Dir.glob(File.join(cell.workspace, "*", "scratch", "output-*")),
+                     "the output was staged onto scratch instead of written directly"
+      end
+    end
+  end
+
   def test_a_video_preview_can_be_taken_from_further_in
     Cell.boot do |cell|
       with_output(".jpg") do |destination|

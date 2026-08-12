@@ -34,11 +34,18 @@ module ActiveStorage
           page = positive_integer!(:page, page, MAX_PAGE)
           resolution = positive_integer!(:resolution, resolution, MAX_RESOLUTION)
 
+          # The input is read through its descriptor, but the output is staged: mutool unlinks its output
+          # path before writing, and /dev/fd cannot be unlinked, so a passed output descriptor fails with
+          # "Operation not permitted". The staged PNG is copied out by Output#post. Streaming mutool's
+          # stdout to the descriptor — what Rails does with `-o -` — would remove the copy, and is a
+          # separate change.
           run! "mutool", "draw", "-F", "png", "-r", resolution.to_s, "-o", destination.path,
                source.fd_path, page.to_s, pass: [ source.to_io ]
 
+          staged = File.exist?(destination.path) ? File.size(destination.path) : 0
+
           { format: "png", content_type: "image/png", page: page, resolution: resolution,
-            bytes: produced!(destination.path, "mutool") }
+            bytes: produced!(staged, "mutool") }
         end
       end
     end

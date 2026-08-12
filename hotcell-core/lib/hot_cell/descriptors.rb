@@ -125,9 +125,13 @@ module HotCell
     # the cold side can now read. Outputs are posted and flushed before success is reported, so a
     # caller may read as soon as it sees `ok`.
     #
-    # A staged file that does not exist means the operation returned without writing anything. That
-    # reports zero rather than raising, because zero bytes is a verdict the client already has to
-    # handle: a full tmpfs arrives the same way.
+    # Two shapes, and an operation chooses by which path it wrote. A staged output was written to `path` on
+    # scratch and is copied out here; a file that does not exist means the operation wrote nothing, reported
+    # as zero the way a full tmpfs is. An output the operation wrote straight through the descriptor was
+    # never staged, so there is nothing to copy — the bytes are already in the caller's file — and this only
+    # flushes and measures. The direct form leaves partial bytes in the caller's file if the operation
+    # fails mid-write, where the staged form leaves it empty; every operation that writes directly turns a
+    # failure into a refusal the caller acts on rather than reading those bytes as a result.
     def post
       if staged?
         return 0 unless File.exist?(path)

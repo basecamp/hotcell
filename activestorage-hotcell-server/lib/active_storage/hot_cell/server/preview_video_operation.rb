@@ -39,13 +39,19 @@ module ActiveStorage
           #
           # -ss before -i seeks by keyframe, which is orders of magnitude cheaper on a long file than decoding up
           # to the point. -nostdin because ffmpeg reads the terminal otherwise, and a worker has no terminal.
+          #
+          # Both descriptors go to ffmpeg: it reads /dev/fd for the source and writes /dev/fd for the frame,
+          # so neither the input nor the output touches scratch. Writing the descriptor directly leaves
+          # partial bytes in the caller's file on a mid-write failure where a staged output would have left
+          # it empty — harmless here, because run! turns a non-zero exit into a refusal and the previewer
+          # discards its output on any failure, but it is a real property of the direct write.
           run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s, "-i", source.fd_path,
                "-vf", RELEVANT_FRAME,
-               "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.path,
-               pass: [ source.to_io ]
+               "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.fd_path,
+               pass: [ source.to_io, destination.to_io ]
 
           { format: "jpg", content_type: "image/jpeg", seek: seek,
-            bytes: produced!(destination.path, "ffmpeg") }
+            bytes: produced!(destination.to_io.stat.size, "ffmpeg") }
         end
 
         private

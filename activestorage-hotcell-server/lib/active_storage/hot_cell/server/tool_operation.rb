@@ -36,10 +36,11 @@ module ActiveStorage
             raise ::HotCell::MessageError, message
           end
 
-          # An empty output file means the tool said it succeeded and produced nothing, which the client
-          # would otherwise have to catch as zero bytes on a successful response.
-          def produced!(path, command)
-            bytes = File.exist?(path) ? File.size(path) : 0
+          # An empty output means the tool said it succeeded and produced nothing, which the client would
+          # otherwise have to catch as zero bytes on a successful response. The caller measures the output
+          # wherever it landed — the descriptor's own file for a tool that wrote it directly, or the staged
+          # scratch path for one that could not.
+          def produced!(bytes, command)
             raise UnreadableDocument, "#{command} wrote nothing" if bytes.zero?
 
             bytes

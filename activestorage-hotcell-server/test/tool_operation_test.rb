@@ -24,39 +24,19 @@ class ToolOperationTest < ActiveStorageHotCellTest
   end
 
   def test_a_tool_that_succeeds_and_writes_nothing_is_unreadable
-    with_file do |path|
-      error = assert_raises UnreadableDocument do
-        operation.send :produced!, path, "mutool"
-      end
-
-      assert_match "mutool wrote nothing", error.message
-    end
-  end
-
-  def test_an_output_the_tool_never_created_is_unreadable
     error = assert_raises UnreadableDocument do
-      operation.send :produced!, "/nonexistent/output.png", "mutool"
+      operation.send :produced!, 0, "mutool"
     end
 
-    assert_match "wrote nothing", error.message
+    assert_match "mutool wrote nothing", error.message
   end
 
   def test_an_output_with_bytes_reports_its_size
-    with_file "some pixels" do |path|
-      assert_equal 11, operation.send(:produced!, path, "mutool")
-    end
+    assert_equal 11, operation.send(:produced!, 11, "mutool")
   end
 
   private
     def operation
       Probe.new
-    end
-
-    def with_file(contents = "")
-      Tempfile.create([ "tool", ".bin" ], binmode: true) do |file|
-        file.write contents
-        file.flush
-        yield file.path
-      end
     end
 end
