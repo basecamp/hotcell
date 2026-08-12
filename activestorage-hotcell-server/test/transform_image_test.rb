@@ -199,6 +199,22 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # The input is read through its descriptor, not staged, so its size is not bounded by file_size — which
+  # bounds only what the operation writes. A large source downscaled to a small thumbnail succeeds under a
+  # file_size that the source alone would have blown while being copied onto scratch.
+  def test_a_large_source_downscaled_to_a_small_thumbnail_is_not_bounded_by_the_write_limit
+    Cell.boot(file_size: 64 * 1024) do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.transform_image",
+                             inputs: [ fixture("large.png") ], outputs: [ destination ],
+                             payload: { format: "png", operations: { resize_to_limit: [ 32, 32 ] } }
+
+        assert_ok response
+        assert_equal 32, identify(destination)[:width]
+      end
+    end
+  end
+
   def test_something_that_is_not_an_image_is_unreadable_rather_than_failed
     Cell.boot do |cell|
       with_output do |destination|

@@ -39,9 +39,10 @@ module ActiveStorage
           #
           # -ss before -i seeks by keyframe, which is orders of magnitude cheaper on a long file than decoding up
           # to the point. -nostdin because ffmpeg reads the terminal otherwise, and a worker has no terminal.
-          run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s, "-i", source.path,
+          run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s, "-i", source.fd_path,
                "-vf", RELEVANT_FRAME,
-               "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.path
+               "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.path,
+               pass: [ source.to_io ]
 
           { format: "jpg", content_type: "image/jpeg", seek: seek,
             bytes: produced!(destination.path, "ffmpeg") }

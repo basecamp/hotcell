@@ -55,6 +55,18 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
   # `analyzed: true` — so an undecodable image is recorded as successfully analyzed, forever, and nothing
   # re-enqueues AnalyzeJob. This deliberately does not copy that: the cell reports the verdict and the client
   # decides, because only the client knows whether it is safe to write down.
+  # Rails imposes no size limit on analysis, and neither may the cell. The input is read through its
+  # descriptor rather than copied onto scratch, so a file far larger than the operation's file_size — which
+  # bounds writes — is analyzed rather than killed while being staged.
+  def test_an_input_larger_than_the_write_limit_is_still_analyzed
+    Cell.boot(file_size: 32 * 1024) do |cell|
+      result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("large.png") ])).result
+
+      assert_equal 400, result[:width]
+      assert_equal 400, result[:height]
+    end
+  end
+
   def test_an_undecodable_image_is_reported_rather_than_recorded_as_analyzed
     Cell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("active_storage.analyze_image",
