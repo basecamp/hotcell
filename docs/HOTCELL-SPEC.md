@@ -1836,11 +1836,11 @@ Invariant 1 is withdrawn — see the invariants above — so there is nothing to
   see the same `$HOME`; two running concurrently see different ones.
 - The deadline, and **not with `sleep`**. A Ruby `sleep` is interruptible, so a deadline test built on one
   passes against a self-enforcing implementation that cannot actually work. Block the worker where Ruby cannot
-  reach it and assert it is answered `killed`. Measured across the standard library: `sleep`, a Ruby spin loop
-  and `Zlib::Inflate` are all interruptible, and `Integer#**` is not — `3 ** 40_000_000` runs for about seven
-  seconds straight through a fifty-millisecond `Timeout`. That lets the cell's own suite hold this with no
-  tool installed. Assert the premise in the test, so a Ruby that adds an interrupt check to that path
-  reports it rather than quietly weakening the test. Two things are being
+  reach it and assert it is answered `killed`. `Thread.handle_interrupt(Exception => :never) { sleep }` does
+  that: `Timeout` raises asynchronously, and the deferral holds the raise until the block ends, which is what
+  a thread inside a C extension does. That lets the cell's own suite hold this with no tool installed. Do not
+  build it on a long computation instead: `Integer#**` runs for seconds without GMP and finishes at once with
+  it, so the stand-in would depend on how the Ruby was built. Two things are being
   tested: that the supervisor kills it at all, and that it does so **promptly**, with no other request needed
   to trigger the reap. The naive reap-at-top-of-accept-loop implementation fails the second.
 - The deadline is per request, not per worker life: a worker that has already served several quick requests

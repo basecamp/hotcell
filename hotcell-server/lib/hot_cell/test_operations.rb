@@ -187,25 +187,16 @@ module HotCell
     #
     # A deadline test built on sleep passes against a self-enforcing implementation that could never work in
     # production, because Timeout raises at an interrupt checkpoint and a thread inside a C extension does
-    # not reach one until it returns. libvips is the real case; Integer#** is the one in the standard
-    # library. Measured: 3 ** 40_000_000 runs for 6.7 seconds straight through a 0.05 second Timeout, so a
-    # deadline test against it fails loudly rather than passing by finishing early.
+    # not reach one until it returns. libvips is the real case. Deferring the raise reproduces that on every
+    # Ruby and every build, which a long computation cannot: Integer#** takes seven seconds without GMP and
+    # a fraction of a second with it. SIGKILL is not deferrable, so the supervisor still gets through.
     class Uninterruptible < HotCell::Operation
       operation "test.uninterruptible"
-      EXPONENT = 40_000_000
-
-      # The premise, asserted rather than assumed. If a later Ruby adds an interrupt check to this path, the
-      # deadline tests should say so instead of quietly becoming weaker.
-      def self.blocks_through_a_timeout?
-        require "timeout"
-        Timeout.timeout(0.05) { 3**5_000_000 }
-        true
-      rescue Timeout::Error
-        false
-      end
+      SECONDS = 60
 
       def perform(_inputs, _outputs)
-        { digits: (3**EXPONENT).bit_length }
+        Thread.handle_interrupt(Exception => :never) { sleep SECONDS }
+        {}
       end
     end
 
