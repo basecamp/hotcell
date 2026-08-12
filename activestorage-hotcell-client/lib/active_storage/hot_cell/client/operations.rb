@@ -33,6 +33,11 @@ module ActiveStorage
         operation "active_storage.preview_pdf"
       end
 
+      class PreviewPdfPoppler < ::HotCell::Client
+        hotcell CELL
+        operation "active_storage.preview_pdf_poppler"
+      end
+
       class PreviewVideo < ::HotCell::Client
         hotcell CELL
         operation "active_storage.preview_video"

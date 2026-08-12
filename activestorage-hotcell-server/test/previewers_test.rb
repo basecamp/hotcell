@@ -139,6 +139,46 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
+  # The Poppler sibling of the mutool preview, for an image that carries pdftoppm. Same result shape.
+  def test_a_poppler_pdf_preview_comes_back_as_a_png
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.preview_pdf_poppler",
+                             inputs: [ fixture("sample.pdf") ], outputs: [ destination ]
+
+        assert_ok response
+        assert_equal "PNG", identify(destination)[:format]
+        assert_equal File.size(destination), response.result[:bytes]
+      end
+    end
+  end
+
+  def test_a_poppler_nonsense_resolution_is_a_caller_bug
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        failure = assert_failed "invalid", cell.call("active_storage.preview_pdf_poppler",
+                                                     inputs: [ fixture("sample.pdf") ],
+                                                     outputs: [ destination ],
+                                                     payload: { resolution: 100_000 })
+
+        assert_match "resolution 100000 must be an integer between 1 and 600", failure.message
+      end
+    end
+  end
+
+  def test_poppler_on_something_that_is_not_a_pdf_is_unreadable
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.preview_pdf_poppler",
+                                                        inputs: [ fixture("broken.pdf") ],
+                                                        outputs: [ destination ])
+
+        assert_predicate failure, :permanent?
+        assert_match "pdftoppm", failure.message
+      end
+    end
+  end
+
   # Rails' default preview arguments choose the first keyframe or scene change rather than the literal first
   # frame, because so many videos open on black. A drop-in replacement has to keep that choice: fade_in.mp4
   # opens on half a second of black before a hard cut, and its preview must come from after the cut.

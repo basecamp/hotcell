@@ -3,6 +3,7 @@
 require "tempfile"
 require "active_storage"
 require "active_storage/previewer/mupdf_previewer"
+require "active_storage/previewer/poppler_pdf_previewer"
 require "active_storage/previewer/video_previewer"
 
 require "active_storage/hot_cell/client/operations"
@@ -54,6 +55,24 @@ module ActiveStorage
         def preview(**options)
           download_blob_to_tempfile do |input|
             render_through(PreviewPdf, input) do |attachable|
+              yield(**attachable, **options)
+            end
+          end
+        end
+      end
+
+      # The Poppler sibling of PdfPreviewer, for an application whose image carries pdftoppm rather than
+      # mutool — the previewer Rails' default chain reaches first.
+      class PopplerPdfPreviewer < ActiveStorage::Previewer::PopplerPDFPreviewer
+        include Previewing
+
+        def self.accept?(blob)
+          pdf? blob.content_type
+        end
+
+        def preview(**options)
+          download_blob_to_tempfile do |input|
+            render_through(PreviewPdfPoppler, input) do |attachable|
               yield(**attachable, **options)
             end
           end
