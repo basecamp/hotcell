@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "hot_cell/server"
+require "active_storage/hot_cell/server/operation"
 
 module ActiveStorage
   module HotCell
@@ -12,7 +12,7 @@ module ActiveStorage
       # and it is worth being careful about when changing them: reading a tool's output with an
       # in-process library — to put dimensions in the result, say — or parsing its stdout brings bytes a
       # hostile input produced back into this worker. Neither happens here.
-      class ToolOperation < ::HotCell::Operation
+      class ToolOperation < Operation
         abstract_operation
 
         # A tool that exits non-zero on a document it cannot read is the commonest failure on this path, and
@@ -30,10 +30,6 @@ module ActiveStorage
 
             raise UnreadableDocument, "#{command.first} exited #{result.status.exitstatus}: " \
                                       "#{result.err.to_s.strip[0, 200]}"
-          end
-
-          def refuse!(message)
-            raise ::HotCell::MessageError, message
           end
 
           # An empty output means the tool said it succeeded and produced nothing, which the client would

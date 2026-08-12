@@ -10,8 +10,8 @@ module ActiveStorage
       # way the shared image analyzer does it.
       #
       # The result is a superset — pages and animation, which the vips analyzer also reports — that the client
-      # analyzer slices to Rails' `{ width, height }`. An input ImageMagick cannot decode raises
-      # MiniMagick::Error or fails `valid?`, and either way the cell answers `unreadable`.
+      # analyzer slices to Rails' `{ width, height }`. An input ImageMagick cannot decode exits `identify`
+      # non-zero, which raises MiniMagick::Error, and the cell answers `unreadable`.
       class MagickAnalyzeImageOperation < MagickOperation
         operation "active_storage.analyze_image_imagemagick"
 
@@ -23,30 +23,34 @@ module ActiveStorage
 
         def perform(inputs, _outputs)
           source, = inputs
-          image = MiniMagick::Image.new(source.path)
-          refuse_unreadable! unless image.valid?
+          frames = identified(source.path)
+          width, height, orientation = frames.first
 
-          { **dimensions_of(image), **frames_of(image), bytes: source.to_io.stat.size }
+          { **dimensions(width, height, orientation), pages: frames.size, animated: frames.size > 1,
+            bytes: source.to_io.stat.size }
         end
 
         private
-          def dimensions_of(image)
-            if ROTATED.include?(image["%[orientation]"])
-              { width: image.height, height: image.width }
+          # One `identify` run reports every frame's dimensions and orientation, where MiniMagick::Image's
+          # accessors (`valid?`, `width`, `pages`) each spawn an identify of their own — four execs per
+          # analysis, two of them decoding every frame.
+          def identified(path)
+            frames = MiniMagick.identify do |identify|
+              identify.format "%w %h %[orientation]\n"
+              identify << path
+            end.lines.map(&:split)
+
+            raise MiniMagick::Invalid, "ImageMagick does not recognise this as an image" if frames.empty?
+
+            frames
+          end
+
+          def dimensions(width, height, orientation)
+            if ROTATED.include?(orientation)
+              { width: height.to_i, height: width.to_i }
             else
-              { width: image.width, height: image.height }
+              { width: width.to_i, height: height.to_i }
             end
-          end
-
-          def frames_of(image)
-            pages = image.pages.size
-            { pages: pages, animated: pages > 1 }
-          rescue MiniMagick::Error
-            { pages: 1, animated: false }
-          end
-
-          def refuse_unreadable!
-            raise MiniMagick::Invalid, "ImageMagick does not recognise this as an image"
           end
       end
     end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "hot_cell/server"
+require "active_storage/hot_cell/server/operation"
 
 # Loaded here rather than lazily in a worker, so mini_magick resolves the ImageMagick binary once at boot
 # rather than shelling out to find it on the first request under a tight limit. mini_magick shells out for
@@ -23,30 +23,13 @@ module ActiveStorage
       # returns the file_size ceiling to this path — an input larger than the operation's file_size dies
       # being staged — which the vips operations shed. Removing it means driving `magick` directly rather
       # than through mini_magick, and is a separate enhancement.
-      class MagickOperation < ::HotCell::Operation
+      class MagickOperation < Operation
         abstract_operation
 
         # MiniMagick::Error is how mini_magick reports a `magick` that exited non-zero — the common shape of an
         # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright. Both are the
         # input's fault rather than the operation's.
         unreadable MiniMagick::Error, MiniMagick::Invalid
-
-        # A lookup for a result's content type, the way the vips base has one. Not a gate: which format a
-        # caller may ask for is decided by the ImageMagick build, the way Rails decides it.
-        CONTENT_TYPES = {
-          "png"  => "image/png",
-          "jpg"  => "image/jpeg",
-          "jpeg" => "image/jpeg",
-          "webp" => "image/webp",
-          "gif"  => "image/gif",
-          "avif" => "image/avif",
-          "tiff" => "image/tiff",
-        }.freeze
-
-        private
-          def refuse!(message)
-            raise ::HotCell::MessageError, message
-          end
       end
     end
   end

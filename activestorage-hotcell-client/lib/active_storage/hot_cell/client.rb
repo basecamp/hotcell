@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 require "active_storage"
+require "active_support/core_ext/string/inflections"
 
 require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/transformers/vips"
 require "active_storage/hot_cell/client/transformers/image_magick"
-require "active_storage/hot_cell/client/analyzers/image_analyzer/vips"
-require "active_storage/hot_cell/client/analyzers/image_analyzer/image_magick"
+require "active_storage/hot_cell/client/analyzers/image_analyzer"
 require "active_storage/hot_cell/client/analyzers/media_analyzer"
 require "active_storage/hot_cell/client/previewers"
 require "active_storage/hot_cell/client/railtie" if defined?(::Rails::Railtie)
@@ -56,7 +56,7 @@ module ActiveStorage
                               .uniq
           return [] if transients.empty?
 
-          jobs.filter_map { |name| Object.const_get(name) if Object.const_defined?(name) }
+          jobs.filter_map(&:safe_constantize)
               .each { |job| job.retry_on(*transients, **RETRY) }
         end
       end

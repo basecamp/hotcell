@@ -5,22 +5,20 @@ require "active_storage/hot_cell/server/tool_operation"
 module ActiveStorage
   module HotCell
     module Server
-      # What `ActiveStorage::Previewer::MuPDFPreviewer` does, moved out of the application.
-      #
-      # Rails runs `mutool draw -F png -o - <file> 1` and streams the result through the web process. This writes
-      # to the worker's own scratch instead of to stdout, so a pathological page cannot be answered by buffering an
-      # unbounded PNG in memory — the file is bounded by the cell's `file_size` limit and the kernel enforces it.
+      # What the two PDF previewers share: one bounded page, rendered to PNG on the worker's own scratch, so
+      # a pathological page cannot be answered by buffering an unbounded PNG in memory — the file is bounded
+      # by the cell's `file_size` limit and the kernel enforces it. A subclass supplies the tool run.
       #
       # The result carries no dimensions, and that is what Rails does rather than a concession to make here. A
-      # previewer yields `io:`, `filename:` and `content_type:` and nothing else; `Preview#process` attaches that as
-      # a new blob, and the dimensions come later from analyzing *that* blob like any other. So a drop-in
+      # previewer yields `io:`, `filename:` and `content_type:` and nothing else; `Preview#process` attaches that
+      # as a new blob, and the dimensions come later from analyzing *that* blob like any other. So a drop-in
       # replacement returns no dimensions either.
       #
-      # It is also what keeps the `:subprocess` claim true. Reading the produced PNG here would mean parsing bytes
-      # mutool just made out of a hostile PDF, in this worker, which is exactly what turns a subprocess operation
-      # into an in-process one.
+      # It is also what keeps the `:subprocess` claim true. Reading the produced PNG here would mean parsing
+      # bytes the tool just made out of a hostile PDF, in this worker, which is exactly what turns a
+      # subprocess operation into an in-process one.
       class PreviewPdfOperation < ToolOperation
-        operation "active_storage.preview_pdf"
+        abstract_operation
 
         limits deadline: 30, memory: 1024 * 1024**2, file_size: 48 * 1024**2, open_files: 128
 
@@ -34,18 +32,12 @@ module ActiveStorage
           page = positive_integer!(:page, page, MAX_PAGE)
           resolution = positive_integer!(:resolution, resolution, MAX_RESOLUTION)
 
-          # The input is read through its descriptor, but the output is staged: mutool unlinks its output
-          # path before writing, and /dev/fd cannot be unlinked, so a passed output descriptor fails with
-          # "Operation not permitted". The staged PNG is copied out by Output#post. Streaming mutool's
-          # stdout to the descriptor — what Rails does with `-o -` — would remove the copy, and is a
-          # separate change.
-          run! "mutool", "draw", "-F", "png", "-r", resolution.to_s, "-o", destination.path,
-               source.fd_path, page.to_s, pass: [ source.to_io ]
+          render source, destination, page: page, resolution: resolution
 
           staged = File.exist?(destination.path) ? File.size(destination.path) : 0
 
           { format: "png", content_type: "image/png", page: page, resolution: resolution,
-            bytes: produced!(staged, "mutool") }
+            bytes: produced!(staged, tool) }
         end
       end
     end

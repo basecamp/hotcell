@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "hot_cell/server"
+require "active_storage/hot_cell/server/operation"
 
 # Loaded here, in the supervisor, rather than lazily in a worker.
 #
@@ -14,18 +14,10 @@ require "hot_cell/server"
 require "image_processing/vips"
 
 module ActiveStorage
-  # Despite the namespace, nothing here loads Active Storage. The name says which consumer these operations
-  # serve, not what they link against, and the gem stays small because a smaller graph is a smaller thing to
-  # audit — not because a cell polices what runs inside it. It does not: the container is the control, and what
-  # an operation chooses to require is its own business.
   module HotCell
-    # Everything the cell side defines lives under this, and everything the application side defines lives under
-    # ActiveStorage::HotCell::Client. Not a tidying convention: the two gems are never both loaded in production,
-    # and a cell is forked from a process that may well have loaded the client — after which a shared name is a
-    # superclass mismatch while the cell boots. Two namespaces make that impossible rather than avoided.
     module Server
       # Everything that parses an image with libvips, which happens in the worker's own address space.
-      class VipsOperation < ::HotCell::Operation
+      class VipsOperation < Operation
         abstract_operation
 
         # Vips::Error is how libvips reports a file it cannot decode, which is common rather than exceptional: it
@@ -69,27 +61,7 @@ module ActiveStorage
           Vips.cache_set_max_mem 0
         end
 
-        # A lookup, not a gate: which format a caller may ask for is decided by the vips build's savers, the
-        # way Rails decides it. This only names the content type in a result, and a format it has never heard
-        # of gets none.
-        CONTENT_TYPES = {
-          "png"  => "image/png",
-          "jpg"  => "image/jpeg",
-          "jpeg" => "image/jpeg",
-          "webp" => "image/webp",
-          "gif"  => "image/gif",
-          "avif" => "image/avif",
-          "tiff" => "image/tiff",
-        }.freeze
-
         private
-          # A caller breaking the protocol is a caller bug, not a bad document. Raising MessageError is what
-          # makes the cell answer `invalid`, which is permanent and which the client raises rather than
-          # turning into a placeholder.
-          def refuse!(message)
-            raise ::HotCell::MessageError, message
-          end
-
           # EXIF says the pixels are stored rotated, so the dimensions a caller cares about are swapped. Rails'
           # own analyzer does the same thing for the same orientations.
           SWAPPED_ORIENTATIONS = (5..8)

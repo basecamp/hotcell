@@ -72,11 +72,12 @@ module ActiveStorage
             encoded_height = float(stream["height"])
             ratio = display_aspect_ratio(stream)
             displayed_height = computed_height(encoded_width, ratio) || encoded_height
-            rotated = ROTATIONS.include?(angle(stream))
+            angle = angle(stream)
+            rotated = ROTATIONS.include?(angle)
 
             { width: rotated ? displayed_height : encoded_width,
               height: rotated ? encoded_width : displayed_height,
-              angle: angle(stream), display_aspect_ratio: ratio,
+              angle: angle, display_aspect_ratio: ratio,
               video_codec: SCRUB[stream["codec_name"]] }
           end
 

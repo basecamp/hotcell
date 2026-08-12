@@ -3,6 +3,9 @@
 require "active_storage"
 require "active_storage/analyzer"
 
+require "active_storage/hot_cell/client/operations"
+require "active_storage/hot_cell/client/analyzers/analyzing"
+
 module ActiveStorage
   module HotCell
     module Client
@@ -15,38 +18,31 @@ module ActiveStorage
         # This holds everything that does not depend on which toolchain the cell carries. A subclass names the
         # client that reaches that toolchain, the way ActiveStorage::Analyzer::ImageAnalyzer::Vips does.
         class ImageAnalyzer < ActiveStorage::Analyzer
-          class_attribute :client, instance_accessor: false
+          include Analyzing
+
+          # Width and height, which is exactly what the built-in analyzer returns. The cell knows more — page
+          # count, whether the image is animated — and surfacing it would change the shape of every blob's
+          # metadata.
+          KEYS = %i[ width height ].freeze
 
           def self.accept?(blob)
             blob.image?
           end
 
-          # Width and height, which is exactly what the built-in analyzer returns. The cell knows more — page
-          # count, whether the image is animated — and surfacing it would change the shape of every blob's
-          # metadata, so a subclass is the place for that rather than here.
+          # What an application prepends onto `config.active_storage.analyzers`.
           #
-          # **Which way this fails is the whole design of the method.** The built-in vips analyzer rescues every
-          # Vips::Error and returns an empty hash, which Rails then merges with `analyzed: true` — so an
-          # undecodable image is recorded as successfully analyzed, forever, and nothing ever re-enqueues
-          # AnalyzeJob. That is right for a permanent verdict and catastrophic for a transient one.
+          #   config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips
           #
-          # So a permanent failure follows the built-in behaviour and lets the blob be marked analyzed, with the
-          # reason written to the log so it can be re-decided later against a newer library. A transient failure
-          # is not rescued at all, which is what leaves the blob `analyzed: false` and eligible to be tried
-          # again.
-          def metadata
-            measured.slice(:width, :height)
-          rescue self.class.client.cell.permanent => error
-            logger.warn "hotcell: #{blob.filename} could not be analyzed and will not be retried: #{error.message}"
-            {}
+          # Named for its toolchain the way ActiveStorage::Analyzer::ImageAnalyzer::Vips is. The library itself
+          # is in the cell, so what a subclass names is which operation to ask — the ImageMagick sibling reaches
+          # a cell carrying ImageMagick and differs in nothing else.
+          class Vips < ImageAnalyzer
+            self.client = AnalyzeImage
           end
 
-          private
-            def measured
-              download_blob_to_tempfile do |file|
-                File.open(file.path, "rb") { |readable| self.class.client.perform_in_hotcell [ readable ], [], {} }
-              end
-            end
+          class ImageMagick < ImageAnalyzer
+            self.client = MagickAnalyzeImage
+          end
         end
       end
     end
