@@ -3,12 +3,6 @@
 require "test_helper"
 
 class SchedulingTest < HotCellServerTest
-  def setup
-    unless Fixtures::Uninterruptible.blocks_through_a_timeout?
-      skip "Integer#** is interruptible on this Ruby, so it no longer stands in for a C extension"
-    end
-  end
-
   # Two things are being tested. That the supervisor kills an overdue worker at all, and that it does so
   # promptly, with no other request needed to trigger the reap. A supervisor that only reaped at the top of
   # its accept loop would leave this caller waiting out its whole timeout, so the naive implementation
@@ -20,7 +14,7 @@ class SchedulingTest < HotCellServerTest
 
       failure = assert_failed "killed", response, cause: "deadline"
       assert_equal "KILL", failure.signal
-      assert_operator took, :<, 4, "the work itself takes 6.7s, so this was not a kill"
+      assert_operator took, :<, 4, "the work itself runs for a minute, so this was not a kill"
 
       # A killed worker cannot report anything, so the supervisor fills this in from fork to reap. It is an
       # upper bound rather than a measurement, and it is worth having: killed at 30s and killed at 0.2s are
