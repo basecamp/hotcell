@@ -31,15 +31,28 @@ module ActiveStorage
 
       RETRY = { wait: :polynomially_longer, attempts: 10 }.freeze
 
+      # The five clients this gem ships, which is where the retry hook learns which cells' transient classes
+      # the jobs must retry. Deliberately not HotCell.clients: that records every client the process loaded,
+      # including an application's own for unrelated cells, and Active Storage's jobs have no business
+      # retrying those.
+      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewVideo, ProbeMedia ].freeze
+
       class << self
         # The railtie calls this from a to_prepare block. Applied once at boot it would not survive a code
         # reload: a gem engine's app/jobs is in the reloadable autoloader, so these classes are discarded and
         # redefined, and the retry would silently disappear after the first file save in development.
+        #
+        # Every registered cell contributes its transient class, because the documented multi-cell
+        # arrangement routes PreviewVideo to a cell of its own and each cell names its own class. A cell not
+        # yet registered contributes nothing rather than raising: this runs on the boot where the application
+        # has bundled the gem and not yet written the initializer, and that boot has to succeed for the
+        # rollout to take two deploys rather than one.
         def retry_transient_failures!(jobs: JOBS)
-          transient = TransformImage.cell.transient
+          transients = CLIENTS.filter_map { |client| client.cell.transient if ::HotCell.cells.key?(client.hotcell) }
+                              .uniq
 
           jobs.filter_map { |name| Object.const_get(name) if Object.const_defined?(name) }
-              .each { |job| job.retry_on transient, **RETRY }
+              .each { |job| transients.each { |transient| job.retry_on transient, **RETRY } }
         end
       end
     end
