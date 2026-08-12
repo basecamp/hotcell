@@ -69,9 +69,10 @@ module ActiveStorage
           Vips.cache_set_max_mem 0
         end
 
-        # What a caller may ask to be given back. Not a general format list: every entry here is a saver this cell
-        # is willing to run.
-        FORMATS = {
+        # A lookup, not a gate: which format a caller may ask for is decided by the vips build's savers, the
+        # way Rails decides it. This only names the content type in a result, and a format it has never heard
+        # of gets none.
+        CONTENT_TYPES = {
           "png"  => "image/png",
           "jpg"  => "image/jpeg",
           "jpeg" => "image/jpeg",
@@ -82,18 +83,11 @@ module ActiveStorage
         }.freeze
 
         private
-          # A caller asking for something outside the allowlist is a caller bug, not a bad document. Raising
-          # MessageError is what makes the cell answer `invalid`, which is permanent and which the client raises
-          # rather than turning into a placeholder.
+          # A caller breaking the protocol is a caller bug, not a bad document. Raising MessageError is what
+          # makes the cell answer `invalid`, which is permanent and which the client raises rather than
+          # turning into a placeholder.
           def refuse!(message)
             raise ::HotCell::MessageError, message
-          end
-
-          def format!(value)
-            format = value.to_s.downcase
-            refuse! "format #{value.inspect} is not one of #{FORMATS.keys.join(", ")}" unless FORMATS.key?(format)
-
-            format
           end
 
           # EXIF says the pixels are stored rotated, so the dimensions a caller cares about are swapped. Rails'

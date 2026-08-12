@@ -83,11 +83,18 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
-  # The shape HEY has signed into variant URLs, minted on mini_magick. It is refused here for the same reason
-  # it raises Vips::Error under Rails on vips: `coalesce` is not a libvips operation. Making these URLs work is
-  # an ImageMagick-compatible transformer, which is a planned addition — until then an application that moves
-  # from mini_magick to vips rewrites them at its own boundary, the way BC4 does.
-  def test_the_imagemagick_shape_is_refused_rather_than_silently_reinterpreted
+  # The shape HEY has signed into variant URLs, minted on mini_magick. `coalesce` is not a libvips
+  # operation, so ImageProcessing forwards it to vips, which raises Vips::Error — and VipsOperation declares
+  # Vips::Error `unreadable`, so it lands permanent.
+  #
+  # KNOWN DEVIATION (resolved by the planned ImageMagick operations): this is a caller bug, not a bad
+  # document, and Rails treats it as an unclassified job failure rather than a verdict on the blob. The
+  # `unreadable Vips::Error` rule was written for the load phase, where a Vips::Error means bad pixels; a
+  # bad operation name raising the same class slips through as a false permanent verdict. The real fix is an
+  # ImageMagick transformer where `coalesce` is a real operation — until then an application moving from
+  # mini_magick to vips rewrites these URLs at its own boundary, the way BC4 does. This test pins the
+  # current behavior so the deviation is visible, not hidden.
+  def test_an_imagemagick_only_operation_name_lands_permanent_for_now
     with_cell do
       error = assert_raises Unprocessable do
         transform({ loader: { page: nil }, coalesce: true }, "animated.gif", format: "gif") { flunk "no" }
@@ -105,15 +112,16 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
-  # A caller bug, not a verdict on the document. It has to be told apart from an undecodable image, because one
-  # gets a placeholder and the other should reach an exception reporter.
-  def test_a_transformation_outside_the_cells_allowlist_raises_the_permanent_class
+  # A caller bug, not a verdict on the document: ImageProcessing refuses the name, the failure is
+  # unclassified and therefore transient, and it stays distinguishable from an undecodable image — which
+  # raises the permanent class and gets a placeholder.
+  def test_an_unknown_transformation_raises_the_transient_class
     with_cell do
-      error = assert_raises Unprocessable do
+      error = assert_raises TemporarilyUnavailable do
         transform({ system: "id" }, "colour.png") { flunk "should not have yielded" }
       end
 
-      assert_match "invalid", error.message
+      assert_match "system", error.message
     end
   end
 
