@@ -32,13 +32,15 @@ Gemfile tracks `main` until 8.2 ships and the gemspec floor can name a version.
 
 Not yet, in the order they matter:
 
-**A library-option allowlist.** `loader` and `saver` reach ImageProcessing exactly as Rails passes them, so a
-caller can set `loader: { unlimited: true }` and remove libvips' own denial-of-service limits. That is the
-capability Rails gives a caller today, and it is tolerable here only because the cell's limits are outside the
-library — `RLIMIT_DATA`, `RLIMIT_FSIZE` and the wall-clock deadline still apply, so the caller buys a killed
-worker. The fix is an explicit allowlist of the keys permitted inside each: `page`, `n`, `quality`, `strip`
-yes; `unlimited`, `access`, `fail-on`, `revalidate` no. Deriving that list is the work, and it must be one
-visible list rather than a filter hidden in a translation step.
+**A transformation allowlist.** Today the transformer matches Rails' vips path exactly: it refuses
+`combine_options`, drops blank arguments, and passes every other transformation, `loader`, and `saver`
+straight to ImageProcessing. So a caller can set `loader: { unlimited: true }` and remove libvips' own
+denial-of-service limits — the capability Rails gives a caller today, tolerable here only because the cell's
+limits are outside the library (`RLIMIT_DATA`, `RLIMIT_FSIZE` and the wall-clock deadline still apply, so the
+caller buys a killed worker). A future deliverable narrows this to an explicit allowlist: which operations
+are permitted, and which keys inside `loader`/`saver` (`page`, `n`, `quality`, `strip` yes; `unlimited`,
+`access`, `fail-on`, `revalidate` no). It must be one visible list rather than a filter hidden in a
+translation step, and it is deliberately not present yet.
 
 **An ImageMagick-compatible transformer and analyzer.** `Transformers::Vips` and
 `Analyzers::ImageAnalyzer::Vips` are named for their toolchain so these can sit beside them. Until they exist,

@@ -5,52 +5,27 @@ require "active_storage/hot_cell/server/vips_operation"
 module ActiveStorage
   module HotCell
     module Server
-      # What `ActiveStorage::Transformers::ImageProcessingTransformer` does, moved out of the application.
+      # What `ActiveStorage::Transformers::ImageProcessingTransformer` does, moved out of the application, and
+      # deliberately nothing more: the transformations and the format reach ImageProcessing exactly as Rails
+      # hands them over.
       #
-      # Rails builds `source(file).loader(page: 0).convert(format).apply(operations)` and validates nothing on the
-      # vips path — `Transformers::Vips` overrides only `#processor`, so the transformation allowlist in
-      # `ActiveStorage.supported_image_processing_methods` is enforced by the ImageMagick transformer alone.
-      # Verified by reading 8.1, not inferred. So the allowlist below is not a second line of defence, it is the
-      # only one there is.
-      #
-      # ImageProcessing does refuse a name that is not one of its own operations or a Vips::Image method, which
-      # rules out `:system` and friends. What it leaves open is every one of libvips' several hundred image
-      # operations, with caller-chosen arguments.
+      # There is no allowlist here, and that mirrors Rails: the vips path validates exactly one thing —
+      # `combine_options` is refused — and `ActiveStorage.supported_image_processing_methods` is enforced by
+      # the ImageMagick transformer alone. ImageProcessing itself refuses a name that is not one of its own
+      # operations or a `Vips::Image` method, which rules out `:system` and friends. Bounding the operation
+      # set and the keys inside `loader`/`saver` is a planned, separate deliverable — see the README — and
+      # until then the cell's limits are the bound: RLIMIT_DATA, RLIMIT_FSIZE and the deadline still apply,
+      # so a pipeline libvips has been told not to bound costs the caller a killed worker.
       class TransformImageOperation < VipsOperation
         operation "active_storage.transform_image"
 
         limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256
 
-        # Verified against libvips 8.18 rather than copied from a list: every name here works through
-        # ImageProcessing::Vips, and the ones a reader might expect to find — `thumbnail`, `blur`, `flop`, `trim`,
-        # `extend`, `monochrome` — are absent because they raise on this path.
-        #
-        # Deliberately short. `linear`, `gamma`, `hist_equal`, `embed` and `premultiply` all work and are all
-        # knobs an attacker-supplied URL could turn, and no application here asks for them. Adding one is a line.
-        OPERATIONS = %w[
-          resize_to_limit resize_to_fit resize_to_fill resize_and_pad resize_to_cover
-          crop rotate autorot flip flatten smartcrop sharpen gaussblur colourspace invert
-        ].freeze
-
-        # `loader` and `saver` are pipeline configuration rather than transformations, and they are passed to
-        # ImageProcessing exactly as Rails passes them.
-        #
-        # That means a caller can currently set libvips loader and saver options directly, including
-        # `loader: { unlimited: true }`, which removes libvips' own denial-of-service limits. This is the same
-        # capability Rails gives a caller today. It is acceptable here and not there because the cell's limits
-        # are outside the library: RLIMIT_DATA, RLIMIT_FSIZE and the supervisor's wall-clock deadline still
-        # apply, so a decode libvips has been told not to bound costs the caller a killed worker.
-        #
-        # Bounding what may appear inside them is a planned feature — see the allowlist note in the README.
-        PIPELINE = %w[ loader saver ].freeze
-
-        ALLOWED = (OPERATIONS + PIPELINE).freeze
-
         def perform(inputs, outputs, format:, operations: {})
           source, = inputs
           destination, = outputs
 
-          format = format!(format)
+          format = format.to_s
           produced = pipeline(source.path, format, operations).call
 
           begin
@@ -75,14 +50,26 @@ module ActiveStorage
               .apply(operations_for(operations))
           end
 
+          # What Rails validates, and no more. `combine_options` is refused because it can never be one vips
+          # pipeline, and a blank argument means "skip this operation" — Rails filters on `present?`, and the
+          # test below is that semantic reimplemented, because the cell does not load Active Support.
           def operations_for(declared)
             refuse! "operations must be an object, and this is a #{declared.class}" unless declared.is_a?(Hash)
 
             declared.filter_map do |name, argument|
-              refuse! "#{name} is not one of #{ALLOWED.join(", ")}" unless ALLOWED.include?(name.to_s)
+              if name.to_s == "combine_options"
+                refuse! "combine_options is not supported, because it cannot generate a single command"
+              end
 
-              [ name, argument ] unless argument.nil? || argument == false
+              [ name, argument ] unless blank?(argument)
             end
+          end
+
+          def blank?(argument)
+            return true if argument.nil? || argument == false
+            return argument.match?(/\A[[:space:]]*\z/) if argument.is_a?(String)
+
+            argument.respond_to?(:empty?) && argument.empty?
           end
 
           # Read back what was just written. Several callers need it: an analyzer returns metadata and no bytes at
@@ -94,8 +81,8 @@ module ActiveStorage
           def describe(path, format)
             image = ::Vips::Image.new_from_file(path)
 
-            { format: format, content_type: FORMATS.fetch(format), bytes: File.size(path),
-              tracked_mem_highwater: vips_highwater, **dimensions_of(image) }
+            { format: format, content_type: CONTENT_TYPES[format.downcase], bytes: File.size(path),
+              tracked_mem_highwater: vips_highwater, **dimensions_of(image) }.compact
           end
       end
     end

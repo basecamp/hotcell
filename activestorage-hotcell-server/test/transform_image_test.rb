@@ -102,17 +102,51 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
-  # The allowlist here is not a second line of defence. Rails' Transformers::Vips overrides only #processor, so
-  # supported_image_processing_methods is enforced by the ImageMagick transformer alone and the vips path has no
-  # allowlist at all.
-  def test_an_operation_outside_the_allowlist_is_refused
+  # Rails' vips path second-guesses nothing but combine_options, so neither does the cell: any
+  # ImageProcessing or Vips::Image method a caller names runs. An operation allowlist is a planned, separate
+  # deliverable.
+  def test_a_transformation_rails_accepts_is_not_second_guessed
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.transform_image",
+                             inputs: [ fixture("colour.png") ], outputs: [ destination ],
+                             payload: { format: "png", operations: { linear: [ 2, 0 ] } }
+
+        assert_ok response
+        assert_operator File.size(destination), :>, 0
+      end
+    end
+  end
+
+  # The one thing Rails' vips path refuses, refused the same way. It can never become a single vips
+  # pipeline, and Rails raises on it by name.
+  def test_combine_options_is_refused_like_rails_refuses_it
     Cell.boot do |cell|
       with_output do |destination|
         failure = assert_failed "invalid", cell.call("active_storage.transform_image",
                                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
-                                                     payload: { format: "png", operations: { linear: [ 2, 0 ] } })
+                                                     payload: { format: "png",
+                                                                operations: { combine_options: { resize: "50x50" } } })
 
-        assert_match "linear is not one of", failure.message
+        assert_predicate failure, :permanent?
+        assert_match "combine_options", failure.message
+      end
+    end
+  end
+
+  # Rails drops a transformation whose argument is blank — nil, false, "", [], {} all mean "skip this
+  # operation" — so a blank must not reach ImageProcessing, where it raises.
+  def test_a_blank_argument_skips_the_operation_rather_than_failing
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.transform_image",
+                             inputs: [ fixture("colour.png") ], outputs: [ destination ],
+                             payload: { format: "png",
+                                        operations: { resize_to_limit: [ 30, 30 ], sharpen: "",
+                                                      rotate: [], flip: nil, autorot: false } }
+
+        assert_ok response
+        assert_equal 30, identify(destination)[:width]
       end
     end
   end
@@ -133,28 +167,34 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
-  def test_a_format_outside_the_allowlist_is_refused
+  # The format is decided by the vips build's savers, the way Rails decides it: Variation validates the
+  # extension app-side, and a format no saver answers to raises Vips::Error at save. The classification is
+  # the cell's own — Vips::Error is `unreadable` here where Rails surfaces it unclassified.
+  def test_a_format_no_saver_answers_to_is_a_vips_error
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
-                                                     inputs: [ fixture("colour.png") ], outputs: [ destination ],
-                                                     payload: { format: "dzsave" })
+        failure = assert_failed "unreadable", cell.call("active_storage.transform_image",
+                                                        inputs: [ fixture("colour.png") ],
+                                                        outputs: [ destination ],
+                                                        payload: { format: "xyzzy" })
 
-        assert_match "is not one of", failure.message
+        assert_equal "Vips::Error", failure.error_class
       end
     end
   end
 
-  # A caller bug is permanent and the client raises it. A bad document is permanent too but the client serves a
-  # placeholder for it, so the two must not arrive as the same code.
-  def test_a_refused_transformation_is_permanent
+  # A name that is neither an ImageProcessing operation nor a Vips::Image method is refused by
+  # ImageProcessing itself, exactly as it is under Rails on vips. It arrives `failed` — transient — so a
+  # caller bug is never written down against the document.
+  def test_an_unknown_transformation_is_not_a_verdict_on_the_document
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
-                                                     inputs: [ fixture("colour.png") ], outputs: [ destination ],
-                                                     payload: { format: "png", operations: { system: "id" } })
+        failure = assert_failed "failed", cell.call("active_storage.transform_image",
+                                                    inputs: [ fixture("colour.png") ], outputs: [ destination ],
+                                                    payload: { format: "png", operations: { system: "id" } })
 
-        assert_predicate failure, :permanent?
+        refute_predicate failure, :permanent?
+        assert_match "system", failure.message
       end
     end
   end
