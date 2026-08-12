@@ -38,7 +38,7 @@ module ActiveStorage
       # the jobs must retry. Deliberately not HotCell.clients: that records every client the process loaded,
       # including an application's own for unrelated cells, and Active Storage's jobs have no business
       # retrying those.
-      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewVideo, ProbeMedia,
+      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewPdfPoppler, PreviewVideo, ProbeMedia,
                   MagickTransformImage, MagickAnalyzeImage ].freeze
 
       class << self

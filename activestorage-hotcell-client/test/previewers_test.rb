@@ -7,6 +7,8 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   # not inherited.
   MUPDF = [ ActiveStorage::HotCell::Client::PdfPreviewer, ActiveStorage::Previewer::MuPDFPreviewer ].freeze
   FFMPEG = [ ActiveStorage::HotCell::Client::VideoPreviewer, ActiveStorage::Previewer::VideoPreviewer ].freeze
+  POPPLER = [ ActiveStorage::HotCell::Client::PopplerPdfPreviewer,
+              ActiveStorage::Previewer::PopplerPDFPreviewer ].freeze
 
   # The reason these classes exist as much as the sandboxing is. The built-in accept? shells out with `system`
   # from inside a web request to find out whether the binary is there — and the whole point of a cell is that it
@@ -45,6 +47,23 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   def test_a_pdf_preview_yields_what_rails_yields
     with_cell do
       preview ActiveStorage::HotCell::Client::PdfPreviewer, "sample.pdf" do |attachable|
+        assert_equal "image/png", attachable[:content_type]
+        assert_equal "sample.png", attachable[:filename]
+        assert_equal "PNG", identify(attachable[:io].path)[:format]
+      end
+    end
+  end
+
+  def test_the_poppler_previewer_accepts_pdfs_without_probing_for_pdftoppm
+    with_binary_missing POPPLER, :@pdftoppm_exists do
+      assert ActiveStorage::HotCell::Client::PopplerPdfPreviewer.accept?(Blob.new(fixture("sample.pdf")))
+      refute ActiveStorage::Previewer::PopplerPDFPreviewer.accept?(Blob.new(fixture("sample.pdf")))
+    end
+  end
+
+  def test_a_poppler_pdf_preview_yields_what_rails_yields
+    with_cell do
+      preview ActiveStorage::HotCell::Client::PopplerPdfPreviewer, "sample.pdf" do |attachable|
         assert_equal "image/png", attachable[:content_type]
         assert_equal "sample.png", attachable[:filename]
         assert_equal "PNG", identify(attachable[:io].path)[:format]

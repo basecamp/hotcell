@@ -12,5 +12,6 @@ require "active_storage/hot_cell/server/magick_analyze_image_operation"
 
 require "active_storage/hot_cell/server/tool_operation"
 require "active_storage/hot_cell/server/preview_pdf_operation"
+require "active_storage/hot_cell/server/preview_pdf_poppler_operation"
 require "active_storage/hot_cell/server/preview_video_operation"
 require "active_storage/hot_cell/server/probe_media_operation"
