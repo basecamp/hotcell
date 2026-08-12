@@ -117,6 +117,22 @@ class TransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # An Array here would filter to nothing and succeed as a bare format conversion, so a caller bug would
+  # come back `ok` with an untransformed image instead of the permanent `invalid` that reaches a reporter.
+  def test_operations_that_are_not_an_object_are_refused
+    Cell.boot do |cell|
+      with_output do |destination|
+        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
+                                                     inputs: [ fixture("colour.png") ], outputs: [ destination ],
+                                                     payload: { format: "png",
+                                                                operations: [ "resize_to_limit" ] })
+
+        assert_predicate failure, :permanent?
+        assert_match "operations must be an object", failure.message
+      end
+    end
+  end
+
   def test_a_format_outside_the_allowlist_is_refused
     Cell.boot do |cell|
       with_output do |destination|

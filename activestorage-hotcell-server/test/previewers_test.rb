@@ -31,6 +31,48 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
+  # two_page.pdf is a white page followed by a black one, so which page rendered is measurable.
+  def test_the_requested_page_is_the_one_rendered
+    Cell.boot do |cell|
+      first, second = [ 1, 2 ].map do |page|
+        with_output(".png") do |destination|
+          assert_ok cell.call("active_storage.preview_pdf", inputs: [ fixture("two_page.pdf") ],
+                                                            outputs: [ destination ],
+                                                            payload: { page: page })
+          brightness(destination)
+        end
+      end
+
+      assert_operator first, :>, 0.9, "page 1 is white"
+      assert_operator second, :<, 0.1, "page 2 is black"
+    end
+  end
+
+  def test_a_page_out_of_bounds_is_a_caller_bug
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        failure = assert_failed "invalid", cell.call("active_storage.preview_pdf",
+                                                     inputs: [ fixture("sample.pdf") ],
+                                                     outputs: [ destination ],
+                                                     payload: { page: 100_001 })
+
+        assert_match "page 100001 must be an integer between 1 and 10000", failure.message
+      end
+    end
+  end
+
+  # A String would ride straight into mutool's argv, so the type check is part of the bound.
+  def test_a_page_that_is_not_an_integer_is_a_caller_bug
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        assert_failed "invalid", cell.call("active_storage.preview_pdf",
+                                           inputs: [ fixture("sample.pdf") ],
+                                           outputs: [ destination ],
+                                           payload: { page: "2" })
+      end
+    end
+  end
+
   def test_a_nonsense_resolution_is_a_caller_bug
     Cell.boot do |cell|
       with_output(".png") do |destination|

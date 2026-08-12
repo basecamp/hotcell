@@ -15,6 +15,10 @@ gemspec path: "activestorage-hotcell-server", name: "activestorage-hotcell-serve
 gem "activestorage", github: "rails/rails", branch: "main"
 gem "activesupport", github: "rails/rails", branch: "main"
 
+# Test-only, for activestorage-hotcell-client's railtie test, which boots a minimal application to prove
+# the retry registration runs from to_prepare and survives a code reload.
+gem "railties", github: "rails/rails", branch: "main"
+
 gem "minitest"
 gem "rake"
 
