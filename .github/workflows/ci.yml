@@ -69,6 +69,27 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake hotcell
 
+  # The uncontainerized cell is the supported macOS development path, so the no-toolchain suite runs on a mac
+  # too. It is advisory rather than a gate: the runners are slow and a timing-sensitive deadline test is
+  # occasionally flaky there, and the memory clamp is unenforced because macOS has no finite RLIMIT_DATA. One
+  # lane on one Ruby, because macOS runners bill at about ten times the Linux rate.
+  hotcell-macos:
+    name: "hotcell (macos, ruby 3.4)"
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - run: bundle exec rake hotcell
+
   # These convert real images, PDFs and video rather than pretending to, so the converters have to be here.
   activestorage:
     name: "activestorage (ruby ${{matrix.ruby}})"
