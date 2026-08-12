@@ -6,6 +6,10 @@ require "active_storage/hot_cell/server/vips_operation"
 require "active_storage/hot_cell/server/transform_image_operation"
 require "active_storage/hot_cell/server/analyze_image_operation"
 
+require "active_storage/hot_cell/server/magick_operation"
+require "active_storage/hot_cell/server/magick_transform_image_operation"
+require "active_storage/hot_cell/server/magick_analyze_image_operation"
+
 require "active_storage/hot_cell/server/tool_operation"
 require "active_storage/hot_cell/server/preview_pdf_operation"
 require "active_storage/hot_cell/server/preview_video_operation"

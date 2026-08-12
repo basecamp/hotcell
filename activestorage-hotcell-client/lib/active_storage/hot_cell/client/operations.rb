@@ -42,6 +42,16 @@ module ActiveStorage
         hotcell CELL
         operation "active_storage.probe_media"
       end
+
+      class MagickTransformImage < ::HotCell::Client
+        hotcell CELL
+        operation "active_storage.transform_image_imagemagick"
+      end
+
+      class MagickAnalyzeImage < ::HotCell::Client
+        hotcell CELL
+        operation "active_storage.analyze_image_imagemagick"
+      end
     end
   end
 end
