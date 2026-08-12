@@ -86,7 +86,7 @@ jobs:
       - name: Install the converters
         run: |
           sudo apt-get update -qq
-          sudo apt-get install --no-install-recommends -y libvips42 mupdf-tools ffmpeg imagemagick
+          sudo apt-get install --no-install-recommends -y libvips42 mupdf-tools poppler-utils ffmpeg imagemagick
       - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
         with:
           ruby-version: "${{matrix.ruby}}"
