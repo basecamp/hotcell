@@ -372,10 +372,11 @@ Active Storage integration converting real images, PDFs and video.
 
 ```
 bundle install
-rake              # every suite
-rake hotcell      # only the suites that need no tool installed
-rake rubocop      # style, one configuration for all five gems
-docker/smoke      # the only check that covers network: none and cap-drop
+rake                    # every suite
+rake hotcell            # only the suites that need no tool installed
+rake test:devcell       # boot the real development cell and run the example battery
+rake rubocop            # style, one configuration for all five gems
+bin/conformance IMAGE   # the only check that covers network: none and cap-drop
 ```
 
 **The three hotcell gems need no container and no tool**, and `rake hotcell` is what keeps that honest —
@@ -398,7 +399,8 @@ Linux VM, a file descriptor is an index into one kernel's table, and `sendmsg` h
 across two kernels. Native `AF_UNIX` and `SCM_RIGHTS` on macOS are fine; it is the host-to-VM boundary that
 cannot carry a descriptor.
 
-What that leaves out is the isolation, which is verified on Linux by `docker/smoke` and in CI.
+What that leaves out is the isolation, which `bin/conformance` verifies on Linux — CI runs it against the
+base image on every push.
 
 ### Testing a control
 

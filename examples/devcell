@@ -1,0 +1,103 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Does the development configuration work? Boots the real exe/hotcell as a plain host process on the
+# example operations — exactly the way a developer runs it, uncontainerized — runs the battery through
+# the client classes, and then proves SIGTERM shuts it down cleanly: exit 0 and no socket left behind.
+#
+# `rake test:devcell` runs this. It needs no container and no toolchain, so it runs on Linux and macOS
+# alike; the memory-clamp check skips itself where RLIMIT_DATA cannot be set.
+
+require "bundler/setup"
+require "fileutils"
+require_relative "lib/battery"
+
+REPO = File.expand_path("..", __dir__)
+ROOT = File.join(REPO, "tmp", "devcell")
+DIRECTORY = File.join(ROOT, "example")
+SOCKETS = [ "work.sock", "control.sock" ].map { |name| File.join(DIRECTORY, name) }
+LOG = File.join(ROOT, "cell.log")
+
+def now
+  Process.clock_gettime Process::CLOCK_MONOTONIC
+end
+
+def wait_until(what, within: 15)
+  deadline = now + within
+  until yield
+    raise "#{what} did not happen within #{within}s" if now > deadline
+
+    sleep 0.05
+  end
+end
+
+# Whether a finite RLIMIT_DATA can be set here, probed without lasting effect. macOS returns EINVAL.
+def memory_clamp_enforceable?
+  soft, hard = Process.getrlimit(Process::RLIMIT_DATA)
+  Process.setrlimit Process::RLIMIT_DATA, 1200 * 1024**2, hard
+  Process.setrlimit Process::RLIMIT_DATA, soft, hard
+  true
+rescue Errno::EINVAL
+  false
+end
+
+def stop(pid, within: 15)
+  Process.kill :TERM, pid
+  deadline = now + within
+
+  loop do
+    _, status = Process.wait2(pid, Process::WNOHANG)
+    return status if status
+    raise "the cell did not exit within #{within}s of SIGTERM" if now > deadline
+
+    sleep 0.05
+  end
+end
+
+FileUtils.rm_rf ROOT
+FileUtils.mkdir_p ROOT
+
+environment = {
+  "BUNDLE_GEMFILE" => File.join(REPO, "Gemfile"),
+  "RUBYOPT" => "-rbundler/setup",
+  "HOTCELL_DIR" => DIRECTORY,
+  "HOTCELL_WORKSPACE" => File.join(ROOT, "workspace"),
+  "HOTCELL_OPERATIONS" => File.join(REPO, "examples", "operations"),
+}
+
+puts "booting exe/hotcell on the example operations"
+pid = Process.spawn(environment, RbConfig.ruby, File.join(REPO, "hotcell-server", "exe", "hotcell"),
+                    out: LOG, err: LOG)
+
+begin
+  wait_until("the cell's socket") { File.socket?(SOCKETS.first) }
+
+  HotCell.register "example", dir: DIRECTORY, timeout: 15
+  Examples::Battery.new(cell: HotCell.cell("example"),
+                        memory_enforceable: memory_clamp_enforceable?).run
+
+  puts "stopping with SIGTERM"
+  status = stop(pid)
+  pid = nil
+
+  raise "the cell exited #{status.exitstatus.inspect} rather than 0" unless status.exitstatus&.zero?
+
+  leftover = SOCKETS.select { |socket| File.exist?(socket) }
+  raise "the cell left its sockets behind: #{leftover.inspect}" unless leftover.empty?
+
+  puts "PASS"
+rescue StandardError, Interrupt => error
+  warn "FAIL: #{error.message}"
+  warn "cell log:"
+  warn File.read(LOG).gsub(/^/, "  ") if File.exist?(LOG)
+  exit 1
+ensure
+  if pid
+    begin
+      Process.kill :KILL, pid
+      Process.wait pid
+    rescue Errno::ESRCH, Errno::ECHILD
+      nil
+    end
+  end
+end

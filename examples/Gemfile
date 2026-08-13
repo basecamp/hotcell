@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+# The driver side's gems: the real client and its core, from this repository. bin/conformance and
+# bin/load copy this file into the driver container's own writable directory — a read-only mount cannot
+# take the lockfile — with HOTCELL_REPO naming where the repository is mounted.
+
+source "https://rubygems.org"
+
+repo = ENV.fetch("HOTCELL_REPO") { File.expand_path("..", __dir__) }
+
+gem "hotcell-core", path: File.join(repo, "hotcell-core")
+gem "hotcell-client", path: File.join(repo, "hotcell-client")

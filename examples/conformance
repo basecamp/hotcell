@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The driver half of bin/conformance, run inside a second container against a cell booted from the image
+# under test. It waits for the cell's socket to appear where HOTCELL_DIR said it would — which is itself
+# the check that the image obeys HOTCELL_DIR — then runs the battery, isolation checks included.
+
+require "bundler/setup"
+require_relative "lib/battery"
+
+directory = ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell")
+socket = File.join(directory, "work.sock")
+
+deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 30
+until File.socket?(socket)
+  if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    abort "FAIL: the cell never created #{socket} — the image did not start, or does not obey HOTCELL_DIR"
+  end
+
+  sleep 0.1
+end
+puts "the cell is listening at #{socket}"
+
+HotCell.register "example", dir: directory, timeout: 15
+
+begin
+  Examples::Battery.new(cell: HotCell.cell("example"), isolation: true).run
+  puts "PASS"
+rescue Examples::Battery::Failed => error
+  abort "FAIL: #{error.message}"
+end

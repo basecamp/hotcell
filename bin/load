@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# How does a containerized cell behave under pressure? Boots IMAGE with the accessory's real flags and
+# drives one scenario at volume from a second container — see examples/load for the scenarios and the
+# report. Heavy runs are manual and interactive; a short bounded run works as a CI gate.
+#
+#   bin/load IMAGE [SCENARIO] [SECONDS] [THREADS] [DRIVER_IMAGE]
+#
+# The cell's knobs pass through the environment, e.g.:
+#
+#   EXAMPLE_CONCURRENCY=4 EXAMPLE_QUEUE_SIZE=16 bin/load hotcell:test echo 30 16
+#
+# Knobs: EXAMPLE_CONCURRENCY, EXAMPLE_QUEUE_SIZE, EXAMPLE_QUEUE_WAIT, EXAMPLE_DEADLINE,
+# EXAMPLE_MEMORY_MB, EXAMPLE_FILE_SIZE_MB — read by examples/operations/configuration.rb.
+set -euo pipefail
+
+IMAGE="${1:?usage: bin/load IMAGE [SCENARIO] [SECONDS] [THREADS] [DRIVER_IMAGE]}"
+SCENARIO="${2:-echo}"
+SECONDS_ARG="${3:-10}"
+THREADS="${4:-8}"
+DRIVER_IMAGE="${5:-ruby:3.4}"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+STAMP="$$"
+CELL="hotcell-load-cell-$STAMP"
+VOLUME="hotcell-load-$STAMP"
+
+cleanup() {
+  docker rm -f "$CELL" >/dev/null 2>&1 || true
+  docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+docker volume create "$VOLUME" >/dev/null
+
+echo "booting $IMAGE with the accessory's flags"
+docker run --detach --name "$CELL" \
+  --network none \
+  --read-only \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m \
+  --memory 2g --memory-swap 2g \
+  --cpus 2 \
+  --pids-limit 512 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --user 10001:10001 \
+  --ulimit stack=2097152:2097152 \
+  --env EXAMPLE_CONCURRENCY \
+  --env EXAMPLE_QUEUE_SIZE \
+  --env EXAMPLE_QUEUE_WAIT \
+  --env EXAMPLE_DEADLINE \
+  --env EXAMPLE_MEMORY_MB \
+  --env EXAMPLE_FILE_SIZE_MB \
+  --volume "$REPO/examples/operations:/hotcell/operations:ro" \
+  --volume "$VOLUME:/run/hotcell/cell" \
+  "$IMAGE" >/dev/null
+
+echo "driving from a second container over the shared volume"
+if ! docker run --rm \
+  --volume "$REPO:/repo:ro" \
+  --volume "$VOLUME:/run/hotcell/cell" \
+  --env HOTCELL_REPO=/repo \
+  --env BUNDLE_GEMFILE=/tmp/driver/Gemfile \
+  --env BUNDLE_PATH=/tmp/driver/bundle \
+  "$DRIVER_IMAGE" bash -c "
+    install -D /repo/examples/Gemfile /tmp/driver/Gemfile &&
+    bundle install --quiet &&
+    bundle exec ruby /repo/examples/load $SCENARIO $SECONDS_ARG $THREADS
+  "
+then
+  echo "FAIL. Cell log tail:"
+  docker logs --tail 20 "$CELL" 2>&1 | sed 's/^/  /'
+  exit 1
+fi

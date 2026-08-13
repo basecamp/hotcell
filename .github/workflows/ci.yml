@@ -112,5 +112,22 @@ jobs:
         with:
           ruby-version: "${{matrix.ruby}}"
           bundler-cache: true
-      - run: bundle exec rake activestorage-hotcell-server activestorage-hotcell-client
+      - run: bundle exec rake activestorage
+
+  # The container and isolation path, covered for real: build the base image and prove it supports hotcell
+  # with the accessory's flags on. bin/conformance drives the example battery from a second container over a
+  # shared volume, so the descriptor crossing the container boundary, network: none, cap-drop, the read-only
+  # root and the noexec tmpfs are all checked on every push.
+  conformance:
+    name: "container conformance"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Build the base image
+        run: docker build --tag hotcell:test .
+      - run: bin/conformance hotcell:test
 

@@ -1,0 +1,135 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The example operations at volume: the driver half of bin/load, run inside a second container against a
+# containerized cell. Threads hammer one scenario for a duration, and the report splits what the doc's
+# knobs are for — time spent queued against time spent performing, the verdict mix, and throughput.
+#
+#   load [SCENARIO] [SECONDS] [THREADS]
+#
+# Scenarios: echo (baseline), sleep (queueing), greedy (memory kills), overflow (fsize kills),
+# crash (worker death), spawn (orphan sweeps), mix (a weighted blend).
+
+require "bundler/setup"
+require "tempfile"
+require_relative "lib/clients"
+
+SCENARIO = ARGV.fetch(0, "echo")
+SECONDS = Float(ARGV.fetch(1, 10))
+THREADS = Integer(ARGV.fetch(2, 8))
+
+directory = ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell")
+socket = File.join(directory, "work.sock")
+
+deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 30
+until File.socket?(socket)
+  abort "the cell never created #{socket}" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+  sleep 0.1
+end
+
+HotCell.register "example", dir: directory, timeout: 30
+
+CALLS = {
+  "echo" => lambda do
+    Tempfile.create("load-in", binmode: true) do |staging|
+      staging.write "x" * 1024
+      staging.flush
+
+      Tempfile.create("load-out", binmode: true) do |sink|
+        File.open(staging.path, "rb") do |input|
+          File.open(sink.path, "wb") do |output|
+            Examples::Echo.perform_in_hotcell [ input ], [ output ]
+          end
+        end
+      end
+    end
+  end,
+  "sleep" => -> { Examples::Sleep.perform_in_hotcell [], [], { seconds: 0.2 } },
+  "greedy" => -> { Examples::Greedy.perform_in_hotcell [], [], { megabytes: 900 } },
+  "overflow" => lambda do
+    Tempfile.create("load-out", binmode: true) do |sink|
+      File.open(sink.path, "wb") do |output|
+        Examples::Overflow.perform_in_hotcell [], [ output ], { megabytes: 16 }
+      end
+    end
+  end,
+  "crash" => -> { Examples::Crash.perform_in_hotcell [], [], { mode: rand < 0.5 ? "raise" : "signal" } },
+  "spawn" => -> { Examples::Spawn.perform_in_hotcell [], [] },
+}
+MIX = { "echo" => 0.6, "sleep" => 0.2, "crash" => 0.1, "overflow" => 0.1 }
+
+def call_for(scenario)
+  return CALLS.fetch(scenario) unless scenario == "mix"
+
+  draw = rand
+  MIX.each do |name, weight|
+    return CALLS.fetch(name) if (draw -= weight) <= 0
+  end
+  CALLS.fetch("echo")
+end
+
+abort "unknown scenario #{SCENARIO.inspect} (#{CALLS.keys.join(", ")}, mix)" unless SCENARIO == "mix" || CALLS.key?(SCENARIO)
+
+# The verdict, as a caller sees it: `ok`, or the failure's code — with the cause kept for `killed`,
+# because `killed: memory` and `killed: deadline` call for different responses to pressure.
+def verdict_for(error)
+  return "ok" if error.nil?
+
+  parts = error.message.split(": ")
+  parts.first == "killed" ? parts.first(2).join(": ") : parts.first
+end
+
+samples = []
+recorder = Mutex.new
+
+ActiveSupport::Notifications.subscribe "perform.hot_cell" do |event|
+  sample = { duration_ms: event.duration,
+             queued_ms: event.payload.dig(:timing, :queued_ms),
+             perform_ms: event.payload[:perform_ms] }
+  recorder.synchronize { samples << sample }
+end
+
+verdicts = Hash.new(0)
+started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+stop_at = started + SECONDS
+
+puts "#{SCENARIO} for #{SECONDS}s on #{THREADS} threads"
+THREADS.times.map do
+  Thread.new do
+    while Process.clock_gettime(Process::CLOCK_MONOTONIC) < stop_at
+      error = begin
+        call_for(SCENARIO).call
+        nil
+      rescue StandardError => raised
+        raised
+      end
+
+      recorder.synchronize { verdicts[verdict_for(error)] += 1 }
+    end
+  end
+end.each(&:join)
+elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+def percentiles(values)
+  sorted = values.compact.sort
+  return "no samples" if sorted.empty?
+
+  [ 0.50, 0.95, 0.99 ].map do |percentile|
+    rank = (percentile * sorted.size).ceil - 1
+    format "p%d=%.1fms", (percentile * 100), sorted[rank.clamp(0, sorted.size - 1)]
+  end.join(" ")
+end
+
+total = verdicts.values.sum
+puts
+puts format("%d requests in %.1fs — %.1f req/s on %d threads", total, elapsed, total / elapsed, THREADS)
+puts
+puts "verdicts:"
+verdicts.sort_by { |_, count| -count }.each { |verdict, count| puts format("  %-18s %6d", verdict, count) }
+puts
+puts "latency (wall):    #{percentiles(samples.map { |sample| sample[:duration_ms] })}"
+puts "latency (queued):  #{percentiles(samples.map { |sample| sample[:queued_ms] })}"
+puts "latency (perform): #{percentiles(samples.map { |sample| sample[:perform_ms] })}"
+puts
+puts "the cell's own metrics:"
+puts "  #{HotCell.cell("example").metrics&.result.inspect}"

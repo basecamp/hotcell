@@ -152,12 +152,14 @@ values mean the cgroup fires first and you get the bare `SIGKILL` the rlimit exi
 
 ## Verifying an image
 
-`docker/smoke` boots an image with every flag above and converts one file through it from a second container
-over a shared volume. It is the only check in this repository that covers `network: none`, `cap-drop`, the
-read-only root filesystem, and the tmpfs flags, and the only one that shows a descriptor crossing between two
-containers.
+`bin/conformance` boots an image with every flag above and drives the example battery through it from a
+second container over a shared volume: descriptor round-trips, every kill verdict, queue refusal at capacity,
+and the isolation itself — `network: none`, `cap-drop`, the read-only root filesystem, and the tmpfs flags.
+It is the only check in this repository that covers those flags, and the only one that shows a descriptor
+crossing between two containers. It exits non-zero on the first failed check, so it works as a gate, and CI
+runs it against the base image on every push. Run it against your own derived image too:
 
 ```
 docker build -t hotcell:test .
-docker/smoke hotcell:test
+bin/conformance hotcell:test
 ```
