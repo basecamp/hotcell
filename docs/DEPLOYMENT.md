@@ -152,14 +152,20 @@ values mean the cgroup fires first and you get the bare `SIGKILL` the rlimit exi
 
 ## Verifying an image
 
-`bin/conformance` boots an image with every flag above and drives the example battery through it from a
+`bin/conformance` answers "does this image support hotcell?" for any image. It boots yours with every flag
+above, mounts the example operations over `/hotcell/operations`, and drives a battery through it from a
 second container over a shared volume: descriptor round-trips, every kill verdict, queue refusal at capacity,
 and the isolation itself — `network: none`, `cap-drop`, the read-only root filesystem, and the tmpfs flags.
 It is the only check in this repository that covers those flags, and the only one that shows a descriptor
-crossing between two containers. It exits non-zero on the first failed check, so it works as a gate, and CI
-runs it against the base image on every push. Run it against your own derived image too:
+crossing between two containers. It exits non-zero on the first failed check, so it works as a gate.
 
 ```
-docker build -t hotcell:test .
-bin/conformance hotcell:test
+docker build -t my-cell:test hotcell/
+bin/conformance my-cell:test
 ```
+
+The mount is deliberate: it shadows whatever operations your image carries, because what is under test is
+the image's runtime — its Ruby, its gems, its user, and the flags — rather than the work it does.
+
+`bin/example-image` builds one to try it against, by running the installer and building exactly what it
+wrote. CI runs both on every push, so the scaffold an application is given stays known-good.

@@ -1,0 +1,80 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Builds a cell image the way an application builds one: run the installer, customize what it wrote, and
+# `docker build`. There is no published base image to inherit from, so this is the only kind of cell image
+# there is — and building the example this way means CI proves the installed scaffold itself works, rather
+# than proving a hand-maintained copy of it works.
+#
+#   bin/example-image [TAG]        # default hotcell:example
+#
+# The customizations are the two an application makes, plus one this repository has to make:
+#
+#   1. the example operations go into operations/, the way an application's own would;
+#   2. no tools are installed, because the example operations need none;
+#   3. the gems come from this checkout rather than from the branch on GitHub the template names, so that
+#      what CI builds is the code under review. That is the one place this diverges from what an
+#      application gets, and it is two mechanical edits — both of which fail loudly if the templates move
+#      out from under them.
+
+require "bundler/setup"
+require "fileutils"
+require "hot_cell/install"
+
+TAG = ARGV.fetch(0, "hotcell:example")
+REPO = File.expand_path("..", __dir__)
+BUILD = File.join(REPO, "tmp", "example-image")
+CONTEXT = File.join(BUILD, "hotcell")
+GEMS = %w[ hotcell-core hotcell-server ].freeze
+
+def edit(path)
+  written = yield File.read(path)
+  File.write path, written
+end
+
+def substitute(path, pattern, replacement)
+  edit(path) do |content|
+    unless content.match?(pattern)
+      abort "the installed #{File.basename(path)} no longer matches #{pattern.inspect}, so this script " \
+            "cannot point it at the working tree. Update bin/example-image alongside the template."
+    end
+
+    content.sub pattern, replacement
+  end
+end
+
+FileUtils.rm_rf BUILD
+FileUtils.mkdir_p BUILD
+
+puts "installing the cell scaffold"
+HotCell::Install.call BUILD
+
+puts "adding the example operations"
+FileUtils.cp Dir.glob(File.join(REPO, "examples", "operations", "*.rb")),
+             File.join(CONTEXT, "operations")
+
+# The gemspecs are evaluated from inside the image, so the gems have to be in the build context and the
+# Dockerfile has to copy them in before `bundle install` runs.
+puts "pointing the cell's Gemfile at this checkout"
+GEMS.each do |gem|
+  files = `git -C #{REPO} ls-files #{gem}`.lines(chomp: true)
+  abort "git listed no files under #{gem}" if files.empty?
+
+  files.each do |file|
+    destination = File.join(CONTEXT, file)
+    FileUtils.mkdir_p File.dirname(destination)
+    FileUtils.cp File.join(REPO, file), destination
+  end
+end
+
+substitute File.join(CONTEXT, "Gemfile"), /^git .*?^end\n/m,
+           GEMS.map { |gem| %(gem "#{gem}", path: "#{gem}"\n) }.join
+
+substitute File.join(CONTEXT, "Dockerfile"), /^COPY .*Gemfile\* \.\/$/,
+           [ "COPY --chown=hotcell:hotcell Gemfile* ./",
+             *GEMS.map { |gem| "COPY --chown=hotcell:hotcell #{gem} #{gem}" } ].join("\n")
+
+puts "building #{TAG}"
+abort "docker build failed" unless system("docker", "build", "--tag", TAG, CONTEXT)
+
+puts "built #{TAG} from #{CONTEXT}"

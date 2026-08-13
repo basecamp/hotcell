@@ -23,6 +23,7 @@ examples/
   load          # the driver bin/load runs inside a second container
   Gemfile       # the driver's gems: hotcell-core and hotcell-client, from this repository
 bin/
+  example-image # run the installer and build what it wrote, for the two below to drive  (CI on Linux)
   conformance   # container: does this image support hotcell?  (CI on Linux)
   load          # container, at volume  (manual; a bounded run may gate CI later)
 Rakefile
@@ -95,8 +96,8 @@ The real use case: *someone builds their own hotcell image.* `bin/conformance IM
   a stock Ruby image rather than the image under test, so a minimal cell image never needs to carry the
   client's dependencies; it installs `examples/Gemfile` at launch, which is the one step that needs network.
 - Exit non-zero on the first failed assertion, so a user or CI can gate on it.
-- Runs in **CI on Linux** against our own built image, so the container and isolation path finally has automated
-  coverage — the gap `docker/smoke` left.
+- Runs in **CI on Linux** against the image `bin/example-image` builds from the installed scaffold, so the
+  container and isolation path finally has automated coverage — the gap `docker/smoke` left.
 
 ## `bin/load` — how does it behave under pressure?
 
@@ -114,12 +115,16 @@ The same operations at volume against the containerized cell.
 
 ## What this removes
 
-`docker/smoke` is dropped. `bin/conformance` is its automatable, general replacement: it does what
-`docker/smoke` did (mount ops into a hardened container, check the flags, cross a descriptor between
-containers) plus the full battery, for any image. The false "verified … in CI" claim in `README.md` and the
-`docker/smoke` references in `docs/DEPLOYMENT.md` and `docs/HOTCELL-SPEC.md` are corrected in the same pass.
+The whole `docker/` directory goes, and the root `Dockerfile` with it. `bin/conformance` is `docker/smoke`'s
+automatable, general replacement: it does what that did (mount ops into a hardened container, check the
+flags, cross a descriptor between containers) plus the full battery, for any image.
 
-`docker/Gemfile` stays: it is the cell's own Gemfile, copied into the base image by the `Dockerfile`.
+The root `Dockerfile` and `docker/Gemfile` went because they were a hand-maintained near-copy of
+`hotcell-client/lib/hot_cell/install/Dockerfile.tt` and `Gemfile.tt` — and had already drifted from them.
+Nothing derives from a published base image, so the installed scaffold is the only cell image there is;
+`bin/example-image` runs the installer and builds what it wrote, which makes the scaffold an application is
+actually given the thing CI proves. The false "verified … in CI" claim in `README.md` and the `docker/smoke`
+references in `docs/DEPLOYMENT.md` and `docs/HOTCELL-SPEC.md` are corrected in the same pass.
 
 ## Settled
 

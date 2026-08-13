@@ -376,7 +376,9 @@ rake                    # every suite
 rake hotcell            # only the suites that need no tool installed
 rake test:devcell       # boot the real development cell and run the example battery
 rake rubocop            # style, one configuration for all five gems
+bin/example-image       # install the cell scaffold and build what it wrote
 bin/conformance IMAGE   # the only check that covers network: none and cap-drop
+bin/load IMAGE          # the same operations at volume
 ```
 
 **The three hotcell gems need no container and no tool**, and `rake hotcell` is what keeps that honest —
@@ -399,8 +401,9 @@ Linux VM, a file descriptor is an index into one kernel's table, and `sendmsg` h
 across two kernels. Native `AF_UNIX` and `SCM_RIGHTS` on macOS are fine; it is the host-to-VM boundary that
 cannot carry a descriptor.
 
-What that leaves out is the isolation, which `bin/conformance` verifies on Linux — CI runs it against the
-base image on every push.
+What that leaves out is the isolation, which `bin/conformance` verifies on Linux against any image. CI builds
+the installed scaffold with `bin/example-image` and runs it against that on every push, so what an
+application is given is what is checked.
 
 ### Testing a control
 

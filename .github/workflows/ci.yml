@@ -114,10 +114,10 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake activestorage
 
-  # The container and isolation path, covered for real: build the base image and prove it supports hotcell
-  # with the accessory's flags on. bin/conformance drives the example battery from a second container over a
-  # shared volume, so the descriptor crossing the container boundary, network: none, cap-drop, the read-only
-  # root and the noexec tmpfs are all checked on every push.
+  # The container and isolation path, covered for real. bin/example-image runs the installer and builds
+  # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
+  # drives the example battery through it from a second container, checking the descriptor crossing the
+  # container boundary, network: none, cap-drop, the read-only root and the noexec tmpfs.
   conformance:
     name: "container conformance"
     runs-on: ubuntu-latest
@@ -127,7 +127,11 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - name: Build the base image
-        run: docker build --tag hotcell:test .
-      - run: bin/conformance hotcell:test
+      - uses: ruby/setup-ruby@9eb537ca036ebaed86729dcb9309076e4c5c3b74 # v1.314.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - name: Build the example cell image from the installed scaffold
+        run: bin/example-image
+      - run: bin/conformance hotcell:example
 

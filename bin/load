@@ -7,7 +7,7 @@
 #
 # The cell's knobs pass through the environment, e.g.:
 #
-#   EXAMPLE_CONCURRENCY=4 EXAMPLE_QUEUE_SIZE=16 bin/load hotcell:test echo 30 16
+#   EXAMPLE_CONCURRENCY=4 EXAMPLE_QUEUE_SIZE=16 bin/load hotcell:example echo 30 16
 #
 # Knobs: EXAMPLE_CONCURRENCY, EXAMPLE_QUEUE_SIZE, EXAMPLE_QUEUE_WAIT, EXAMPLE_DEADLINE,
 # EXAMPLE_MEMORY_MB, EXAMPLE_FILE_SIZE_MB — read by examples/operations/configuration.rb.
