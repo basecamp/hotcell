@@ -23,7 +23,7 @@ The tool leaf is spelled `Ffprobe`/`Ffmpeg`/`Pdf` so that rule holds mechanicall
 `PDF` are aliases.
 
 Those declarations are the only thing an application writes; a railtie does the rest, including adding the
-transient class to the four Active Storage jobs' retry policies. The client gem exists because the built-in
+transient class to Active Storage's jobs' retry policies. The client gem exists because the built-in
 classes break the moment their tools leave the image: the image analyzers decline once `variant_processor`
 is a class and blobs are marked analyzed with no dimensions; the video and audio analyzers answer `accept?`
 by shelling out to ffprobe and go silent when it is gone; the previewers do the same with mutool and ffmpeg;
@@ -31,6 +31,22 @@ and the jobs retry nothing useful. Each is closed in the gem, where the breakage
 and audio analyzers present exactly Rails' metadata, with one deliberate exception — Rails writes a media
 file's raw container `tags` into the database, and the cell refuses them, because those bytes are
 attacker-controlled.
+
+## What inherits from Rails, and what does not
+
+The client classes subclass Rails' own. The previewers subclass
+`ActiveStorage::Previewer::MuPDFPreviewer`, `PopplerPDFPreviewer` and `VideoPreviewer`.
+`Transformers::Image::Magick` subclasses `ActiveStorage::Transformers::ImageMagick`. The analyzers
+subclass `ActiveStorage::Analyzer`. They inherit `accept?`, the transformation allowlist, and the metadata
+shape. One step changes. The work crosses to a cell instead of running in the application.
+
+The cell's operations inherit nothing from Rails. They subclass `HotCell::Operation`. Each operation
+reimplements what a Rails class does, with the same library and the same pipeline.
+`Transformers::Image::Vips` runs `source(…).loader(page: 0).convert(format).apply(operations)` through
+`ImageProcessing::Vips`, as `ActiveStorage::Transformers::ImageProcessingTransformer` does.
+
+Nothing keeps the operations in step with Rails. When Rails changes a transformer or an analyzer, update
+the operation by hand.
 
 **`activestorage-hotcell-server` does not load Active Storage**, despite the name. The name says which
 consumer it serves, not what it links against. Everything application-side lives under
@@ -46,9 +62,9 @@ Gemfile tracks `main` until 8.2 ships and the gemspec floor can name a version.
 
 Not yet, in the order they matter:
 
-**A transformation allowlist.** Today the transformer matches Rails' vips path exactly: it refuses
-`combine_options`, drops blank arguments, and passes every other transformation, `loader`, and `saver`
-straight to ImageProcessing. So a caller can set `loader: { unlimited: true }` and remove libvips' own
+**A transformation allowlist.** Today the cell matches Rails' vips path exactly, in
+`Server::Transforming#operations_for`: it refuses `combine_options`, drops blank arguments, and passes
+every other transformation, `loader`, and `saver` straight to ImageProcessing. So a caller can set `loader: { unlimited: true }` and remove libvips' own
 denial-of-service limits — the capability Rails gives a caller today, tolerable here only because the cell's
 limits are outside the library (`RLIMIT_DATA`, `RLIMIT_FSIZE` and the wall-clock deadline still apply, so the
 caller buys a killed worker). A future deliverable narrows this to an explicit allowlist: which operations
