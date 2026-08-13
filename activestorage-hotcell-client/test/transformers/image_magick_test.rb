@@ -54,7 +54,7 @@ class TransformersImageMagickTest < ActiveStorageHotCellClientTest
 
   private
     def transformer(transformations)
-      ActiveStorage::HotCell::Client::Transformers::ImageMagick.new transformations
+      ActiveStorage::HotCell::Client::Transformers::Image::Magick.new transformations
     end
 
     def transform(transformations, name, format: "png", &block)

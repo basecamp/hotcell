@@ -6,7 +6,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_variant_comes_back_resized
     Cell.boot do |cell|
       with_output do |destination|
-        response = cell.call "active_storage.transform_image",
+        response = cell.call "active_storage.transformers.image.vips",
                              inputs: [ fixture("colour.png") ], outputs: [ destination ],
                              payload: { format: "png", operations: { resize_to_limit: [ 30, 30 ] } }
 
@@ -21,7 +21,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_the_result_describes_what_was_produced_rather_than_what_was_asked_for
     Cell.boot do |cell|
       with_output do |destination|
-        result = assert_ok(cell.call("active_storage.transform_image",
+        result = assert_ok(cell.call("active_storage.transformers.image.vips",
                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                      payload: { format: "webp", operations: { resize_to_limit: [ 30, 30 ] } })).result
 
@@ -39,7 +39,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_every_response_reports_what_libvips_charged
     Cell.boot do |cell|
       with_output do |destination|
-        result = assert_ok(cell.call("active_storage.transform_image",
+        result = assert_ok(cell.call("active_storage.transformers.image.vips",
                                      inputs: [ fixture("big.png") ], outputs: [ destination ],
                                      payload: { format: "png", operations: { resize_to_fill: [ 64, 64 ] } })).result
 
@@ -51,7 +51,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_format_change_with_no_operations_at_all
     Cell.boot do |cell|
       with_output do |destination|
-        assert_ok cell.call("active_storage.transform_image", inputs: [ fixture("colour.png") ],
+        assert_ok cell.call("active_storage.transformers.image.vips", inputs: [ fixture("colour.png") ],
                                                               outputs: [ destination ], payload: { format: "jpg" })
 
         assert_equal "JPEG", identify(destination)[:format]
@@ -64,7 +64,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_an_animated_source_is_flattened_to_its_first_frame_by_default
     Cell.boot do |cell|
       with_output(".gif") do |destination|
-        assert_ok cell.call("active_storage.transform_image", inputs: [ fixture("animated.gif") ],
+        assert_ok cell.call("active_storage.transformers.image.vips", inputs: [ fixture("animated.gif") ],
                                                               outputs: [ destination ], payload: { format: "gif" })
 
         assert_equal 1, identify(destination)[:frames]
@@ -76,7 +76,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_loader_asking_for_every_frame_keeps_every_frame
     Cell.boot do |cell|
       with_output(".gif") do |destination|
-        assert_ok cell.call("active_storage.transform_image",
+        assert_ok cell.call("active_storage.transformers.image.vips",
                             inputs: [ fixture("animated.gif") ], outputs: [ destination ],
                             payload: { format: "gif", operations: { loader: { n: -1 } } })
 
@@ -91,7 +91,7 @@ class TransformImageTest < ActiveStorageHotCellTest
     Cell.boot do |cell|
       sizes = [ 90, 10 ].map do |quality|
         with_output do |destination|
-          assert_ok cell.call("active_storage.transform_image",
+          assert_ok cell.call("active_storage.transformers.image.vips",
                               inputs: [ fixture("big.png") ], outputs: [ destination ],
                               payload: { format: "jpg", operations: { saver: { Q: quality } } })
           File.size(destination)
@@ -108,7 +108,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_transformation_rails_accepts_is_not_second_guessed
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.transform_image",
+        response = cell.call "active_storage.transformers.image.vips",
                              inputs: [ fixture("colour.png") ], outputs: [ destination ],
                              payload: { format: "png", operations: { linear: [ 2, 0 ] } }
 
@@ -123,7 +123,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_combine_options_is_refused_like_rails_refuses_it
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
+        failure = assert_failed "invalid", cell.call("active_storage.transformers.image.vips",
                                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                                      payload: { format: "png",
                                                                 operations: { combine_options: { resize: "50x50" } } })
@@ -139,7 +139,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_blank_argument_skips_the_operation_rather_than_failing
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.transform_image",
+        response = cell.call "active_storage.transformers.image.vips",
                              inputs: [ fixture("colour.png") ], outputs: [ destination ],
                              payload: { format: "png",
                                         operations: { resize_to_limit: [ 30, 30 ], sharpen: "",
@@ -156,7 +156,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_operations_that_are_not_an_object_are_refused
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image",
+        failure = assert_failed "invalid", cell.call("active_storage.transformers.image.vips",
                                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                                      payload: { format: "png",
                                                                 operations: [ "resize_to_limit" ] })
@@ -173,7 +173,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_format_no_saver_answers_to_is_a_vips_error
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.transform_image",
+        failure = assert_failed "unreadable", cell.call("active_storage.transformers.image.vips",
                                                         inputs: [ fixture("colour.png") ],
                                                         outputs: [ destination ],
                                                         payload: { format: "xyzzy" })
@@ -189,7 +189,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_an_unknown_transformation_is_not_a_verdict_on_the_document
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "failed", cell.call("active_storage.transform_image",
+        failure = assert_failed "failed", cell.call("active_storage.transformers.image.vips",
                                                     inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                                     payload: { format: "png", operations: { system: "id" } })
 
@@ -205,7 +205,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_a_large_source_downscaled_to_a_small_thumbnail_is_not_bounded_by_the_write_limit
     Cell.boot(file_size: 64 * 1024) do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.transform_image",
+        response = cell.call "active_storage.transformers.image.vips",
                              inputs: [ fixture("large.png") ], outputs: [ destination ],
                              payload: { format: "png", operations: { resize_to_limit: [ 32, 32 ] } }
 
@@ -218,7 +218,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   def test_something_that_is_not_an_image_is_unreadable_rather_than_failed
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.transform_image",
+        failure = assert_failed "unreadable", cell.call("active_storage.transformers.image.vips",
                                                         inputs: [ fixture("broken.png") ], outputs: [ destination ],
                                                         payload: { format: "png" })
 
@@ -238,10 +238,11 @@ class TransformImageTest < ActiveStorageHotCellTest
         cell.answer connection
       end
 
-      assert_equal %w[ active_storage.analyze_image active_storage.analyze_image_imagemagick
-                       active_storage.preview_pdf active_storage.preview_pdf_poppler active_storage.preview_video
-                       active_storage.probe_media active_storage.transform_image
-                       active_storage.transform_image_imagemagick ],
+      assert_equal %w[ active_storage.analyzers.image.magick active_storage.analyzers.image.vips
+                       active_storage.analyzers.media.ffprobe
+                       active_storage.previewers.pdf.mutool active_storage.previewers.pdf.poppler
+                       active_storage.previewers.video.ffmpeg
+                       active_storage.transformers.image.magick active_storage.transformers.image.vips ],
                    assert_ok(described).result[:operations]
     end
   end

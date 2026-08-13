@@ -9,7 +9,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
   def test_a_variant_comes_back_resized
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.transform_image_imagemagick",
+        response = cell.call "active_storage.transformers.image.magick",
                              inputs: [ fixture("colour.png") ], outputs: [ destination ],
                              payload: { format: "png", operations: { resize_to_limit: [ 20, 20 ] } }
 
@@ -24,7 +24,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
   def test_a_format_change
     Cell.boot do |cell|
       with_output(".jpg") do |destination|
-        response = cell.call "active_storage.transform_image_imagemagick",
+        response = cell.call "active_storage.transformers.image.magick",
                              inputs: [ fixture("colour.png") ], outputs: [ destination ],
                              payload: { format: "jpg" }
 
@@ -39,7 +39,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
   def test_an_imagemagick_only_operation_runs
     Cell.boot do |cell|
       with_output(".gif") do |destination|
-        response = cell.call "active_storage.transform_image_imagemagick",
+        response = cell.call "active_storage.transformers.image.magick",
                              inputs: [ fixture("animated.gif") ], outputs: [ destination ],
                              payload: { format: "gif", operations: { coalesce: true, resize_to_limit: [ 20, 20 ] } }
 
@@ -52,7 +52,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
   def test_combine_options_is_refused
     Cell.boot do |cell|
       with_output do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.transform_image_imagemagick",
+        failure = assert_failed "invalid", cell.call("active_storage.transformers.image.magick",
                                                      inputs: [ fixture("colour.png") ], outputs: [ destination ],
                                                      payload: { format: "png",
                                                                 operations: { combine_options: { resize: "5x5" } } })
@@ -65,7 +65,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
   def test_something_that_is_not_an_image_is_unreadable
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.transform_image_imagemagick",
+        failure = assert_failed "unreadable", cell.call("active_storage.transformers.image.magick",
                                                         inputs: [ fixture("broken.png") ], outputs: [ destination ],
                                                         payload: { format: "png" })
 

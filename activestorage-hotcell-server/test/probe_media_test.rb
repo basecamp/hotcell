@@ -5,7 +5,7 @@ require "test_helper"
 class ProbeMediaTest < ActiveStorageHotCellTest
   def test_probing_a_video_returns_the_shape_rails_records
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp4") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mp4") ])).result
 
       assert_in_delta 64.0, result[:width], 0.01
       assert_in_delta 48.0, result[:height], 0.01
@@ -20,7 +20,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
   # Rails reports dimensions as floats, and a stream with no rotation carries no angle at all.
   def test_dimensions_are_floats_and_an_unrotated_video_reports_no_angle
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp4") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mp4") ])).result
 
       assert_kind_of Float, result[:width]
       refute result.key?(:angle)
@@ -29,7 +29,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
 
   def test_probing_audio_returns_the_shape_rails_records
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mp3") ])).result
 
       assert result[:audio]
       refute result[:video]
@@ -45,7 +45,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
   # being staged. This exercises the same run_tool descriptor passing that both previewers use.
   def test_an_input_larger_than_the_write_limit_is_still_probed
     Cell.boot(file_size: 4 * 1024) do |cell|
-      result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture("sample.mp3") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mp3") ])).result
 
       assert result[:audio]
       assert_equal 44_100, result[:sample_rate]
@@ -54,7 +54,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
 
   def test_something_that_is_not_media_is_unreadable
     Cell.boot do |cell|
-      failure = assert_failed "unreadable", cell.call("active_storage.probe_media",
+      failure = assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
                                                       inputs: [ fixture("broken.mp4") ])
 
       assert_predicate failure, :permanent?
@@ -69,7 +69,7 @@ class ProbeMediaTest < ActiveStorageHotCellTest
   def test_only_numbers_and_recognisable_codec_names_come_back
     Cell.boot do |cell|
       [ "sample.mp4", "sample.mp3" ].each do |name|
-        result = assert_ok(cell.call("active_storage.probe_media", inputs: [ fixture(name) ])).result
+        result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture(name) ])).result
 
         refute result.key?(:tags)
         result.each do |key, value|

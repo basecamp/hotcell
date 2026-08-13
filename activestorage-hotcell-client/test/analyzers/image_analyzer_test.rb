@@ -4,8 +4,8 @@ require "test_helper"
 
 class ImageAnalyzerVipsTest < ActiveStorageHotCellClientTest
   def test_it_accepts_images_whatever_the_variant_processor_is
-    assert ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips.accept?(Blob.new(fixture("colour.png")))
-    refute ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips.accept?(Blob.new(fixture("sample.pdf")))
+    assert ActiveStorage::HotCell::Client::Analyzers::Image::Vips.accept?(Blob.new(fixture("colour.png")))
+    refute ActiveStorage::HotCell::Client::Analyzers::Image::Vips.accept?(Blob.new(fixture("sample.pdf")))
   end
 
   def test_it_returns_the_dimensions_the_built_in_analyzer_returns
@@ -36,7 +36,7 @@ class ImageAnalyzerVipsTest < ActiveStorageHotCellClientTest
     with_canned_response failed("capacity")
 
     assert_raises TemporarilyUnavailable do
-      ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips.new(Blob.new(fixture("colour.png"))).metadata
+      ActiveStorage::HotCell::Client::Analyzers::Image::Vips.new(Blob.new(fixture("colour.png"))).metadata
     end
   end
 
@@ -44,12 +44,12 @@ class ImageAnalyzerVipsTest < ActiveStorageHotCellClientTest
     with_canned_response failed("unavailable")
 
     assert_raises TemporarilyUnavailable do
-      ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips.new(Blob.new(fixture("colour.png"))).metadata
+      ActiveStorage::HotCell::Client::Analyzers::Image::Vips.new(Blob.new(fixture("colour.png"))).metadata
     end
   end
 
   private
     def analyze(name)
-      ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips.new(Blob.new(fixture(name))).metadata
+      ActiveStorage::HotCell::Client::Analyzers::Image::Vips.new(Blob.new(fixture(name))).metadata
     end
 end

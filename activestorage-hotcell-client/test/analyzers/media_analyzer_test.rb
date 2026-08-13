@@ -3,8 +3,8 @@
 require "test_helper"
 
 class MediaAnalyzerTest < ActiveStorageHotCellClientTest
-  Video = ActiveStorage::HotCell::Client::Analyzers::VideoAnalyzer
-  Audio = ActiveStorage::HotCell::Client::Analyzers::AudioAnalyzer
+  Video = ActiveStorage::HotCell::Client::Analyzers::Video::Ffprobe
+  Audio = ActiveStorage::HotCell::Client::Analyzers::Audio::Ffprobe
 
   def test_the_video_analyzer_accepts_video_and_nothing_else
     assert Video.accept?(Blob.new(fixture("sample.mp4")))

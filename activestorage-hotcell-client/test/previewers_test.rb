@@ -5,9 +5,9 @@ require "test_helper"
 class PreviewersTest < ActiveStorageHotCellClientTest
   # The whole chain, because the memo behind these predicates is a class-level instance variable and those are
   # not inherited.
-  MUPDF = [ ActiveStorage::HotCell::Client::PdfPreviewer, ActiveStorage::Previewer::MuPDFPreviewer ].freeze
-  FFMPEG = [ ActiveStorage::HotCell::Client::VideoPreviewer, ActiveStorage::Previewer::VideoPreviewer ].freeze
-  POPPLER = [ ActiveStorage::HotCell::Client::PopplerPdfPreviewer,
+  MUPDF = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, ActiveStorage::Previewer::MuPDFPreviewer ].freeze
+  FFMPEG = [ ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, ActiveStorage::Previewer::VideoPreviewer ].freeze
+  POPPLER = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Poppler,
               ActiveStorage::Previewer::PopplerPDFPreviewer ].freeze
 
   # The reason these classes exist as much as the sandboxing is. The built-in accept? shells out with `system`
@@ -16,11 +16,11 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   # them, and previews stop existing. No exception, no alert, nothing in a log.
   def test_accept_does_not_care_whether_the_binary_is_installed
     with_binary_missing MUPDF, :@mutool_exists do
-      assert ActiveStorage::HotCell::Client::PdfPreviewer.accept?(Blob.new(fixture("sample.pdf")))
+      assert ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool.accept?(Blob.new(fixture("sample.pdf")))
     end
 
     with_binary_missing FFMPEG, :@ffmpeg_exists do
-      assert ActiveStorage::HotCell::Client::VideoPreviewer.accept?(Blob.new(fixture("sample.mp4")))
+      assert ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg.accept?(Blob.new(fixture("sample.mp4")))
     end
   end
 
@@ -39,14 +39,14 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   # Delegating to the superclass's content-type predicate rather than restating the list is what stops the
   # accepted set drifting away from the one Rails ships.
   def test_the_accepted_content_types_are_the_ones_rails_accepts
-    refute ActiveStorage::HotCell::Client::PdfPreviewer.accept?(Blob.new(fixture("colour.png")))
-    refute ActiveStorage::HotCell::Client::VideoPreviewer.accept?(Blob.new(fixture("sample.pdf")))
-    assert ActiveStorage::HotCell::Client::VideoPreviewer.accept?(Blob.new(fixture("sample.mp4")))
+    refute ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool.accept?(Blob.new(fixture("colour.png")))
+    refute ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg.accept?(Blob.new(fixture("sample.pdf")))
+    assert ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg.accept?(Blob.new(fixture("sample.mp4")))
   end
 
   def test_a_pdf_preview_yields_what_rails_yields
     with_cell do
-      preview ActiveStorage::HotCell::Client::PdfPreviewer, "sample.pdf" do |attachable|
+      preview ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, "sample.pdf" do |attachable|
         assert_equal "image/png", attachable[:content_type]
         assert_equal "sample.png", attachable[:filename]
         assert_equal "PNG", identify(attachable[:io].path)[:format]
@@ -56,14 +56,14 @@ class PreviewersTest < ActiveStorageHotCellClientTest
 
   def test_the_poppler_previewer_accepts_pdfs_without_probing_for_pdftoppm
     with_binary_missing POPPLER, :@pdftoppm_exists do
-      assert ActiveStorage::HotCell::Client::PopplerPdfPreviewer.accept?(Blob.new(fixture("sample.pdf")))
+      assert ActiveStorage::HotCell::Client::Previewers::Pdf::Poppler.accept?(Blob.new(fixture("sample.pdf")))
       refute ActiveStorage::Previewer::PopplerPDFPreviewer.accept?(Blob.new(fixture("sample.pdf")))
     end
   end
 
   def test_a_poppler_pdf_preview_yields_what_rails_yields
     with_cell do
-      preview ActiveStorage::HotCell::Client::PopplerPdfPreviewer, "sample.pdf" do |attachable|
+      preview ActiveStorage::HotCell::Client::Previewers::Pdf::Poppler, "sample.pdf" do |attachable|
         assert_equal "image/png", attachable[:content_type]
         assert_equal "sample.png", attachable[:filename]
         assert_equal "PNG", identify(attachable[:io].path)[:format]
@@ -75,7 +75,7 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   # content type would not be a replacement for it.
   def test_a_video_preview_yields_what_rails_yields
     with_cell do
-      preview ActiveStorage::HotCell::Client::VideoPreviewer, "sample.mp4" do |attachable|
+      preview ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mp4" do |attachable|
         assert_equal "image/jpeg", attachable[:content_type]
         assert_equal "sample.jpg", attachable[:filename]
         assert_equal({ width: 64, height: 48, format: "JPEG", frames: 1 }, identify(attachable[:io].path))
@@ -85,7 +85,7 @@ class PreviewersTest < ActiveStorageHotCellClientTest
 
   def test_options_are_passed_through_to_the_attachable
     with_cell do
-      preview ActiveStorage::HotCell::Client::PdfPreviewer, "sample.pdf", service_name: "somewhere" do |attachable|
+      preview ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, "sample.pdf", service_name: "somewhere" do |attachable|
         assert_equal "somewhere", attachable[:service_name]
       end
     end
@@ -94,7 +94,7 @@ class PreviewersTest < ActiveStorageHotCellClientTest
   def test_an_undecodable_document_raises_the_permanent_class
     with_cell do
       assert_raises Unprocessable do
-        preview(ActiveStorage::HotCell::Client::PdfPreviewer, "broken.pdf") { flunk "should not have yielded" }
+        preview(ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, "broken.pdf") { flunk "should not have yielded" }
       end
     end
   end

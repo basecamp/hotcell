@@ -2,13 +2,13 @@
 
 require "test_helper"
 
-# ProbeMedia has no analyzer wrapping it yet, so this round trip is the one thing pinning its wire name
+# The probe operation is also reachable without an analyzer wrapping it, so this round trip is the one thing pinning its wire name
 # and result shape to the operation the cell registers under the same name.
 class ProbeMediaTest < ActiveStorageHotCellClientTest
   def test_probing_crosses_the_boundary_and_returns_the_shape
     with_cell do
       File.open(fixture("sample.mp4"), "rb") do |readable|
-        result = ActiveStorage::HotCell::Client::ProbeMedia.perform_in_hotcell [ readable ], []
+        result = ActiveStorage::HotCell::Client::Operations::Analyzers::Media::Ffprobe.perform_in_hotcell [ readable ], []
 
         assert_equal 64, result[:width]
         assert_equal 48, result[:height]

@@ -17,7 +17,7 @@ class BlockedLoadersTest < ActiveStorageHotCellTest
   def test_an_unfuzzed_loader_is_refused_rather_than_run
     Cell.boot do |cell|
       BLOCKED.each do |name|
-        failure = assert_failed "unreadable", cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])
+        failure = assert_failed "unreadable", cell.call("active_storage.analyzers.image.vips", inputs: [ fixture(name) ])
 
         assert_equal "Vips::Error", failure.error_class, "#{name} should be refused by libvips"
       end
@@ -27,7 +27,7 @@ class BlockedLoadersTest < ActiveStorageHotCellTest
   def test_a_transform_of_a_blocked_format_is_refused_too
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        assert_failed "unreadable", cell.call("active_storage.transform_image",
+        assert_failed "unreadable", cell.call("active_storage.transformers.image.vips",
                                               inputs: [ fixture("icon.svg") ], outputs: [ destination ],
                                               payload: { format: "png" })
       end
@@ -49,7 +49,7 @@ class BlockedLoadersTest < ActiveStorageHotCellTest
   def test_the_fuzzed_loaders_still_work
     Cell.boot do |cell|
       %w[ colour.png colour.jpg animated.gif ].each do |name|
-        assert_ok cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])
+        assert_ok cell.call("active_storage.analyzers.image.vips", inputs: [ fixture(name) ])
       end
     end
   end
@@ -62,7 +62,7 @@ class BlockedLoadersTest < ActiveStorageHotCellTest
     with_environment "VIPS_BLOCK_UNTRUSTED" => "" do
       Cell.boot do |cell|
         BLOCKED.each do |name|
-          assert_failed "unreadable", cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])
+          assert_failed "unreadable", cell.call("active_storage.analyzers.image.vips", inputs: [ fixture(name) ])
         end
       end
     end

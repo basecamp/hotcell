@@ -5,13 +5,18 @@ operations covering transforms, analysis and previews, and the client-side trans
 previewers Rails is configured with:
 
 ```ruby
-config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Vips
-config.active_storage.analyzers.prepend ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::Vips,
-                                        ActiveStorage::HotCell::Client::Analyzers::VideoAnalyzer,
-                                        ActiveStorage::HotCell::Client::Analyzers::AudioAnalyzer
-config.active_storage.previewers = [ ActiveStorage::HotCell::Client::PdfPreviewer,
-                                     ActiveStorage::HotCell::Client::VideoPreviewer ]
+config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Image::Vips
+config.active_storage.analyzers = [ ActiveStorage::HotCell::Client::Analyzers::Image::Vips,
+                                    ActiveStorage::HotCell::Client::Analyzers::Video::FFprobe,
+                                    ActiveStorage::HotCell::Client::Analyzers::Audio::FFprobe ]
+config.active_storage.previewers = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool,
+                                     ActiveStorage::HotCell::Client::Previewers::Video::FFmpeg ]
 ```
+
+Classes are named role, then subject, then tool — `Analyzers::Image::Vips` — so lexical order groups
+siblings, and an operation's wire name is the snake-cased class path: `active_storage.analyzers.image.vips`.
+The tool leaf is spelled `Ffprobe`/`Ffmpeg`/`Pdf` so that rule holds mechanically; `FFprobe`, `FFmpeg` and
+`PDF` are aliases.
 
 Those declarations are the only thing an application writes; a railtie does the rest, including adding the
 transient class to the four Active Storage jobs' retry policies. The client gem exists because the built-in
@@ -48,7 +53,7 @@ are permitted, and which keys inside `loader`/`saver` (`page`, `n`, `quality`, `
 translation step, and it is deliberately not present yet.
 
 **Cell-side allowlist enforcement.** Rails' ImageMagick transformer enforces
-`supported_image_processing_methods` and an argument blocklist, and the client `Transformers::ImageMagick`
+`supported_image_processing_methods` and an argument blocklist, and the client `Transformers::Image::Magick`
 keeps that check where Rails runs it — in the application, before a request crosses to the cell. The vips
 path has no such allowlist, in Rails or here. A future enhancement moves an explicit allowlist into the cell
 itself, so the boundary rather than the caller's configuration is what bounds the operation set; until then

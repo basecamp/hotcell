@@ -140,7 +140,7 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
 
     def transformer(transformations)
-      ActiveStorage::HotCell::Client::Transformers::Vips.new transformations
+      ActiveStorage::HotCell::Client::Transformers::Image::Vips.new transformations
     end
 
     def transform(transformations, name, format: "png", &block)

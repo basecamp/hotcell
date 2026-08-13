@@ -47,20 +47,20 @@ class RetriesTest < ActiveStorageHotCellClientTest
     FakeJob.forget
   end
 
-  # Routing PreviewVideo to a cell of its own is the documented multi-cell arrangement, and each cell carries
+  # Routing the video previewer to a cell of its own is the documented multi-cell arrangement, and each cell carries
   # its own transient class. The jobs have to retry every one of them, not only the class of the cell
-  # TransformImage happens to name.
+  # the image transformer happens to name.
   def test_every_registered_cells_transient_class_is_retried
     with_canned_response failed("capacity")
     HotCell.register "video", permanent: Unprocessable, transient: VideoUnavailable
-    ActiveStorage::HotCell::Client::PreviewVideo.hotcell "video"
+    ActiveStorage::HotCell::Client::Operations::Previewers::Video::Ffmpeg.hotcell "video"
 
     ActiveStorage::HotCell::Client.retry_transient_failures! jobs: [ "RetriesTest::FakeJob" ]
 
     assert_equal [ [ TemporarilyUnavailable, VideoUnavailable ] ], FakeJob.retried.map(&:first),
                  "both classes belong in one retry_on call"
   ensure
-    ActiveStorage::HotCell::Client::PreviewVideo.hotcell ActiveStorage::HotCell::Client::CELL
+    ActiveStorage::HotCell::Client::Operations::Previewers::Video::Ffmpeg.hotcell ActiveStorage::HotCell::Client::CELL
     FakeJob.forget
   end
 

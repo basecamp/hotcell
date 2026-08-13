@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "active_storage/hot_cell/server/probe_media_operation"
+require "active_storage/hot_cell/server/analyzers/media/ffprobe"
 
 # Everything ffprobe reports about a file is attacker-controlled, and these are the functions that stand
 # between its output and an application's database. They are exercised directly with hostile shapes, because
 # no fixture can make ffprobe emit them — a real cell round-trip only ever shows the shaping on honest files.
 class ProbeScrubbingTest < ActiveStorageHotCellTest
-  OPERATION = ActiveStorage::HotCell::Server::ProbeMediaOperation
+  OPERATION = ActiveStorage::HotCell::Server::Analyzers::Media::Ffprobe
 
   def test_a_codec_name_that_is_not_a_codec_name_is_dropped
     [ "h264; rm -rf /", "H264", "a" * 33, "", "mp3\n", "<script>", nil ].each do |hostile|

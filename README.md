@@ -344,7 +344,7 @@ The recommended approach, in four parts:
 | `hotcell-client` | the application | `HotCell::Client`, cell registration, routing, classification, instrumentation. |
 | `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, the container image. |
 | `activestorage-hotcell-client` | the application | The transformer, analyzer, and previewers Rails is configured with. |
-| `activestorage-hotcell-server` | the cell | `transform_image`, `analyze_image`, `preview_pdf`, `preview_video`, `probe_media`. |
+| `activestorage-hotcell-server` | the cell | The `transformers.image.*`, `analyzers.image.*`, `analyzers.media.ffprobe`, and `previewers.*` operations. |
 
 They are in one repository because they are one system today: writing the Active Storage gems has already twice
 required changing `hotcell-server` first. Splitting them is cheap while nothing is published.

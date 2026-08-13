@@ -28,7 +28,7 @@ class ForkSafetyTest < ActiveStorageHotCellTest
     Cell.boot(max_requests_per_worker: 1, concurrency: 1) do |cell|
       3.times do
         with_output do |destination|
-          assert_ok cell.call("active_storage.transform_image",
+          assert_ok cell.call("active_storage.transformers.image.vips",
                               inputs: [ fixture("colour.png") ], outputs: [ destination ],
                               payload: { format: "png", operations: { resize_to_limit: [ 20, 20 ] } })
         end

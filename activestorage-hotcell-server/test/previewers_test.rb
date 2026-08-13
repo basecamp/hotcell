@@ -6,7 +6,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_pdf_preview_comes_back_as_a_png
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.preview_pdf",
+        response = cell.call "active_storage.previewers.pdf.mutool",
                              inputs: [ fixture("sample.pdf") ], outputs: [ destination ]
 
         assert_ok response
@@ -20,7 +20,7 @@ class PreviewersTest < ActiveStorageHotCellTest
     Cell.boot do |cell|
       sizes = [ 36, 144 ].map do |resolution|
         with_output(".png") do |destination|
-          assert_ok cell.call("active_storage.preview_pdf", inputs: [ fixture("sample.pdf") ],
+          assert_ok cell.call("active_storage.previewers.pdf.mutool", inputs: [ fixture("sample.pdf") ],
                                                             outputs: [ destination ],
                                                             payload: { resolution: resolution })
           identify(destination)[:width]
@@ -36,7 +36,7 @@ class PreviewersTest < ActiveStorageHotCellTest
     Cell.boot do |cell|
       first, second = [ 1, 2 ].map do |page|
         with_output(".png") do |destination|
-          assert_ok cell.call("active_storage.preview_pdf", inputs: [ fixture("two_page.pdf") ],
+          assert_ok cell.call("active_storage.previewers.pdf.mutool", inputs: [ fixture("two_page.pdf") ],
                                                             outputs: [ destination ],
                                                             payload: { page: page })
           brightness(destination)
@@ -51,7 +51,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_page_out_of_bounds_is_a_caller_bug
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.preview_pdf",
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.pdf.mutool",
                                                      inputs: [ fixture("sample.pdf") ],
                                                      outputs: [ destination ],
                                                      payload: { page: 100_001 })
@@ -65,7 +65,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_page_that_is_not_an_integer_is_a_caller_bug
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        assert_failed "invalid", cell.call("active_storage.preview_pdf",
+        assert_failed "invalid", cell.call("active_storage.previewers.pdf.mutool",
                                            inputs: [ fixture("sample.pdf") ],
                                            outputs: [ destination ],
                                            payload: { page: "2" })
@@ -76,7 +76,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_nonsense_resolution_is_a_caller_bug
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.preview_pdf",
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.pdf.mutool",
                                                      inputs: [ fixture("sample.pdf") ],
                                                      outputs: [ destination ],
                                                      payload: { resolution: 100_000 })
@@ -89,7 +89,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_something_that_is_not_a_pdf_is_unreadable
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.preview_pdf",
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.pdf.mutool",
                                                         inputs: [ fixture("broken.pdf") ],
                                                         outputs: [ destination ])
 
@@ -103,7 +103,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_video_preview_comes_back_as_the_jpeg_rails_produces
     Cell.boot do |cell|
       with_output(".jpg") do |destination|
-        response = cell.call "active_storage.preview_video",
+        response = cell.call "active_storage.previewers.video.ffmpeg",
                              inputs: [ fixture("sample.mp4") ], outputs: [ destination ]
 
         assert_ok response
@@ -118,7 +118,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_video_preview_is_written_through_the_descriptor_not_scratch
     Cell.boot do |cell|
       with_output(".jpg") do |destination|
-        assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("sample.mp4") ],
+        assert_ok cell.call("active_storage.previewers.video.ffmpeg", inputs: [ fixture("sample.mp4") ],
                                                             outputs: [ destination ])
 
         assert_operator File.size(destination), :>, 0, "the frame reached the caller's file"
@@ -131,7 +131,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_video_preview_can_be_taken_from_further_in
     Cell.boot do |cell|
       with_output(".jpg") do |destination|
-        assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("sample.mp4") ],
+        assert_ok cell.call("active_storage.previewers.video.ffmpeg", inputs: [ fixture("sample.mp4") ],
                                                             outputs: [ destination ], payload: { seek: 0.5 })
 
         assert_equal "JPEG", identify(destination)[:format]
@@ -143,7 +143,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_poppler_pdf_preview_comes_back_as_a_png
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        response = cell.call "active_storage.preview_pdf_poppler",
+        response = cell.call "active_storage.previewers.pdf.poppler",
                              inputs: [ fixture("sample.pdf") ], outputs: [ destination ]
 
         assert_ok response
@@ -156,7 +156,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_poppler_nonsense_resolution_is_a_caller_bug
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.preview_pdf_poppler",
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.pdf.poppler",
                                                      inputs: [ fixture("sample.pdf") ],
                                                      outputs: [ destination ],
                                                      payload: { resolution: 100_000 })
@@ -169,7 +169,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_poppler_on_something_that_is_not_a_pdf_is_unreadable
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.preview_pdf_poppler",
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.pdf.poppler",
                                                         inputs: [ fixture("broken.pdf") ],
                                                         outputs: [ destination ])
 
@@ -185,7 +185,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_video_that_opens_on_black_previews_as_the_scene_rather_than_the_black
     Cell.boot do |cell|
       with_output(".jpg") do |destination|
-        assert_ok cell.call("active_storage.preview_video", inputs: [ fixture("fade_in.mp4") ],
+        assert_ok cell.call("active_storage.previewers.video.ffmpeg", inputs: [ fixture("fade_in.mp4") ],
                                                             outputs: [ destination ])
 
         assert_operator brightness(destination), :>, 0.1, "the preview is the black opening frame"
@@ -198,7 +198,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_caller_cannot_choose_what_ffmpeg_runs
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "invalid", cell.call("active_storage.preview_video",
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.video.ffmpeg",
                                                      inputs: [ fixture("sample.mp4") ],
                                                      outputs: [ destination ],
                                                      payload: { seek: "0 -f lavfi -i /etc/passwd" })
@@ -211,7 +211,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_something_that_is_not_a_video_is_unreadable
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        failure = assert_failed "unreadable", cell.call("active_storage.preview_video",
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.video.ffmpeg",
                                                         inputs: [ fixture("broken.mp4") ],
                                                         outputs: [ destination ])
 
@@ -227,7 +227,7 @@ class PreviewersTest < ActiveStorageHotCellTest
   def test_a_preview_reports_no_dimensions_because_rails_previewers_do_not_either
     Cell.boot do |cell|
       with_output(".png") do |destination|
-        result = assert_ok(cell.call("active_storage.preview_pdf", inputs: [ fixture("sample.pdf") ],
+        result = assert_ok(cell.call("active_storage.previewers.pdf.mutool", inputs: [ fixture("sample.pdf") ],
                                                                    outputs: [ destination ])).result
 
         refute result.key?(:width)

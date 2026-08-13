@@ -7,7 +7,7 @@ require "test_helper"
 class MagickAnalyzeImageTest < ActiveStorageHotCellTest
   def test_analysis_returns_dimensions
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image_imagemagick",
+      result = assert_ok(cell.call("active_storage.analyzers.image.magick",
                                    inputs: [ fixture("colour.png") ])).result
 
       assert_equal 60, result[:width]
@@ -18,7 +18,7 @@ class MagickAnalyzeImageTest < ActiveStorageHotCellTest
 
   def test_exif_orientation_decides_which_way_round_the_dimensions_are
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image_imagemagick",
+      result = assert_ok(cell.call("active_storage.analyzers.image.magick",
                                    inputs: [ fixture("rotated.jpg") ])).result
 
       assert_equal 40, result[:width]
@@ -28,7 +28,7 @@ class MagickAnalyzeImageTest < ActiveStorageHotCellTest
 
   def test_something_that_is_not_an_image_is_unreadable
     Cell.boot do |cell|
-      failure = assert_failed "unreadable", cell.call("active_storage.analyze_image_imagemagick",
+      failure = assert_failed "unreadable", cell.call("active_storage.analyzers.image.magick",
                                                       inputs: [ fixture("broken.png") ])
 
       assert_predicate failure, :permanent?

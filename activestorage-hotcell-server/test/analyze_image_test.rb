@@ -5,7 +5,7 @@ require "test_helper"
 class AnalyzeImageTest < ActiveStorageHotCellTest
   def test_analysis_returns_metadata_and_no_bytes_at_all
     Cell.boot do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("colour.png") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture("colour.png") ])).result
 
       assert_equal 60, result[:width]
       assert_equal 40, result[:height]
@@ -29,7 +29,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
   def test_exif_orientation_decides_which_way_round_the_dimensions_are
     Cell.boot do |cell|
       ORIENTATIONS.each do |name, (width, height)|
-        result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture(name) ])).result
+        result = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture(name) ])).result
 
         assert_equal width, result[:width], "#{name} width"
         assert_equal height, result[:height], "#{name} height"
@@ -41,8 +41,8 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
   # produce it; BC4's does, and this is the shape that makes it expressible.
   def test_analysis_says_how_many_frames_there_are
     Cell.boot do |cell|
-      still = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("colour.png") ])).result
-      moving = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("animated.gif") ])).result
+      still = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture("colour.png") ])).result
+      moving = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture("animated.gif") ])).result
 
       assert_equal 1, still[:pages]
       refute still[:animated]
@@ -60,7 +60,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
   # bounds writes — is analyzed rather than killed while being staged.
   def test_an_input_larger_than_the_write_limit_is_still_analyzed
     Cell.boot(file_size: 32 * 1024) do |cell|
-      result = assert_ok(cell.call("active_storage.analyze_image", inputs: [ fixture("large.png") ])).result
+      result = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture("large.png") ])).result
 
       assert_equal 400, result[:width]
       assert_equal 400, result[:height]
@@ -69,7 +69,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
 
   def test_an_undecodable_image_is_reported_rather_than_recorded_as_analyzed
     Cell.boot do |cell|
-      failure = assert_failed "unreadable", cell.call("active_storage.analyze_image",
+      failure = assert_failed "unreadable", cell.call("active_storage.analyzers.image.vips",
                                                       inputs: [ fixture("broken.png") ])
 
       assert_equal "Vips::Error", failure.error_class

@@ -3,7 +3,7 @@
 require "test_helper"
 
 class ImageAnalyzerImageMagickTest < ActiveStorageHotCellClientTest
-  Analyzer = ActiveStorage::HotCell::Client::Analyzers::ImageAnalyzer::ImageMagick
+  Analyzer = ActiveStorage::HotCell::Client::Analyzers::Image::Magick
 
   def test_it_accepts_images
     assert Analyzer.accept?(Blob.new(fixture("colour.png")))

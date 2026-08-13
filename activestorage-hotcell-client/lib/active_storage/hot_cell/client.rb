@@ -5,11 +5,15 @@ require "active_support/core_ext/string/inflections"
 
 require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
-require "active_storage/hot_cell/client/transformers/vips"
-require "active_storage/hot_cell/client/transformers/image_magick"
-require "active_storage/hot_cell/client/analyzers/image_analyzer"
-require "active_storage/hot_cell/client/analyzers/media_analyzer"
-require "active_storage/hot_cell/client/previewers"
+require "active_storage/hot_cell/client/transformers/image/vips"
+require "active_storage/hot_cell/client/transformers/image/magick"
+require "active_storage/hot_cell/client/analyzers/image/vips"
+require "active_storage/hot_cell/client/analyzers/image/magick"
+require "active_storage/hot_cell/client/analyzers/video/ffprobe"
+require "active_storage/hot_cell/client/analyzers/audio/ffprobe"
+require "active_storage/hot_cell/client/previewers/pdf/mutool"
+require "active_storage/hot_cell/client/previewers/pdf/poppler"
+require "active_storage/hot_cell/client/previewers/video/ffmpeg"
 require "active_storage/hot_cell/client/railtie" if defined?(::Rails::Railtie)
 
 module ActiveStorage
@@ -34,12 +38,15 @@ module ActiveStorage
 
       RETRY = { wait: :polynomially_longer, attempts: 10 }.freeze
 
-      # The five clients this gem ships, which is where the retry hook learns which cells' transient classes
+      # The clients this gem ships, which is where the retry hook learns which cells' transient classes
       # the jobs must retry. Deliberately not HotCell.clients: that records every client the process loaded,
       # including an application's own for unrelated cells, and Active Storage's jobs have no business
       # retrying those.
-      CLIENTS = [ TransformImage, AnalyzeImage, PreviewPdf, PreviewPdfPoppler, PreviewVideo, ProbeMedia,
-                  MagickTransformImage, MagickAnalyzeImage ].freeze
+      CLIENTS = [ Operations::Transformers::Image::Vips, Operations::Transformers::Image::Magick,
+                  Operations::Analyzers::Image::Vips, Operations::Analyzers::Image::Magick,
+                  Operations::Analyzers::Media::Ffprobe,
+                  Operations::Previewers::Pdf::Mutool, Operations::Previewers::Pdf::Poppler,
+                  Operations::Previewers::Video::Ffmpeg ].freeze
 
       class << self
         # The railtie calls this from a to_prepare block. Applied once at boot it would not survive a code
