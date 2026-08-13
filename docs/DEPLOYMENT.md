@@ -1,124 +1,118 @@
 # Deploying a cell
 
-One Kamal accessory per cell.
+A cell is a second container beside the application. Three requirements hold whatever you deploy with:
 
-Use an accessory, not an app role. Kamal hard-codes `--network kamal` for app roles, and only an accessory
-can set `network: none`. An accessory can still target `roles: [web, jobs]`, which it must: `SCM_RIGHTS`
-works only over `AF_UNIX`, so a cell must run on the caller's host.
+1. **The same host as the caller.** `SCM_RIGHTS` works only over `AF_UNIX`, so a descriptor cannot cross
+   machines.
+2. **One volume shared by both containers**, holding the cell's sockets. The cell writes them at
+   `HOTCELL_DIR`, and the app finds them at `$HOTCELL_ROOT/<cell name>`.
+3. **The container flags under "Container settings"**, which are what makes a cell a cell.
 
-```yaml
-accessories:
-  images:
-    image: registry.37signals.com/basecamp/hotcell-images:latest
-    roles: [ web, jobs ]
-    volumes:
-      - hotcell-images:/run/hotcell/cell
-    options:
-      network: none
-      read-only: true
-      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
-      memory: 2g
-      memory-swap: 2g
-      cpus: 2
-      pids-limit: 512
-      cap-drop: ALL
-      security-opt: no-new-privileges:true
-      user: 10001:10001
-      ulimit: stack=2097152:2097152
-```
+The examples below use Kamal. Any orchestrator that can set the same `docker run` flags will do.
 
-The app mounts the same volume. It then sets `HOTCELL_ROOT` to the parent directory, or registers the cell
-with an explicit `dir:`.
+## If you deploy with Kamal
 
-A deploy does not update an accessory. Reboot it explicitly:
+Use one accessory per cell, not an app role. Kamal hard-codes `--network kamal` for app roles, and only an
+accessory can set `network: none`. An accessory can still target `roles: [web, jobs]`, which it must, to
+land on the caller's hosts.
+
+A deploy does not update an accessory. Reboot one explicitly:
 
 ```
 bin/kamal accessory reboot images -d production
 ```
 
-## Every knob
+## Container settings
 
-A cell is tuned in two places. The **container flags** are the ceiling the kernel applies to the whole
-cell. The **cell settings** are what the supervisor applies per worker and per request, inside that
-ceiling.
+These are `docker run` flags. Under Kamal they go in an accessory's `options:`, and Kamal supplies no
+value of its own for any of them.
 
-The knobs divide into two kinds:
+An illustrative Kamal configuration, the cell's half:
 
-- **Performance knobs** fit the cell to your workload and your hardware. A wrong value costs throughput or
-  latency, and measurement finds it.
-- **Security knobs** set what the cell contains. A wrong value removes a protection, and the cell's
-  behaviour does not change.
+```yaml
+# config/deploy.yml — the cell
+accessories:
+  images:                                       # the cell's name; the app registers it under this
+    image: your.registry.com/your-image:latest
+    roles: [ web, jobs ]                        # a cell runs on its caller's host
+    volumes:
+      - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
+    options:
+      # Performance. No defaults — tune each one. See "Performance" below.
+      cpus: 2
+      memory: 2g
+      memory-swap: 2g                           # equal to memory
+      ulimit: stack=2097152:2097152
 
-### Performance knobs
+      # Security. Use these values. See "Security" below.
+      network: none
+      read-only: true
+      cap-drop: ALL
+      security-opt: no-new-privileges:true
+      user: 10001:10001
+      pids-limit: 512
 
-| Knob | Where | Default | What it does |
-| --- | --- | --- | --- |
-| `cpus` | container | `2` | The cell's share of the host. Size `concurrency` from this value. |
-| `memory` | container | `2g` | The cgroup limit. It counts every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. |
-| `memory-swap` | container | `2g` | Set it equal to `memory`, so the memory cap does not extend into swap. |
-| `tmpfs` size | container | `512m` | Scratch space. It bounds all concurrent workers together, so it pairs with `file_size × concurrency`. |
-| `ulimit: stack` | container | `2097152` | Gives about 140MB of `RLIMIT_DATA` headroom per worker at concurrency 4, because each thread in a tool's pool reserves a stack. This cannot be a cell setting: glibc reads `RLIMIT_STACK` once at process start, so a later `Process.setrlimit` has no effect. |
-| `concurrency` | cell | `4` | Workers that run at once, and the number of slots. Size it from `cpus`. See "Knobs that are both". |
-| `queue_size` | cell | `8` | Connections that may wait for a worker. When `running + queued` reaches `concurrency + queue_size`, the cell answers `capacity`. Use `0` to refuse instead of queueing. |
-| `queue_wait` | cell | `10` | Seconds a queued connection may wait before the cell answers `capacity`. This makes a saturated cell answer with a verdict instead of holding the caller until its own timeout. |
-| `control_deadline` | cell | `5` | Seconds a control connection may take to send its request. |
-| `max_requests_per_worker` | cell | `1` | Requests one worker serves before the cell discards it. `1` forks per request. `:unlimited` keeps a worker for the life of the cell. See "Knobs that are both". |
-
-### Security knobs
-
-| Knob | Where | Value | What it does |
-| --- | --- | --- | --- |
-| `network: none` | container | — | Removes all network interfaces. A tool that is persuaded to fetch a URL cannot reach anything. |
-| `tmpfs` flags | container | `nosuid,nodev,noexec` | `noexec` prevents execution from scratch, which is where a dropped payload lands. |
-| `read-only: true` | container | — | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
-| `cap-drop: ALL` | container | — | Removes every Linux capability. |
-| `security-opt` | container | `no-new-privileges:true` | Prevents a setuid binary from regaining what `cap-drop` removed. |
-| `user` | container | `10001:10001` | Runs the cell as a high uid outside any host user range, with no home directory and no shell. |
-| `pids-limit` | container | `512` | Bounds the number of processes in the cell. It must clear `concurrency` plus the threads and subprocesses one operation's toolchain starts. Check it when you raise `concurrency`. |
-| `deadline` | cell | `60` | Maximum wall-clock seconds for one request. The supervisor kills the worker's process group and answers `killed: deadline`. There is no CPU limit; `HotCell::Limits` gives the reason. |
-| `memory` | cell | `1536MB` | `RLIMIT_DATA` per worker. A breach gives `killed: memory`. The floor is 1GiB, and a cell below it does not boot. |
-| `file_size` | cell | `64MB` | `RLIMIT_FSIZE` per worker. A breach raises `SIGXFSZ` and gives `killed: fsize`. |
-| `open_files` | cell | `256` | `RLIMIT_NOFILE` per worker. |
-
-The last four are sized like performance knobs. They are listed here because they are what bounds a
-hostile input.
-
-Write the cell settings as one call, read at boot:
-
-```ruby
-HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
-               max_requests_per_worker: 1, control_deadline: 5,
-               memory: 1536 * 1024**2, file_size: 48 * 1024**2, open_files: 256
+      # Both: size=512m is performance, the three flags before it are security.
+      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
+    env:
+      clear:
+        HOTCELL_DIR: /run/hotcell/cell          # see "General" below
 ```
 
-An operation can declare `limits deadline:, memory:, file_size:, open_files:` of its own. Those values
-narrow the limit for that request. They never widen it, because the cell's numbers are the ceiling.
+And the app's half, mounting the same volume:
 
-### Knobs that are both
+```yaml
+# config/deploy.yml — the app
+volumes:
+  - hotcell-sockets:/run/hotcell/images         # $HOTCELL_ROOT/<cell name>
 
-**`max_requests_per_worker` above `1`** lets one request reach another. A worker holds each of its
-requests in the same address space, so an input that runs code can read and change every later request
-that worker serves. [ADR 0001](../adr/0001-reuse-workers-across-requests.md) records the measurements and
-the trade.
+env:
+  clear:
+    HOTCELL_ROOT: /run/hotcell
+```
 
-**`concurrency`** sets how many requests hold bytes in the cell at once. Files are not isolated between
-concurrent workers, so this value is also the width of that exposure. See "What is not isolated".
+Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the flags
+below on the cell, and `--volume hotcell-sockets:/run/hotcell/images` with `HOTCELL_ROOT=/run/hotcell` on
+the app.
 
-### Making the numbers agree
+The two mount paths differ, and only the volume name has to match. A cell always writes its sockets to
+`HOTCELL_DIR`. The app resolves a cell's name under `HotCell.root`, so a cell named `images` is found at
+`/run/hotcell/images`.
 
-Nothing checks these three for you.
+Give each cell its own volume. Two accessories sharing one would write `work.sock` over each other.
 
-- The client's `timeout` must be more than the cell's `answer_within`, which is
-  `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
-  instead of as `capacity` or `killed`. The client warns at boot, and `describe` reports the number.
-- The cell's `memory` must stay below the container's `memory`. At equal values the cgroup fires first,
-  and a cgroup kill is a `SIGKILL` with no diagnostic.
-- `file_size × concurrency` must fit the tmpfs. Above it, concurrent workers fill scratch and requests
-  fail with `ENOSPC` instead of with a limit verdict.
+### Performance
 
-### Environment
+**These have no defaults.** Docker applies no limit to a flag you omit, so a cell without them can take
+the whole host. Tune each one to your workload and your hardware. The values below are the worked example
+from this document, not recommendations.
 
-The image sets all of these. Set one only to override it.
+| Flag | Example | Tune it from |
+| --- | --- | --- |
+| `cpus` | `2` | The share of the host this cell may use. Size the cell's `concurrency` from it. |
+| `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. |
+| `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
+| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. |
+| `ulimit: stack` | `2097152:2097152` | Each thread in a tool's pool reserves a stack, so this returns about 140MB of `RLIMIT_DATA` headroom per worker at concurrency 4. It cannot be a cell setting: glibc reads `RLIMIT_STACK` once at process start, so a later `Process.setrlimit` has no effect. |
+
+### Security
+
+**Use these values.** They are what a cell is for. Omit one and the protection is gone, while the cell
+serves requests exactly as before.
+
+| Flag | Recommended | What it does |
+| --- | --- | --- |
+| `network: none` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. |
+| `read-only` | `true` | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
+| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` prevents execution from scratch, which is where a dropped payload lands. |
+| `cap-drop` | `ALL` | Removes every Linux capability. |
+| `security-opt` | `no-new-privileges:true` | Prevents a setuid binary from regaining what `cap-drop` removed. |
+| `user` | `10001:10001` | Runs the cell as a high uid outside any host user range, with no home directory and no shell. |
+| `pids-limit` | `512` | Bounds the number of processes in the cell. It must clear `concurrency` plus the threads and subprocesses one toolchain starts, so check it when you raise `concurrency`. |
+
+### General
+
+Environment variables. The image sets all of them, so set one only to override it.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -129,9 +123,43 @@ The image sets all of these. Set one only to override it.
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with its slot's home before it serves a request. |
 
-### The application side
+## Cell settings
 
-These settings are per registered cell. They set how the application responds to what a cell answers.
+One call, read at boot. Every value has a default, so set only what you are changing.
+
+```ruby
+HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
+               max_requests_per_worker: 1, control_deadline: 5,
+               memory: 1536 * 1024**2, file_size: 48 * 1024**2, open_files: 256
+```
+
+### Performance
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `concurrency` | `4` | Workers that run at once, and the number of slots. Size it from `cpus`. See "Settings that trade one for the other". |
+| `queue_size` | `8` | Connections that may wait for a worker. When `running + queued` reaches `concurrency + queue_size`, the cell answers `capacity`. Use `0` to refuse instead of queueing. |
+| `queue_wait` | `10` | Seconds a queued connection may wait before the cell answers `capacity`. This makes a saturated cell answer with a verdict instead of holding the caller until its own timeout. |
+| `control_deadline` | `5` | Seconds a control connection may take to send its request. |
+| `max_requests_per_worker` | `1` | Requests one worker serves before the cell discards it. `1` forks per request. `:unlimited` keeps a worker for the life of the cell. See "Settings that trade one for the other". |
+
+### Security
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `deadline` | `60` | Maximum wall-clock seconds for one request. The supervisor kills the worker's process group and answers `killed: deadline`. This is the only bound on a wedged or deliberately slow input. There is no CPU limit; `HotCell::Limits` gives the reason. |
+| `memory` | `1536MB` | `RLIMIT_DATA` per worker, and the bound on a decompression bomb. A breach gives `killed: memory`. The floor is 1GiB, and a cell below it does not boot. |
+| `file_size` | `64MB` | `RLIMIT_FSIZE` per worker. A breach raises `SIGXFSZ` and gives `killed: fsize`. |
+| `open_files` | `256` | `RLIMIT_NOFILE` per worker. |
+
+These four are sized like performance settings and exist as limits on a hostile input.
+
+An operation can declare `limits deadline:, memory:, file_size:, open_files:` of its own. Those values
+narrow the limit for that request. They never widen it, because the cell's numbers are the ceiling.
+
+## Application settings
+
+Per registered cell. They set how the application responds to what a cell answers.
 
 ```ruby
 HotCell.root = ENV["HOTCELL_ROOT"]   # unset turns every cell off
@@ -151,17 +179,48 @@ HotCell.register "images",
 | `permanent:`, `transient:` | the gem's classes | The exception classes the application raises for each side of the split. `transient` must not descend from `permanent`, and the client refuses to start if it does. |
 | `on_contract_skew:` | — | Called when a cell answers `protocol`, so a version mismatch is visible to an application that rescues broadly. |
 
+## Settings that trade one for the other
+
+**`max_requests_per_worker` above `1`** lets one request reach another. A worker holds each of its
+requests in the same address space, so an input that runs code can read and change every later request
+that worker serves. [ADR 0001](../adr/0001-reuse-workers-across-requests.md) records the measurements and
+the trade.
+
+**`concurrency`** sets how many requests hold bytes in the cell at once. Files are not isolated between
+concurrent workers, so this value is also the width of that exposure. See "What is not isolated".
+
+## Making the numbers agree
+
+Nothing checks these three for you.
+
+- The client's `timeout` must be more than the cell's `answer_within`, which is
+  `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
+  instead of as `capacity` or `killed`. The client warns at boot, and `describe` reports the number.
+- The cell's `memory` must stay below the container's `memory`. At equal values the cgroup fires first,
+  and a cgroup kill is a `SIGKILL` with no diagnostic.
+- `file_size × concurrency` must fit the tmpfs. Above it, concurrent workers fill scratch and requests
+  fail with `ENOSPC` instead of with a limit verdict.
+
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
 
 ## The volume
 
+Nobody creates it. Docker creates a named volume when the first container that references it starts, so
+either the cell or the app makes it, whichever starts first.
+
+**Boot order does not matter.** An empty named volume takes its ownership from the image of whichever
+container mounts it, even when an earlier container already mounted it, as long as it is still empty. An
+app that starts first gives the volume its own ownership; the cell then mounts it while it is still empty
+and takes it back. Once the cell creates its sockets the volume is no longer empty, and ownership stops
+changing.
+
 Two mistakes both fail the same way, as `EACCES` when the cell creates its socket at boot.
 
-**The mount point must exist in the image, owned by the cell's user.** A new named volume takes its
-ownership from the directory it covers. The base image creates `/run/hotcell/cell` and chowns it, not only
-`/run/hotcell`. If the image creates only the parent, Docker creates the last level as root, and the cell
-cannot create a socket in it.
+**The mount point must exist in the cell's image, owned by the cell's user.** The image the installer
+writes creates `/run/hotcell/cell` and chowns it, not only `/run/hotcell`. If an image creates only the
+parent, Docker creates the last level as root, and the cell cannot create a socket in it. The app's image
+needs nothing at its own mount point.
 
 **A bind mount inherits nothing.** It keeps the host directory's ownership. A bind mount in development
 needs the host directory chowned to `10001`, or the container run as the host user. Use named volumes in
@@ -197,34 +256,41 @@ does not restrict. A forked worker's environ is fixed at exec time, so `ENV.dele
 credentials out of a cell's environment, and spawn tools with `unsetenv_others`, which
 `HotCell::Operation#run_tool` does.
 
-## Deriving an image
+## Building an image
 
-The base image carries Ruby, bundler, and the two server gems. It carries no tool. The toolchain a cell
-holds decides its blast radius, so a derived image installs it.
+There is no published base image to derive from. `bin/rails hotcell:install` writes a `hotcell/` directory
+into the application holding a complete `Dockerfile`, the cell's `Gemfile`, its `config.rb`, and an
+`operations/` directory. That Dockerfile is the whole recipe, and it is yours to change. Build it from its
+own directory:
 
-```dockerfile
-FROM registry.37signals.com/basecamp/hotcell:latest
-
-USER root
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y libvips42 imagemagick && \
-    rm -rf /var/lib/apt/lists/*
-USER hotcell
-
-COPY --chown=hotcell:hotcell operations /hotcell/operations
-RUN bundle install
+```
+docker build -t your-image:latest hotcell/
 ```
 
-Files in `/hotcell/operations` load in sorted order, so a leading file can configure the cell:
+Three places to change, and nothing else is required.
+
+**The `Dockerfile`'s apt line.** Install the tools your operations run, and nothing else. The toolchain a
+cell carries is what decides its blast radius.
+
+```dockerfile
+# hotcell/Dockerfile
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libvips42 imagemagick && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+**The `Gemfile`.** Add the gems your operations need. Keep it short: every gem is inside the blast radius,
+and a larger supervisor heap costs every request — see "Sizing the numbers".
+
+**`config.rb`.** The cell settings. It loads before the operations, which then load in sorted order.
 
 ```ruby
-# operations/00_cell.rb
-HotCell.limits concurrency: 4, queue_size: 8, deadline: 30, queue_wait: 10, max_requests_per_worker: 1,
+# hotcell/config.rb
+HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 
-`bundle install` in a derived image is required. The base image's bundle is unfrozen so that operations
-can add gems, and an image that skips this step has a stale lockfile against a read-only root filesystem.
+Running the installer again leaves every file that already exists untouched, so customizing is safe.
 
 ### Sizing the numbers
 
@@ -283,6 +349,24 @@ bin/conformance my-cell:test
 ```
 
 The mount shadows the operations your image carries. What the checks cover is the image's runtime — its
-Ruby, its gems, its user, and its flags — not the work your operations do.
+Ruby, its gems, and its socket behaviour — not the work your operations do.
 
 `bin/example-image` builds an image to try it against. CI runs both on every push.
+
+### What it does not verify
+
+**It does not check your accessory.** `bin/conformance` supplies its own flags, so it proves the image
+works when the flags are right. It never reads your Kamal configuration, and it passes against an image
+you are about to deploy with `cap-drop` missing.
+
+Of the security flags, it observes three from inside the cell: `network: none` (the only interface is
+`lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does not observe
+`cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or `pids-limit`.
+
+To check a deployed cell, read the flags on the running container:
+
+```
+docker inspect <container> --format '{{json .HostConfig}}' | jq '{
+  NetworkMode, ReadonlyRootfs, CapDrop, SecurityOpt, PidsLimit, Memory, MemorySwap, Tmpfs
+}'
+```

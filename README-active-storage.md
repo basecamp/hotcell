@@ -1,8 +1,8 @@
 # HotCell and Active Storage
 
-The two `activestorage-hotcell-*` gems are the shipped, worked example of building on HotCell: five
-operations covering transforms, analysis and previews, and the client-side transformer, analyzer and
-previewers Rails is configured with:
+The two `activestorage-hotcell-*` gems are the shipped, worked example of building on HotCell: operations
+covering transforms, analysis and previews, and the client-side transformers, analyzers and previewers
+Rails is configured with:
 
 ```ruby
 config.active_storage.variant_processor = ActiveStorage::HotCell::Client::Transformers::Image::Vips
@@ -12,6 +12,10 @@ config.active_storage.analyzers = [ ActiveStorage::HotCell::Client::Analyzers::I
 config.active_storage.previewers = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool,
                                      ActiveStorage::HotCell::Client::Previewers::Video::FFmpeg ]
 ```
+
+That is one configuration of several. Images can go through ImageMagick instead of libvips
+(`Transformers::Image::Magick`, `Analyzers::Image::Magick`), and PDFs through Poppler instead of mutool
+(`Previewers::Pdf::Poppler`). Pick the pair your cell's image installs the tools for.
 
 Classes are named role, then subject, then tool — `Analyzers::Image::Vips` — so lexical order groups
 siblings, and an operation's wire name is the snake-cased class path: `active_storage.analyzers.image.vips`.

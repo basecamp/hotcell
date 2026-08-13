@@ -24,8 +24,8 @@ and nothing else travels at all.
 ```ruby
 # In the application.
 class TransformImage < HotCell::Client
-  hotcell "images"                             # the cell that serves this call, by registered name
-  operation "active_storage.transform_image"   # the routing name an operation must answer to
+  hotcell "images"                # the cell that serves this call, by registered name
+  operation "images.transform"    # the routing name an operation must answer to
 end
 
 # source and destination are Files the app opened — inputs read-only, outputs write-only. Their
@@ -44,7 +44,7 @@ require "active_support"
 require "active_support/core_ext/numeric"   # for 30.seconds and 1280.megabytes
 
 class TransformImageOperation < HotCell::Operation
-  operation "active_storage.transform_image"   # the same routing name — the only coupling between the two classes
+  operation "images.transform"    # the same routing name — the only coupling between the two classes
 
   # Ceilings for one request — deadline in seconds, memory and file_size in bytes — enforced by
   # rlimits and the supervisor's clock, clamped to the cell's own.
@@ -97,10 +97,10 @@ A **slot** is the numbered workspace a worker borrows — two directories. `home
 
 An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a routing name, its
 own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payload keys it wants as
-keyword arguments. By convention the class takes an `Operation`
-suffix — `TransformImageOperation` — while the client keeps the bare name, and the default routing name strips
-the suffix, so both sides derive `transform_image`. The set of operations a cell carries is its
-**inventory** — logged at boot, advertised on the control socket.
+keyword arguments. The examples above name themselves explicitly. Left unnamed, both sides derive the same
+name from the class path, and the cell-side `Operation` suffix is stripped — so `ExtractTextOperation` in
+the cell and `ExtractText` in the application both answer to `extract_text`. The set of operations a cell
+carries is its **inventory** — logged at boot, advertised on the control socket.
 
 A **client** is the application-side mirror of an operation: a subclass of `HotCell::Client` that names
 the cell with `hotcell` and the operation with `operation`, and exposes `perform_in_hotcell`. That is a
@@ -250,25 +250,26 @@ repository, with its own `Gemfile` — the same one the image build copies — a
 to `Procfile.dev`:
 
 ```procfile
-web: HOTCELL_ROOT=tmp/hotcell bin/rails server
-cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_CONFIG=hotcell/config.rb HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell/documents bundle exec hotcell
+web: HOTCELL_ROOT=tmp/hotcell-sockets bin/rails server
+cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_CONFIG=hotcell/config.rb HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell-sockets/documents bundle exec hotcell
 ```
 
-`bin/dev` boots both. The app finds the sockets under `tmp/hotcell`, and the cell keeps its own bundle
+`bin/dev` boots both. The app finds the sockets under `tmp/hotcell-sockets`, and the cell keeps its own bundle
 so the two sides stay separate in development the way they are in production.
 
-### Deploy it with Kamal
+### Deploy it
 
-One accessory per cell. An accessory rather than an app role, because only an accessory can set
-`network: none` — and it targets the app's own hosts, because a descriptor cannot cross machines.
+A cell is a second container beside the application, on the same host, sharing one volume that holds its
+sockets. An illustrative Kamal configuration — one accessory per cell, rather than an app role, because
+only an accessory can set `network: none`:
 
 ```yaml
 accessories:
   documents:
-    image: registry.example.com/myapp-hotcell-documents:latest
-    roles: [ web, jobs ]                       # a cell always lives on its caller's host
+    image: your.registry.com/your-image:latest
+    roles: [ web, jobs ]                        # a cell always lives on its caller's host
     volumes:
-      - hotcell-documents:/run/hotcell/cell    # the socket directory, shared with the app
+      - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
     options:
       network: none
       read-only: true
@@ -303,10 +304,10 @@ result[:pages]
 
 `HotCell.root` names the directory that holds one subdirectory of sockets per cell, so this cell's live
 at `$HOTCELL_ROOT/documents`. In production that is the shared volume. The accessory above mounts
-`hotcell-documents` at `/run/hotcell/cell`, the app mounts the same volume at `/run/hotcell/documents`,
+`hotcell-sockets` at `/run/hotcell/cell`, the app mounts the same volume at `/run/hotcell/documents`,
 and `HOTCELL_ROOT` is `/run/hotcell`. In development a cell runs uncontainerized, so use the app's own
-scratch space — set `HOTCELL_ROOT=tmp/hotcell` and boot the cell with
-`HOTCELL_DIR=tmp/hotcell/documents`. Leaving `HOTCELL_ROOT` unset turns every cell off — `enabled?`
+scratch space — set `HOTCELL_ROOT=tmp/hotcell-sockets` and boot the cell with
+`HOTCELL_DIR=tmp/hotcell-sockets/documents`. Leaving `HOTCELL_ROOT` unset turns every cell off — `enabled?`
 answers false, and `perform_in_hotcell` raises `HotCell::CellNotConfigured`. There is no automatic
 in-process fallback. A caller that wants one checks `enabled?` and takes its old path, which is how an
 application rolls this out as a configuration change rather than a release.
@@ -320,7 +321,7 @@ the failure modes worth alerting on.
 
 ## Observability
 
-The recommended approach, in four parts:
+The recommended approach:
 
 - **Metrics collection.** Poll `cell.metrics` on a schedule — for example with a
   [Yabeda](https://github.com/yabeda-rb/yabeda) `collect` block. The control socket answers even
@@ -332,9 +333,9 @@ The recommended approach, in four parts:
 - **The healthcheck.** The installed Dockerfile wires `hotcell-health` up as the Docker `HEALTHCHECK`. It
   probes the supervisor's control socket from inside the container, where `network: none` does not apply.
   Healthy means the supervisor answers, not that a worker is free.
-- **Logs.** The cell writes one JSON object per event to stdout, so Kamal's container log capture ships
-  it wherever your logs go. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause —
-  `memory` means bombs, `deadline` means wedged tools.
+- **Logs.** The cell writes one JSON object per event to stdout, so whatever ships your container logs
+  ships these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause — `memory`
+  means bombs, `deadline` means wedged tools.
 
 ## The gems
 
@@ -356,9 +357,9 @@ control rather than the contents.
 
 ## Active Storage
 
-The two `activestorage-hotcell-*` gems are the shipped, worked example of building on HotCell — the five
-media operations, and the transformer, analyzer and previewers Rails is configured with. They are
-documented in [README-active-storage.md](README-active-storage.md).
+The two `activestorage-hotcell-*` gems are the shipped, worked example of building on HotCell — the media
+operations, and the transformers, analyzers and previewers Rails is configured with. They are documented
+in [README-active-storage.md](README-active-storage.md).
 
 ## Status
 

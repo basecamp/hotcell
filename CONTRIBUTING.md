@@ -9,7 +9,7 @@ your own application — start with [README.md](README.md) instead.
 bundle install
 ```
 
-That is enough for the three hotcell gems and for the example cell. It is deliberately enough: **the three
+That is enough for the hotcell gems and for the example cell. It is deliberately enough: **the
 hotcell gems need no container and no tool installed**, and `rake test:hotcell` is what keeps that honest —
 CI runs it on a machine with nothing on it. Fixture operations stand in for the work, so the protocol, the
 fork, the descriptor passing, the limits and the reap are all exercised in milliseconds.
@@ -29,7 +29,7 @@ rake test:hotcell           # everything that needs no tool installed
 rake test:activestorage     # everything that needs the converters installed
 rake test:devcell           # boot the real development cell and run the example battery
 rake test:gem:hotcell-core  # one gem's suite
-rake rubocop                # style, one configuration for all five gems
+rake rubocop                # style, one configuration for every gem
 ```
 
 One file, or one test, from inside a gem directory:
@@ -54,12 +54,12 @@ bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]
 hotcell-core/                 the wire protocol, descriptors, failures — both sides depend on it
 hotcell-client/               the application side, and the installer that scaffolds a cell
 hotcell-server/               the supervisor, workers, slots, limits, and exe/hotcell
-activestorage-hotcell-server/ the five media operations
+activestorage-hotcell-server/ the media operations
 activestorage-hotcell-client/ the Rails transformer, analyzers and previewers
 
 examples/                     one cell's worth of sample operations and the battery that drives them
 bin/                          the container checks: example-image, conformance, load
-docs/                         the specification and the deployment guide
+docs/                         the design document and the deployment guide
 adr/                          decisions that were argued rather than obvious
 ```
 
@@ -183,7 +183,7 @@ new kill reason goes in `PERMANENT_BY_CAUSE`, or it silently becomes the wrong k
 rake rubocop
 ```
 
-One configuration for all five gems, because the style is one style. It runs in CI as its own job.
+One configuration for every gem, because the style is one style. It runs in CI as its own job.
 
 ## Writing it down
 
