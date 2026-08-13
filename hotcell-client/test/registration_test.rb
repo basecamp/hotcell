@@ -45,6 +45,15 @@ class RegistrationTest < HotCellClientTest
     assert_match "no cell named \"nothing_like_it\"", error.message
   end
 
+  def test_asking_whether_a_cell_is_registered
+    refute HotCell.cell?("active_storage")
+
+    HotCell.register "active_storage"
+
+    assert HotCell.cell?("active_storage")
+    assert HotCell.cell?(:active_storage)
+  end
+
   # The inheritance graph is the classification, so a later tidying pass that gives both a common ancestor
   # silently turns every retryable failure into a permanent one. This refuses it at registration rather than
   # waiting for the first cell restart to discover it.

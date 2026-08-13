@@ -57,6 +57,12 @@ module HotCell
         HotCell.cell name
       end
 
+      # Whether this client's named cell is registered, for a boot-time hook that must not raise on an
+      # application that has bundled the gem and not yet written the initializer.
+      def registered?
+        !hotcell.nil? && HotCell.cell?(hotcell)
+      end
+
       # Whether this path is turned on. A caller that finds it off runs in process exactly as it did before,
       # which is the whole rollout mechanism.
       def enabled?

@@ -36,6 +36,11 @@ module HotCell
       end
     end
 
+    # Whether a name is registered, for a caller with a fallback rather than a requirement.
+    def cell?(name)
+      cells.key?(name.to_s)
+    end
+
     # Every HotCell::Client subclass, so a boot check can tell which cell is expected to carry what. This
     # records what the process has loaded rather than what it has configured, so resetting registrations
     # leaves it alone: the classes are still defined either way.

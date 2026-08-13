@@ -52,7 +52,7 @@ module ActiveStorage
         # has bundled the gem and not yet written the initializer, and that boot has to succeed for the
         # rollout to take two deploys rather than one.
         def retry_transient_failures!(jobs: JOBS)
-          transients = CLIENTS.filter_map { |client| client.cell.transient if ::HotCell.cells.key?(client.hotcell) }
+          transients = CLIENTS.filter_map { |client| client.cell.transient if client.registered? }
                               .uniq
           return [] if transients.empty?
 

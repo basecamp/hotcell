@@ -85,6 +85,18 @@ class ClientTest < HotCellClientTest
     end
   end
 
+  def test_a_client_knows_whether_its_cell_is_registered
+    refute_predicate Echo, :registered?
+
+    HotCell.register "test"
+
+    assert_predicate Echo, :registered?
+  end
+
+  def test_a_client_with_no_cell_name_is_not_registered
+    refute_predicate Homeless, :registered?
+  end
+
   class Uppercase < HotCell::Client
     hotcell "test"
     operation "test.uppercase"
