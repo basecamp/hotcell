@@ -5,9 +5,13 @@ module HotCell
   #
   # These numbers are arithmetic against the container's own flags, not defaults to copy. Against a cell
   # given two CPUs, 2GB, and a 512MB tmpfs: concurrency 4 because the work is CPU-bound on two cores;
-  # file_size 48MB because four workers each holding an input and an output is 384MB of that tmpfs; and
-  # memory 1536MB because that is the measured working value for RLIMIT_DATA, which is per worker and
+  # file_size 64MB because it bounds what one worker writes onto that tmpfs, and four of them share it;
+  # and memory 1536MB because that is the measured working value for RLIMIT_DATA, which is per worker and
   # mostly reservation rather than resident bytes.
+  #
+  # What a worker writes is its outputs plus a copy of any input an operation asked for by path. An
+  # operation that consumes the descriptor never pays for its input, which is what lets a small file_size
+  # accept a large upload — but the kernel does not distinguish the two writes, so one number covers both.
   #
   # memory does not multiply by concurrency, and that is the easiest mistake to make here. It is an
   # address-space charge on one worker. The cgroup limit is what bounds real memory across the cell, and

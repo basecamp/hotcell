@@ -135,13 +135,15 @@ against a read-only root filesystem.
 
 **Sizing those numbers.** They are arithmetic against the flags above, not defaults to copy. Against the
 `cpus: 2`, `memory: 2g`, `size=512m` accessory here: `concurrency: 4` because the work is CPU-bound on two
-cores; `file_size: 48MB` because that bounds what one worker *writes* — its output plus any scratch a tool
-produces — not what it reads, since inputs are read through their descriptors and never staged onto the
-tmpfs; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
+cores; `file_size: 48MB` because that bounds what one worker *writes* — its output, plus any scratch a tool
+produces; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
 
-An input is not charged to `file_size` or to the tmpfs at all: it is the caller's own file, read in place
-over `/dev/fd`, so a multi-gigabyte upload analyzes or previews under a small `file_size` and a small tmpfs.
-Size `file_size` from the largest output an operation writes, not the largest input it accepts.
+**An input is charged only if an operation asks for its path.** A descriptor consumed in place costs
+nothing — no tmpfs, no `file_size` — so a multi-gigabyte upload analyzes or previews under a small
+`file_size` and a small tmpfs. An operation that needs a filename, because its tool will not take
+`/dev/fd`, copies the input onto scratch first, and the kernel charges that copy to `file_size` exactly as
+it charges an output. Size `file_size` from the largest thing your operations write, and count a staged
+input as one of them.
 
 `memory` does not multiply by `concurrency`, which is the easiest mistake here. It is an address-space charge
 on one worker and roughly 620MB of it is reserved and never touched — about 450MB of that is Ruby's own

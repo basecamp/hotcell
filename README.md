@@ -380,6 +380,8 @@ rake
 
 ## Design
 
-[docs/HOTCELL-SPEC.md](docs/HOTCELL-SPEC.md) is the authority on the wire contract, the threat model, and the
-measurements behind every limit. Where the code departs from it, the code says so and why — `unsupported` being
-transient is the one worth knowing about.
+[docs/DESIGN.md](docs/DESIGN.md) holds what the code cannot tell you: the threat model, the invariants the
+design exists to hold, why descriptors rather than a shared volume, and the facts that were measured rather
+than reasoned about. Behavior is the code's to describe, and it does.
+
+[adr/](adr/README.md) holds the decisions that were argued rather than obvious.

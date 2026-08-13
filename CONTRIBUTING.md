@@ -187,8 +187,12 @@ One configuration for all five gems, because the style is one style. It runs in 
 
 ## Writing it down
 
-[docs/HOTCELL-SPEC.md](docs/HOTCELL-SPEC.md) is the authority on the wire contract, the threat model, and the
-measurements behind every limit. Where the code departs from it, the code says so and why.
+[docs/DESIGN.md](docs/DESIGN.md) holds the threat model, the numbered invariants, and the facts that were
+established by experiment rather than by reasoning — the fork hazard, what `RLIMIT_DATA` charges, what
+`/proc` gives a sibling away. Read it before changing anything a limit or an isolation claim rests on. It
+deliberately does not describe behavior: that is the code's job, and a duplicate description rots.
+
+The invariants are numbered, and code comments across three gems cite them by number. Do not renumber them.
 
 [adr/](adr/README.md) holds the decisions that were argued rather than obvious, so the argument does not have
 to be rerun. Write one when a decision cost you a real debate; do not edit one afterwards — a later decision
