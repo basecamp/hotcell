@@ -372,16 +372,18 @@ Active Storage integration converting real images, PDFs and video.
 
 ```
 bundle install
-rake                    # every suite
-rake hotcell            # only the suites that need no tool installed
-rake test:devcell       # boot the real development cell and run the example battery
-rake rubocop            # style, one configuration for all five gems
-bin/example-image       # install the cell scaffold and build what it wrote
-bin/conformance IMAGE   # the only check that covers network: none and cap-drop
-bin/load IMAGE          # the same operations at volume
+rake                       # everything
+rake test:hotcell          # only what needs no tool installed
+rake test:activestorage    # only what needs the converters installed
+rake test:devcell          # boot the real development cell and run the example battery
+rake test:gem:hotcell-core # one gem's suite
+rake rubocop               # style, one configuration for all five gems
+bin/example-image          # install the cell scaffold and build what it wrote
+bin/conformance IMAGE      # the only check that covers network: none and cap-drop
+bin/load IMAGE             # the same operations at volume
 ```
 
-**The three hotcell gems need no container and no tool**, and `rake hotcell` is what keeps that honest —
+**The three hotcell gems need no container and no tool**, and `rake test:hotcell` is what keeps that honest —
 CI runs it on a machine with nothing installed. Fixture operations stand in for the work, so the protocol, the
 fork, the descriptor passing, the limits and the reap are all exercised in milliseconds.
 

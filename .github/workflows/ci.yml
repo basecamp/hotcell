@@ -67,7 +67,7 @@ jobs:
         with:
           ruby-version: "${{matrix.ruby}}"
           bundler-cache: true
-      - run: bundle exec rake hotcell
+      - run: bundle exec rake test:hotcell
 
   # The uncontainerized cell is the supported macOS development path, so the no-toolchain suite runs on a mac
   # too. It is advisory rather than a gate: the runners are slow and a timing-sensitive deadline test is
@@ -88,7 +88,7 @@ jobs:
         with:
           ruby-version: "3.4"
           bundler-cache: true
-      - run: bundle exec rake hotcell
+      - run: bundle exec rake test:hotcell
 
   # These convert real images, PDFs and video rather than pretending to, so the converters have to be here.
   activestorage:
@@ -112,7 +112,7 @@ jobs:
         with:
           ruby-version: "${{matrix.ruby}}"
           bundler-cache: true
-      - run: bundle exec rake activestorage
+      - run: bundle exec rake test:activestorage
 
   # The container and isolation path, covered for real. bin/example-image runs the installer and builds
   # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
