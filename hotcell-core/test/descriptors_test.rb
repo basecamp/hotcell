@@ -138,6 +138,47 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  def test_an_output_names_a_suffixed_sibling_for_a_tool_that_needs_an_extension
+    with_file do |destination|
+      Dir.mktmpdir do |scratch|
+        writing(destination) do |io|
+          output = HotCell::Output.new(io, scratch: -> { File.join(scratch, "output") })
+
+          assert_equal "#{output.path}.png", output.path(extension: "png")
+        end
+      end
+    end
+  end
+
+  def test_adopting_a_suffixed_sibling_renames_it_into_place_for_post
+    with_file do |destination|
+      Dir.mktmpdir do |scratch|
+        writing(destination) do |io|
+          output = HotCell::Output.new(io, scratch: -> { File.join(scratch, "output") })
+          File.binwrite output.path(extension: "png"), "converted"
+          output.adopt output.path(extension: "png")
+
+          assert_equal 9, output.post
+        end
+
+        assert_equal "converted", File.binread(destination)
+      end
+    end
+  end
+
+  def test_adopting_a_sibling_the_tool_never_wrote_leaves_zero_bytes_to_report
+    with_file do |destination|
+      Dir.mktmpdir do |scratch|
+        writing(destination) do |io|
+          output = HotCell::Output.new(io, scratch: -> { File.join(scratch, "output") })
+          output.adopt output.path(extension: "png")
+
+          assert_equal 0, output.post
+        end
+      end
+    end
+  end
+
   def test_posting_an_unstaged_output_flushes_and_reports_what_is_there
     with_file do |destination|
       writing(destination) do |io|

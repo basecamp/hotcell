@@ -15,14 +15,13 @@ module ActiveStorage
 
         private
           # pdftoppm appends `.png` to its output root, so the frame lands beside the scratch name and is
-          # renamed into place; Output#post makes the one copy out through the caller's descriptor.
+          # adopted into place; Output#post makes the one copy out through the caller's descriptor.
           def render(source, destination, page:, resolution:)
             run! "pdftoppm", "-png", "-singlefile", "-cropbox", "-r", resolution.to_s,
                  "-f", page.to_s, "-l", page.to_s, source.fd_path, destination.path,
                  pass: [ source.to_io ]
 
-            rendered = "#{destination.path}.png"
-            File.rename rendered, destination.path if File.exist?(rendered)
+            destination.adopt destination.path(extension: "png")
           end
 
           def tool

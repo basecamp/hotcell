@@ -117,8 +117,19 @@ module HotCell
     # Names the file the operation is to write, on the first call. Nothing is copied yet: post sends
     # the file back out through the descriptor, and an operation that writes the descriptor directly
     # never names one at all.
-    def path
-      @path ||= scratch_path
+    #
+    # `extension` names a suffixed sibling on the same scratch instead, for a producer that picks its
+    # saver from the extension (ImageProcessing) or appends one of its own (pdftoppm). The sibling is
+    # not what post ships: adopt renames it into place.
+    def path(extension: nil)
+      base = (@path ||= scratch_path)
+      extension.nil? ? base : "#{base}.#{extension}"
+    end
+
+    # Renames a staged sibling onto `path`, so post ships it. A sibling the tool never wrote is left
+    # to post's zero-byte accounting.
+    def adopt(staged)
+      File.rename staged, path if File.exist?(staged)
     end
 
     # Sends whatever the operation produced back out through the descriptor, and returns the byte count
