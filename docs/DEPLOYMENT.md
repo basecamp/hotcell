@@ -290,7 +290,26 @@ HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
                memory: 1536 * 1024**2, file_size: 48 * 1024**2
 ```
 
+Read "Sizing the numbers" before copying those. They are arithmetic against one set of container flags,
+and they are below what some shipped operations declare.
+
 Running the installer again leaves every file that already exists untouched, so customizing is safe.
+
+**Load only the operations your image has tools for.** A cell advertises what it loaded, on `describe`, and
+a client checks that inventory at boot to catch a cell that does not carry the operation it wants. An
+operation whose tool is missing makes that check pass and fails at the first request instead. A gem that
+ships several toolchains loads them all through its entry point, so require the files you want:
+
+```ruby
+# hotcell/operations/active_storage.rb
+require "active_storage/hot_cell/server/transformers/image/vips"
+require "active_storage/hot_cell/server/analyzers/image/vips"
+require "active_storage/hot_cell/server/previewers/pdf/mutool"
+```
+
+**Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately. A skew between the
+client the app loads and the server the cell runs answers `protocol` on every request. While either tracks
+a branch rather than a released version, assert in a test that both lockfiles name the same revision.
 
 ### Sizing the numbers
 
@@ -299,7 +318,13 @@ The numbers above are arithmetic against the container flags. Against the `cpus:
 because that bounds what one worker writes; and `memory: 1536MB` because that is the measured working
 value for `RLIMIT_DATA`.
 
-Three results change how you read those numbers.
+**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
+so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
+set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
+`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
+nothing else, which is a hard failure to place.
+
+Three more results change how you read those numbers.
 
 **`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
 of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
@@ -373,3 +398,21 @@ docker inspect <container> --format '{{json .HostConfig}}' | jq '{
   NetworkMode, ReadonlyRootfs, CapDrop, SecurityOpt, PidsLimit, Memory, MemorySwap, Tmpfs
 }'
 ```
+
+## Checking a deployed cell
+
+`describe` and `metrics` answer on the control socket, which a descriptor never crosses. They report a
+healthy cell whose work socket the application cannot use at all — the two volume-ownership mistakes above
+fail as `EACCES` on the first real request, and nothing on the control socket says so.
+
+So carry a trivial operation that crosses the work socket, permanently, and call it from whatever page or
+probe reports the cell's health. `examples/operations/echo.rb` in the hotcell repository is written for
+this. Copy it into your own `operations/`. It loads no library and runs no tool, so it costs the blast
+radius nothing, and one round trip proves descriptor passing end to end.
+
+Three checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
+supervisor, and one `echo` for the socket that real files travel over.
+
+When you move an existing application onto a cell, consider doing it in phases. A first phase that deploys
+the accessory and confirms those three answers correctly separates a deployment problem from a conversion
+problem, before any traffic depends on it.

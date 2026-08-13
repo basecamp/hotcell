@@ -80,6 +80,10 @@ somebody's container image. They double as worked examples of how to write an op
 readable and pure Ruby with no external toolchain — which is also what lets them run on macOS, where the
 converters and Docker are absent.
 
+`echo` is also meant to be copied into a real cell and kept there. It is the only cheap way to prove the
+work socket answers, because `describe` and `metrics` cross the control socket instead. See "Checking a
+deployed cell" in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 | op | behavior | what it proves |
 | --- | --- | --- |
 | `echo` | read the input fd, write it back to the output fd | descriptor passing round-trips; a throughput baseline |

@@ -17,6 +17,27 @@ That is one configuration of several. Images can go through ImageMagick instead 
 (`Transformers::Image::Magick`, `Analyzers::Image::Magick`), and PDFs through Poppler instead of mutool
 (`Previewers::Pdf::Poppler`). Pick the pair your cell's image installs the tools for.
 
+**Load only the operations your cell's image has tools for.** Requiring
+`active_storage/hot_cell/server` loads every operation this gem ships, including the ImageMagick and
+Poppler ones. A cell advertises whatever it loaded, and a client checks that inventory at boot to catch a
+cell that does not carry the operation it wants. An operation whose tool is absent makes that check pass
+and fails at the first request instead. So require the files the image can serve:
+
+```ruby
+# hotcell/operations/active_storage.rb
+require "active_storage/hot_cell/server/transformers/image/vips"
+require "active_storage/hot_cell/server/analyzers/image/vips"
+require "active_storage/hot_cell/server/analyzers/media/ffprobe"
+require "active_storage/hot_cell/server/previewers/pdf/mutool"
+require "active_storage/hot_cell/server/previewers/video/ffmpeg"
+```
+
+**Moving one group at a time means naming Rails' classes for the rest.** Rails replaces
+`config.active_storage.analyzers` and `config.active_storage.previewers` wholesale. An application that
+moves previews first, and sets `previewers` to this gem's PDF previewer alone, does not stage the
+rollout — it deletes video previews. List Rails' own classes for every group that has not moved yet, and
+keep them until it does.
+
 Classes are named role, then subject, then tool — `Analyzers::Image::Vips` — so lexical order groups
 siblings, and an operation's wire name is the snake-cased class path: `active_storage.analyzers.image.vips`.
 The tool leaf is spelled `Ffprobe`/`Ffmpeg`/`Pdf` so that rule holds mechanically; `FFprobe`, `FFmpeg` and
