@@ -59,7 +59,7 @@ activestorage-hotcell-client/ the Rails transformer, analyzers and previewers
 
 examples/                     one cell's worth of sample operations and the battery that drives them
 bin/                          the container checks: example-image, conformance, load
-docs/                         the design document and the deployment guide
+docs/                         the design document, the deployment guide, the tuning guide
 adr/                          decisions that were argued rather than obvious
 ```
 

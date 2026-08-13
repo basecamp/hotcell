@@ -278,7 +278,8 @@ accessories:
       cap-drop: ALL
 ```
 
-This is the short version. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) has the full flag set, why each flag
+This is the short version. [docs/TUNING.md](docs/TUNING.md) covers arriving at the numbers for your own
+workload. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) has the full flag set, why each flag
 matters, and the two volume-ownership mistakes that both fail as `EACCES` at boot.
 
 ### Point a client at it

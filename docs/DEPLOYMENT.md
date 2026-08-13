@@ -318,6 +318,9 @@ operations need is paid on every request for the life of the deployment.
 
 ## Load testing a configuration
 
+[docs/TUNING.md](TUNING.md) covers arriving at these numbers for your own workload — what to instrument
+first, which settings to start generous on and why, and what to watch.
+
 `concurrency`, `queue_size` and `queue_wait` are the values that depend on how the work behaves under
 contention. Measure them rather than derive them.
 
