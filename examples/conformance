@@ -21,6 +21,11 @@ until File.socket?(socket)
 end
 puts "the cell is listening at #{socket}"
 
+# The cell runs as a different user here, exactly as an accessory does beside an application, so the files
+# this driver passes carry the cell's group. Without it every operation that opens a descriptor by name
+# fails with EACCES while the ones that read the descriptor directly keep passing.
+HotCell.group = Integer(ENV["HOTCELL_GROUP"]) if ENV["HOTCELL_GROUP"]
+
 HotCell.register "example", dir: directory, timeout: 15
 
 begin

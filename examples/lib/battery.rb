@@ -15,7 +15,8 @@ module Examples
 
     MESSAGE = "a message that must come back through the caller's own descriptors"
 
-    OPERATIONS = [ Echo, Sleep, Greedy, Overflow, Crash, Spawn, Probe, Isolation ].map(&:operation).freeze
+    OPERATIONS = [ Echo, Reopen, Tamper, Sleep, Greedy, Overflow, Crash, Spawn, Probe, Isolation ]
+      .map(&:operation).freeze
 
     # `memory_enforceable: false` skips the memory-clamp check, for platforms where RLIMIT_DATA cannot be
     # set (macOS). `isolation: true` adds the checks only a containerized cell can pass.
@@ -29,6 +30,7 @@ module Examples
     def run
       check("describe lists the example operations") { describe }
       check("echo round-trips through the caller's descriptors") { echo }
+      check("an operation re-opens its input by path") { reopen }
       check("a sleep past the deadline is killed: deadline") { deadline }
 
       if @memory_enforceable
@@ -45,6 +47,7 @@ module Examples
       check("the cell keeps serving afterwards") { still_serving }
       check("metrics answer on the control socket") { metrics }
       check("the isolation holds") { isolation } if @isolation
+      check("a cell cannot widen what it was given") { tamper } if @isolation
 
       true
     end
@@ -71,6 +74,17 @@ module Examples
 
           assert_equal MESSAGE, File.binread(output_path), "the echoed message"
           assert_equal false, result[:staged], "the input was staged onto scratch rather than passed"
+        end
+      end
+
+      # The same round trip as echo, through the input's path rather than its descriptor. Echo passes
+      # whatever the two sides' uids are; this one passes only when the cell can open the caller's file.
+      def reopen
+        with_files do |input, output, output_path|
+          result = Reopen.perform_in_hotcell([ input ], [ output ])
+
+          assert_equal MESSAGE, File.binread(output_path), "the message read back through the input's path"
+          assert_equal false, result[:staged], "the input was staged onto scratch rather than read in place"
         end
       end
 
@@ -160,6 +174,18 @@ module Examples
         assert result[:tool_env], "the env tool could not run inside the cell"
         extra = result[:tool_env] - %w[ HOME LANG LC_ALL PATH ]
         assert_equal [], extra, "an exec'd tool sees more than the written environment"
+      end
+
+      # The other half of the shared group. It lets a cell read an input and write an output, and this is
+      # what says it bought nothing else. A cell that could widen a mode could take both directions back.
+      def tamper
+        with_files do |input, output|
+          result = Tamper.perform_in_hotcell([ input ], [ output ])
+
+          assert_equal "EACCES", result[:write_input], "a cell opened the caller's input for writing"
+          assert_equal "EACCES", result[:read_output], "a cell opened the caller's output for reading"
+          assert_equal "EPERM", result[:chmod_input], "a cell changed the mode of the caller's input"
+        end
       end
 
       def assert(condition, message)

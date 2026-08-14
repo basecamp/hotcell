@@ -7,6 +7,16 @@ module HotCell
     # The directory a cell's name resolves under, holding one subdirectory per cell. Unset means no cell is
     # reachable at all, which is the off position of the whole rollout.
     attr_accessor :root
+
+    # The group both sides hold, so a cell can open a caller's file by name. An operation that hands a tool
+    # a filename re-opens the descriptor as `/dev/fd/N`, and the kernel rechecks that open against the
+    # cell's own credentials rather than the caller's — so a file only this application can read fails with
+    # EACCES however the descriptor was passed. Set this to the cell's gid and put the application in that
+    # group; the client then narrows each descriptor's mode on the way out. See Client#wrap.
+    #
+    # Leave it unset where both sides already run as one user, which is how development runs.
+    attr_accessor :group
+
     attr_writer :logger
 
     def logger
@@ -58,6 +68,7 @@ module HotCell
     def reset_registrations!
       @cells = nil
       @root = nil
+      @group = nil
     end
   end
 end

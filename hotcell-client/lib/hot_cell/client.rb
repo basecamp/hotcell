@@ -30,6 +30,13 @@ module HotCell
   # Routing is a class-level declaration rather than a call-site argument, so call sites carry no deployment
   # detail and several clients may name the same cell.
   class Client
+    # What a shared group is narrowed to on the way out, and the reason the group is safe to give away. A
+    # cell may read an input and never write one; it may write an output and never read one. The kernel
+    # applies these on every re-open by name, and the cell cannot widen either — changing a mode needs
+    # ownership, the caller owns these files, and `cap-drop ALL` leaves no capability that overrides it.
+    INPUT_MODE = 0o640
+    OUTPUT_MODE = 0o620
+
     class << self
       include Declarations
 
@@ -105,7 +112,18 @@ module HotCell
 
     private
       def wrap(inputs, outputs)
-        inputs.map { |io| Input.new(io) } + outputs.map { |io| Output.new(io) }
+        inputs.map { |io| Input.new(shared(io, INPUT_MODE)) } +
+          outputs.map { |io| Output.new(shared(io, OUTPUT_MODE)) }
+      end
+
+      # Through the descriptor rather than the path, so this names no file: fchown and fchmod take the open
+      # file the caller already gave us. Both need ownership, which the caller has and the cell does not.
+      def shared(io, mode)
+        return io if HotCell.group.nil?
+
+        io.chown nil, HotCell.group
+        io.chmod mode
+        io
       end
 
       def request_line(inputs, outputs, payload)

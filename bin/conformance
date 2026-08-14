@@ -55,6 +55,7 @@ if ! docker run --rm \
   --volume "$REPO:/repo:ro" \
   --volume "$VOLUME:/run/hotcell/cell" \
   --env HOTCELL_DIR="$DIRECTORY" \
+  --env HOTCELL_GROUP=10001 \
   --env HOTCELL_REPO=/repo \
   --env BUNDLE_GEMFILE=/tmp/driver/Gemfile \
   --env BUNDLE_PATH=/tmp/driver/bundle \

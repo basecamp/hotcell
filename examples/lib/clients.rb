@@ -13,6 +13,16 @@ module Examples
     operation "example.echo"
   end
 
+  class Reopen < ::HotCell::Client
+    hotcell CELL
+    operation "example.reopen"
+  end
+
+  class Tamper < ::HotCell::Client
+    hotcell CELL
+    operation "example.tamper"
+  end
+
   class Sleep < ::HotCell::Client
     hotcell CELL
     operation "example.sleep"
