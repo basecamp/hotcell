@@ -87,6 +87,7 @@ volumes:
 env:
   clear:
     HOTCELL_ROOT: /run/hotcell
+    HOTCELL_GROUP: 10001                        # must match group-add above
 ```
 
 Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the flags
@@ -180,8 +181,8 @@ narrow the limit for that request. They never widen it, because the cell's numbe
 Per registered cell. They set how the application responds to what a cell answers.
 
 ```ruby
-HotCell.root = ENV["HOTCELL_ROOT"]   # unset turns every cell off
-HotCell.group = 10001                # the cell's gid; the app must be in this group
+HotCell.root = ENV["HOTCELL_ROOT"]              # unset turns every cell off
+HotCell.group = ENV["HOTCELL_GROUP"]&.to_i      # the cell's gid; unset where both sides are one user
 
 HotCell.register "images",
   timeout: 30,

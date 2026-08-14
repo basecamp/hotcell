@@ -293,8 +293,8 @@ Register the cell once, with the application's own exception classes for the two
 sides of the permanent split, then declare a client per operation:
 
 ```ruby
-HotCell.root = ENV["HOTCELL_ROOT"]   # unset means every cell is off
-HotCell.group = 10001                # the cell's gid; the app must be in this group
+HotCell.root = ENV["HOTCELL_ROOT"]              # unset means every cell is off
+HotCell.group = ENV["HOTCELL_GROUP"]&.to_i      # the cell's gid; unset where both sides are one user
 
 HotCell.register "documents",
   permanent: MyApp::UnreadableDocument,
