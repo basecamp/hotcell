@@ -7,13 +7,19 @@ module HotCell
   # Both socket paths are derived from one directory, so the volume mounts are mechanical rather than
   # something to remember and the two sockets cannot end up apart.
   class Cell
-    attr_reader :name, :timeout, :permanent, :transient, :transport
+    attr_reader :name, :timeout, :control_timeout, :permanent, :transient, :transport
 
-    def initialize(name, dir: nil, timeout: 30, permanent: PermanentFailure, transient: TransientFailure,
+    # `timeout` covers work, so it is sized to clear the cell's `answer_within` and a saturated cell reports
+    # its own verdict rather than a transport failure. `control_timeout` covers `describe` and `metrics`,
+    # which the supervisor answers inline with no fork or queue — so it is short on purpose. Sharing one
+    # number would give the call whose job is to say "this cell is down" the patience of a video transcode.
+    def initialize(name, dir: nil, timeout: 30, control_timeout: 5,
+                   permanent: PermanentFailure, transient: TransientFailure,
                    on_contract_skew: nil, transport: Transport::Socket.new)
       @name = name.to_s
       @dir = dir
       @timeout = timeout
+      @control_timeout = control_timeout
       @permanent = permanent
       @transient = transient
       @on_contract_skew = on_contract_skew
@@ -82,7 +88,7 @@ module HotCell
 
     private
       def control(op)
-        transport.call self, Request.new(op: op).to_line, [], socket: control_socket
+        transport.call self, Request.new(op: op).to_line, [], socket: control_socket, timeout: control_timeout
       end
 
       # The client's timeout is a sum rather than a comparison: a request may wait queue_wait in the queue

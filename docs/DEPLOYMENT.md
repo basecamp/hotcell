@@ -175,7 +175,8 @@ HotCell.register "images",
 | --- | --- | --- |
 | `HotCell.root` | — | The parent directory that cell names resolve under. When it is unset, every cell is off and callers run in process. |
 | `dir:` | from `root` | An explicit socket directory for one cell. Give a lambda to make a change of path a configuration change instead of a deploy. |
-| `timeout:` | `30` | Seconds this caller waits for an answer. It must clear the cell's `answer_within`. |
+| `timeout:` | `30` | Seconds this caller waits for an answer to a work request. It must clear the cell's `answer_within`. |
+| `control_timeout:` | `5` | Seconds this caller waits for `describe` or `metrics`. The supervisor answers both inline, with no fork and no queue, so this is short on purpose and must not be raised toward `timeout`. It is what bounds app boot when a cell accepts connections and never answers, and what lets a health check report a wedged cell instead of waiting out a work timeout. |
 | `permanent:`, `transient:` | the gem's classes | The exception classes the application raises for each side of the split. `transient` must not descend from `permanent`, and the client refuses to start if it does. |
 | `on_contract_skew:` | — | Called when a cell answers `protocol`, so a version mismatch is visible to an application that rescues broadly. |
 
