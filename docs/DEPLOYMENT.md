@@ -71,6 +71,16 @@ And the app's half, mounting the same volume:
 
 ```yaml
 # config/deploy.yml — the app
+servers:
+  web:
+    hosts: [ ... ]
+    options:
+      group-add: 10001                          # the cell's gid; see "The group both sides share"
+  jobs:
+    hosts: [ ... ]
+    options:
+      group-add: 10001
+
 volumes:
   - hotcell-sockets:/run/hotcell/images         # $HOTCELL_ROOT/<cell name>
 
@@ -80,8 +90,8 @@ env:
 ```
 
 Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the flags
-below on the cell, and `--volume hotcell-sockets:/run/hotcell/images` with `HOTCELL_ROOT=/run/hotcell` on
-the app.
+below on the cell, and `--volume hotcell-sockets:/run/hotcell/images`, `--group-add 10001` and
+`HOTCELL_ROOT=/run/hotcell` on the app.
 
 The two mount paths differ, and only the volume name has to match. A cell always writes its sockets to
 `HOTCELL_DIR`. The app resolves a cell's name under `HotCell.root`, so a cell named `images` is found at
@@ -171,6 +181,7 @@ Per registered cell. They set how the application responds to what a cell answer
 
 ```ruby
 HotCell.root = ENV["HOTCELL_ROOT"]   # unset turns every cell off
+HotCell.group = 10001                # the cell's gid; the app must be in this group
 
 HotCell.register "images",
   timeout: 30,
@@ -182,6 +193,7 @@ HotCell.register "images",
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `HotCell.root` | — | The parent directory that cell names resolve under. When it is unset, every cell is off and callers run in process. |
+| `HotCell.group` | — | The group both sides hold, so a cell can open a caller's file by name. Set it to the cell's gid. Unset is for an installation whose two sides already run as one user, which is how development runs. See "The group both sides share". |
 | `dir:` | from `root` | An explicit socket directory for one cell. Give a lambda to make a change of path a configuration change instead of a deploy. |
 | `timeout:` | `30` | Seconds this caller waits for an answer to a work request. It must clear the cell's `answer_within`. |
 | `control_timeout:` | `5` | Seconds this caller waits for `describe` or `metrics`. The supervisor answers both inline, with no fork and no queue, so this is short on purpose and must not be raised toward `timeout`. It is what bounds app boot when a cell accepts connections and never answers, and what lets a health check report a wedged cell instead of waiting out a work timeout. |
@@ -242,6 +254,44 @@ permission on it. The two sides do not share a uid — the cell runs as `10001` 
 its own image sets — so `0600` gives `EACCES` on the app's first request.
 
 The mount topology is what limits access: the directory is a volume mounted into two containers only.
+
+## The group both sides share
+
+Set `HotCell.group` to the cell's gid, and put the application in that group:
+
+```yaml
+# config/deploy.yml — the app
+servers:
+  web:
+    options:
+      group-add: 10001
+```
+
+**Why it is needed.** An operation that hands a tool a filename does not copy the input. It re-opens the
+descriptor as `/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user
+rather than the caller's. The two sides do not share a uid, so a mode `0600` file the application owns
+gives `EACCES`. An Active Storage tempfile is exactly that.
+
+Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
+because they stage first.
+
+**What the client does with it.** It puts each descriptor in the group and narrows the mode on the way
+out: `0640` for an input, `0620` for an output. It does this through the open file rather than a path, so
+it names nothing.
+
+**What that buys, and what it does not.** A cell may read an input and write an output. It may not write
+an input or read an output, and it cannot widen either, because it does not own these files and
+`cap-drop ALL` leaves it no capability that overrides a mode. The application must own them and be in the
+group, which is what lets it set the group at all.
+
+**Do not share a uid instead.** It is the obvious shortcut and it costs two things. The cell would own the
+files, so it could set any mode it liked and the one-way rule would stop holding. And a cell that escaped
+its container would land on the application's own user on the host, where it can read the environment of
+the application's processes. Keep the uids apart and share only the group.
+
+**How it fails.** Loudly, on the first operation that hands a tool a filename. Operations that read the
+descriptor directly keep working, which is why `echo` alone does not detect it. See "Checking a deployed
+cell".
 
 ## Host precondition
 
@@ -400,6 +450,12 @@ Of the security flags, it observes three from inside the cell: `network: none` (
 `lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does not observe
 `cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or `pids-limit`.
 
+It does check the shared group, because it runs the cell as `10001` against files a different user owns.
+`example.reopen` proves a cell can open an input by name, and `example.tamper` proves it can do nothing
+else with either file. What it cannot check is your application's group membership: its own driver owns
+the files as root, which needs no membership to set a group. That one fails as `EPERM` in the application
+rather than in the cell.
+
 To check your accessory before you deploy it, print the command Kamal will run. `kamal config` does not
 answer this. It prints merged configuration, not the command, so a `--network` emitted twice does not
 appear there at all.
@@ -429,14 +485,21 @@ docker inspect <container> --format '{{json .HostConfig}}' | jq '{
 healthy cell whose work socket the application cannot use at all — the two volume-ownership mistakes above
 fail as `EACCES` on the first real request, and nothing on the control socket says so.
 
-So carry a trivial operation that crosses the work socket, permanently, and call it from whatever page or
-probe reports the cell's health. `examples/operations/echo.rb` in the hotcell repository is written for
-this. Copy it into your own `operations/`. It loads no library and runs no tool, so it costs the blast
-radius nothing, and one round trip proves descriptor passing end to end.
+So carry two trivial operations that cross the work socket, permanently, and call them from whatever page
+or probe reports the cell's health. `examples/operations/echo.rb` and `examples/operations/reopen.rb` in
+the hotcell repository are written for this. Copy both into your own `operations/`. Neither loads a
+library or runs a tool, so together they cost the blast radius nothing.
 
-Three checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
-supervisor, and one `echo` for the socket that real files travel over.
+**They prove different things, and you need both.** `echo` reads the descriptor directly, so one round
+trip proves descriptor passing end to end. `reopen` reads the input by name, which is what every operation
+that hands a tool a filename does. A cell with the shared group missing answers `echo` perfectly and fails
+`reopen` with `EACCES`. That is the whole difference between a cell that works and one that fails on every
+real conversion, and only `reopen` sees it.
+
+Four checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
+supervisor, one `echo` for the socket that real files travel over, and one `reopen` for the group they
+travel in.
 
 When you move an existing application onto a cell, consider doing it in phases. A first phase that deploys
-the accessory and confirms those three answers correctly separates a deployment problem from a conversion
+the accessory and confirms those four answers correctly separates a deployment problem from a conversion
 problem, before any traffic depends on it.

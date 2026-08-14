@@ -278,9 +278,13 @@ accessories:
       cap-drop: ALL
 ```
 
+The application's own roles need `group-add: 10001`, the cell's gid. The two sides run as different users,
+and a cell has to open the caller's file by name to hand a tool a filename.
+
 This is the short version. [docs/TUNING.md](docs/TUNING.md) covers arriving at the numbers for your own
 workload. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) has the full flag set, why each flag
-matters, and the two volume-ownership mistakes that both fail as `EACCES` at boot.
+matters, the group both sides share, and the two volume-ownership mistakes that both fail as `EACCES` at
+boot.
 
 ### Point a client at it
 
@@ -289,6 +293,7 @@ sides of the permanent split, then declare a client per operation:
 
 ```ruby
 HotCell.root = ENV["HOTCELL_ROOT"]   # unset means every cell is off
+HotCell.group = 10001                # the cell's gid; the app must be in this group
 
 HotCell.register "documents",
   permanent: MyApp::UnreadableDocument,
