@@ -79,6 +79,7 @@ module HotCell
 
       warn_about_timeout response.result
       warn_about_missing_operations response.result
+      warn_about_group_skew response.result
       response.result
     end
 
@@ -115,6 +116,21 @@ module HotCell
       # The cell reports seconds as floats, and "41.0s" is a worse sentence than "41s".
       def seconds(value)
         "#{format("%g", value)}s"
+      end
+
+      # HotCell.group is a number in this application's deploy file, and the cell's gid is baked into an
+      # image built somewhere else. Nothing else compares them, so a cell image that changed its gid would
+      # be an EACCES on every conversion — with a probe that was green the day before.
+      #
+      # A cell too old to report its groups says nothing, which is the right answer for a number we cannot
+      # know. So is a client with no group configured, which is the one-user case.
+      def warn_about_group_skew(described)
+        carried = described[:groups]
+        return if HotCell.group.nil? || carried.nil? || carried.include?(HotCell.group)
+
+        HotCell.logger.warn "hotcell #{name}: HotCell.group is #{HotCell.group} and this cell runs in " \
+                            "#{carried.inspect}, so it cannot open a file this application hands it and " \
+                            "every operation that gives a tool a filename will fail with EACCES."
       end
 
       def warn_about_missing_operations(described)

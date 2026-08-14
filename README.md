@@ -59,10 +59,11 @@ class TransformImageOperation < HotCell::Operation
     source, = inputs
     destination, = outputs
 
-    # Asking an input for its path copies the bytes onto this worker's private scratch, so the tool
-    # gets a filename the caller never chose. Reading source.io directly skips the copy.
+    # fd_path reads the caller's file in place, with no copy onto scratch — so an input of any size
+    # costs nothing against file_size. Reach for source.path only when a tool needs a distinct on-disk
+    # copy; that stages the bytes, and the kernel charges the write.
     converted = ImageProcessing::Vips
-      .source(source.path)
+      .source(source.fd_path)
       .convert(format)
       .apply(operations)
       .call

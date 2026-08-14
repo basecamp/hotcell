@@ -42,10 +42,19 @@ module HotCell
     # pointed at a cell that does not carry the operation it wants, which is otherwise an `unsupported` on
     # the first real request, and to catch a client whose own timeout is below what this cell may take.
     def describe
-      { v: PROTOCOL_VERSION, operations: Registry.names, **@configuration.to_h }
+      { v: PROTOCOL_VERSION, operations: Registry.names, groups: groups, **@configuration.to_h }
     end
 
     private
+      # What a caller's files must carry for this cell to open one by name. The number in an application's
+      # deploy file has to agree with the gid baked into this image, and nothing else compares them — so a
+      # cell whose gid moved is a boot warning in the client rather than an EACCES on every conversion.
+      #
+      # The primary gid is added because getgroups is not required to report it.
+      def groups
+        (Process.groups + [ Process.gid ]).uniq.sort
+      end
+
       def failed(code, message)
         Response.failed Failure.new(code: code, message: message)
       end

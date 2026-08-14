@@ -211,6 +211,43 @@ class IntegrationTest < HotCellClientTest
     assert_nil HotCell.describe_cells["test"]
   end
 
+  # Otherwise the first conversion fails with EPERM from the client's own chown, on a live deployment.
+  def test_describe_warns_when_this_process_is_not_in_the_group_it_would_give_a_descriptor
+    HotCell.group = unheld_group
+
+    warnings = capturing_warnings { HotCell.describe_cells }
+
+    assert_match "HotCell.group is #{unheld_group}", warnings
+    assert_match "every conversion will fail with EPERM", warnings
+  end
+
+  def test_describe_says_nothing_about_a_group_this_process_holds
+    HotCell.group = Process.gid
+
+    refute_match "HotCell.group", capturing_warnings { HotCell.describe_cells }
+  end
+
+  # The gid is baked into an image built elsewhere, so a cell that moved it is otherwise an EACCES on every
+  # conversion, against a probe that was green the day before.
+  def test_describe_warns_when_the_cell_does_not_run_in_the_configured_group
+    with_cell do
+      HotCell.group = unheld_group
+
+      warnings = capturing_warnings { HotCell.describe_cells }
+
+      assert_match "this cell runs in", warnings
+      assert_match "will fail with EACCES", warnings
+    end
+  end
+
+  def test_describe_reports_the_groups_the_cell_runs_in
+    with_cell do
+      carried = HotCell.describe_cells["test"][:groups]
+
+      assert_includes carried, Process.gid
+    end
+  end
+
   # Counts lag responses — the worker answers the caller before the supervisor reads its idle report and
   # increments the counter — so the wait is the assertion, exactly as in the server suite's metrics test.
   def test_metrics_come_back_through_the_registration
@@ -255,6 +292,11 @@ class IntegrationTest < HotCellClientTest
   end
 
   private
+    # A gid this process cannot be holding, so the check has something unambiguous to fail on.
+    def unheld_group
+      @unheld_group ||= ((1..65_000).to_a - Process.groups - [ Process.gid, Process.egid ]).last
+    end
+
     def capturing_warnings
       captured = StringIO.new
       HotCell.logger = Logger.new(captured)

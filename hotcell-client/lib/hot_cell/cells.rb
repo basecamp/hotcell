@@ -60,7 +60,21 @@ module HotCell
 
     # Call once at boot, after registering. Warns and carries on; see Cell#describe.
     def describe_cells
+      warn_about_group
       cells.each_value.to_h { |cell| [ cell.name, cell.describe ] }
+    end
+
+    # A group this process does not hold cannot be given to a file, so without this the first conversion
+    # fails as EPERM from the client's own chown — after the deployment is live and carrying traffic. The
+    # check is local and needs no cell, so it reports a missing `group-add` even when every cell is down.
+    def warn_about_group
+      return if group.nil? || group == Process.gid || group == Process.egid
+      return if Process.groups.include?(group)
+
+      logger.warn "hotcell: HotCell.group is #{group} and this process is in #{Process.groups.sort.inspect}, " \
+                  "so it cannot put a descriptor in that group and every conversion will fail with EPERM. " \
+                  "Add the group to this container (Kamal: `group-add` under the role's `options:`), or " \
+                  "unset HotCell.group where both sides run as one user."
     end
 
     # Test support. Named apart from the server gem's own reset, because both gems open this module and a

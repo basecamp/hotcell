@@ -293,6 +293,16 @@ the application's processes. Keep the uids apart and share only the group.
 descriptor directly keep working, which is why `echo` alone does not detect it. See "Checking a deployed
 cell".
 
+**What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
+like every other boot check here.
+
+- **Whether this process holds `HotCell.group`.** A missing `group-add` is then visible before any traffic
+  depends on it. This check is local and needs no cell, so it reports even when every cell is down.
+- **Whether the cell runs in that group.** `describe` reports the groups a cell holds, and the client
+  compares them. The number lives in your deploy file and the cell's gid is baked into an image built
+  somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
+  them says nothing.
+
 ## Host precondition
 
 `kernel.yama.ptrace_scope >= 1`.
