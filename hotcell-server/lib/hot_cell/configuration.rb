@@ -4,10 +4,10 @@ module HotCell
   # A cell is configured once, and everything about scheduling lives here rather than on an operation.
   #
   # These numbers are arithmetic against the container's own flags, not defaults to copy. Against a cell
-  # given two CPUs, 2GB, and a 512MB tmpfs: concurrency 4 because the work is CPU-bound on two cores;
-  # file_size 64MB because it bounds what one worker writes onto that tmpfs, and four of them share it;
-  # and memory 1536MB because that is the measured working value for RLIMIT_DATA, which is per worker and
-  # mostly reservation rather than resident bytes.
+  # given two CPUs, 2GB, and a 512MB tmpfs: concurrency 4 because a request spends much of its life off
+  # the CPU, so twice `cpus` is where to start; file_size 64MB because it bounds what one worker writes
+  # onto that tmpfs, and four of them share it; and memory 1536MB because that is the measured working
+  # value for RLIMIT_DATA, which is per worker and mostly reservation rather than resident bytes.
   #
   # What a worker writes is its outputs plus a copy of any input an operation asked for by path. An
   # operation that consumes the descriptor never pays for its input, which is what lets a small file_size

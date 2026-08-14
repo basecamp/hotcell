@@ -89,7 +89,7 @@ from this document, not recommendations.
 
 | Flag | Example | Tune it from |
 | --- | --- | --- |
-| `cpus` | `2` | The share of the host this cell may use. Size the cell's `concurrency` from it. |
+| `cpus` | `2` | The share of the host this cell may use. Start the cell's `concurrency` at twice this number. |
 | `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. |
 | `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
 | `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. |
@@ -137,7 +137,7 @@ HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `concurrency` | `4` | Workers that run at once, and the number of slots. Size it from `cpus`. See "Settings that trade one for the other". |
+| `concurrency` | `4` | Workers that run at once, and the number of slots. Start at twice `cpus`. See "Settings that trade one for the other". |
 | `queue_size` | `8` | Connections that may wait for a worker. When `running + queued` reaches `concurrency + queue_size`, the cell answers `capacity`. Use `0` to refuse instead of queueing. |
 | `queue_wait` | `10` | Seconds a queued connection may wait before the cell answers `capacity`. This makes a saturated cell answer with a verdict instead of holding the caller until its own timeout. |
 | `control_deadline` | `5` | Seconds a control connection may take to send its request. |
@@ -314,9 +314,9 @@ a branch rather than a released version, assert in a test that both lockfiles na
 ### Sizing the numbers
 
 The numbers above are arithmetic against the container flags. Against the `cpus: 2`, `memory: 2g`,
-`size=512m` accessory here: `concurrency: 4` because the work is CPU-bound on two cores; `file_size: 48MB`
-because that bounds what one worker writes; and `memory: 1536MB` because that is the measured working
-value for `RLIMIT_DATA`.
+`size=512m` accessory here: `concurrency: 4` because a request spends much of its life off the CPU, so
+twice `cpus` is where to start; `file_size: 48MB` because that bounds what one worker writes; and
+`memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
 
 **Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
 so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
