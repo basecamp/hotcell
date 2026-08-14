@@ -42,7 +42,6 @@ accessories:
       cpus: 2
       memory: 2g
       memory-swap: 2g                           # equal to memory
-      ulimit: stack=2097152:2097152
 
       # Security. Use these values. See "Security" below.
       network: none
@@ -93,7 +92,7 @@ from this document, not recommendations.
 | `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. |
 | `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
 | `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. |
-| `ulimit: stack` | `2097152:2097152` | Each thread in a tool's pool reserves a stack, so this returns about 140MB of `RLIMIT_DATA` headroom per worker at concurrency 4. It cannot be a cell setting: glibc reads `RLIMIT_STACK` once at process start, so a later `Process.setrlimit` has no effect. |
+| `ulimit: stack` | leave it unset | A container inherits the Docker daemon's value, normally 8MB, and that is where to leave it. Lowering it buys a worker about 24MB more room at 2MB, and nothing at all for an operation that shells out. It costs far more than it buys: a thread that overflows the smaller stack dies on `SIGSEGV`, which the cell reports as `killed`/`memory` — a permanent verdict written against the caller's file, and identical to a genuine memory breach, so it sends you to the wrong setting. Raise the cell's `memory` instead. It belongs here rather than in `config.rb` because glibc reads it at exec, before `Process.setrlimit` could run. |
 
 ### Security
 
