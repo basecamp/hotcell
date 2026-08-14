@@ -27,6 +27,15 @@ bin/kamal accessory reboot images -d production
 These are `docker run` flags. Under Kamal they go in an accessory's `options:`, and Kamal supplies no
 value of its own for any of them.
 
+`network` is the one exception, and it is the flag this design depends on most. It is an accessory key of
+its own, a sibling of `image:` and `roles:`. Kamal always emits a `--network` of its own, `kamal` by
+default. An entry under `options:` adds a second `--network` rather than replacing the first, and Docker
+refuses the container:
+
+```
+docker: conflicting options: cannot attach both user-defined and non-user-defined network-modes
+```
+
 An illustrative Kamal configuration, the cell's half:
 
 ```yaml
@@ -35,6 +44,7 @@ accessories:
   images:                                       # the cell's name; the app registers it under this
     image: your.registry.com/your-image:latest
     roles: [ web, jobs ]                        # a cell runs on its caller's host
+    network: none                               # an accessory key, never an option — see above
     volumes:
       - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
     options:
@@ -44,7 +54,6 @@ accessories:
       memory-swap: 2g                           # equal to memory
 
       # Security. Use these values. See "Security" below.
-      network: none
       read-only: true
       cap-drop: ALL
       security-opt: no-new-privileges:true
@@ -101,7 +110,7 @@ serves requests exactly as before.
 
 | Flag | Recommended | What it does |
 | --- | --- | --- |
-| `network: none` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. |
+| `network` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. Set it as an accessory key, not under `options:`. |
 | `read-only` | `true` | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
 | `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` prevents execution from scratch, which is where a dropped payload lands. |
 | `cap-drop` | `ALL` | Removes every Linux capability. |
@@ -390,6 +399,21 @@ you are about to deploy with `cap-drop` missing.
 Of the security flags, it observes three from inside the cell: `network: none` (the only interface is
 `lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does not observe
 `cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or `pids-limit`.
+
+To check your accessory before you deploy it, print the command Kamal will run. `kamal config` does not
+answer this. It prints merged configuration, not the command, so a `--network` emitted twice does not
+appear there at all.
+
+```
+bundle exec ruby -rkamal -e '
+  config = Kamal::Configuration.create_from(
+    config_file: Pathname.new("config/deploy.yml"), destination: "production", version: "check")
+  puts Kamal::Commands::Accessory.new(config, name: :images).run.flatten.join(" ")
+'
+```
+
+Read `--network` off that line. It must appear once, as `--network none`. Two of them is the `options:`
+mistake above, and Docker rejects the container at boot with exit status 125.
 
 To check a deployed cell, read the flags on the running container:
 

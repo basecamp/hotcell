@@ -268,10 +268,10 @@ accessories:
   documents:
     image: your.registry.com/your-image:latest
     roles: [ web, jobs ]                        # a cell always lives on its caller's host
+    network: none                               # an accessory key, never an option
     volumes:
       - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
     options:
-      network: none
       read-only: true
       tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
       memory: 2g
