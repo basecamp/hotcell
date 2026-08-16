@@ -193,8 +193,37 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
-  # video_preview_arguments is a shell string an application can set, and Rails splits it with Shellwords. A cell
-  # exists so that nobody but the operation chooses what a tool runs, so the payload carries one number.
+  # An application's `config.active_storage.video_preview_input_arguments` reaches ffmpeg before `-i` — the
+  # position an input option needs, and where Rails splices it. Excluding the fixture's own codec is the proof:
+  # a whitelist that never reached the tool, or landed after `-i`, would leave the preview succeeding.
+  def test_input_arguments_reach_ffmpeg_before_the_input
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.video.ffmpeg",
+                                                        inputs: [ fixture("sample.mp4") ],
+                                                        outputs: [ destination ],
+                                                        payload: { input_arguments: [ "-codec_whitelist", "aac" ] })
+
+        assert_match "not on whitelist", failure.message
+      end
+    end
+  end
+
+  def test_input_arguments_that_are_not_an_array_of_strings_are_a_caller_bug
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.video.ffmpeg",
+                                                     inputs: [ fixture("sample.mp4") ],
+                                                     outputs: [ destination ],
+                                                     payload: { input_arguments: [ "-f", 1 ] })
+
+        assert_match "input_arguments must be an array of strings", failure.message
+      end
+    end
+  end
+
+  # `seek` is a number, and it is validated as one. Flags travel only in `input_arguments`, so a string that
+  # tries to smuggle them through the seek is refused before anything runs.
   def test_a_caller_cannot_choose_what_ffmpeg_runs
     Cell.boot do |cell|
       with_output(".png") do |destination|

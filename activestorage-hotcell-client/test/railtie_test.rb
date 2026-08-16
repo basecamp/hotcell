@@ -34,14 +34,23 @@ class RailtieTest < ActiveStorageHotCellClientTest
     super
   end
 
-  def test_boot_applies_the_retry_and_a_code_reload_reapplies_it
+  # One boot, because a Rails application initializes once per process, so everything the railtie does at boot
+  # is asserted here. The tool-argument settings are the same line an application writes for the in-process
+  # analyzer, and one is left unset — nil in config, which must arrive as nothing rather than reach Shellwords.
+  # This application does not load the Active Storage engine, so it creates the config namespace the engine
+  # would have.
+  def test_boot_applies_the_retry_and_the_settings_and_a_code_reload_reapplies_the_retry
     with_canned_response failed("capacity")
     ActiveStorage.const_set :AnalyzeJob, RecordingJob
+    application.config.active_storage = ActiveSupport::OrderedOptions.new
+    application.config.active_storage.ffprobe_arguments = "-codec_whitelist h264,aac"
 
     application.initialize!
 
     assert_equal [ TemporarilyUnavailable ], RecordingJob.retried.flat_map(&:first),
                  "boot did not teach the job to retry the transient class"
+    assert_equal "-codec_whitelist h264,aac", ActiveStorage.ffprobe_arguments
+    assert_equal "", ActiveStorage.video_preview_input_arguments
 
     RecordingJob.forget
     application.reloader.prepare!
@@ -50,6 +59,7 @@ class RailtieTest < ActiveStorageHotCellClientTest
                  "a code reload lost the retry"
   ensure
     ActiveStorage.send :remove_const, :AnalyzeJob
+    ActiveStorage.ffprobe_arguments = ""
     RecordingJob.forget
   end
 

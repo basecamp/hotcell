@@ -37,8 +37,14 @@ module ActiveStorage
           private
             def measured
               download_blob_to_tempfile do |file|
-                File.open(file.path, "rb") { |readable| self.class.client.perform_in_hotcell [ readable ], [] }
+                File.open(file.path, "rb") { |readable| self.class.client.perform_in_hotcell [ readable ], [], payload }
               end
+            end
+
+            # What travels with the request beyond the descriptor. Nothing, for an analyzer that has no
+            # configuration to carry; the media analyzers override it with the application's ffprobe arguments.
+            def payload
+              {}
             end
         end
       end

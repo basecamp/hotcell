@@ -319,6 +319,11 @@ answers false, and `perform_in_hotcell` raises `HotCell::CellNotConfigured`. The
 in-process fallback. A caller that wants one checks `enabled?` and takes its old path, which is how an
 application rolls this out as a configuration change rather than a release.
 
+A subclass inherits `hotcell` and not `operation`. The operation name is the wire name, and a subclass
+that inherited it would answer to the same name as its parent, so it derives its own from its class path
+unless it declares one. Subclass a shipped client to change its cell, and redeclare `operation` if the
+name must stay.
+
 ### Watch it
 
 Every `perform_in_hotcell` call — success or failure — emits an Active Support notification named

@@ -83,6 +83,20 @@ class PreviewersTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # `config.active_storage.video_preview_input_arguments` is a shell string an application sets for the
+  # in-process previewer, and it must mean the same thing here: split the way Rails splits it, carried in the
+  # request, and spliced by the cell before `-i`. Excluding the fixture's own codec is the proof, because a
+  # whitelist that never reached ffmpeg would leave the preview yielding a JPEG as it does above.
+  def test_video_preview_input_arguments_reach_the_cell_split_the_way_rails_splits_them
+    with_video_preview_input_arguments "-codec_whitelist aac" do
+      with_cell do
+        assert_raises Unprocessable do
+          preview(ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mp4") { flunk "should not have yielded" }
+        end
+      end
+    end
+  end
+
   def test_options_are_passed_through_to_the_attachable
     with_cell do
       preview ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, "sample.pdf", service_name: "somewhere" do |attachable|

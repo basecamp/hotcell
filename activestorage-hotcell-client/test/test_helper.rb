@@ -77,6 +77,24 @@ class ActiveStorageHotCellClientTest < Minitest::Test
       was.each { |previewer, value| previewer.instance_variable_set memo, value }
     end
 
+    # The two settings are module-level, so a test that sets one restores it — the same way an application
+    # sets them, through the accessor Rails' engine copies `config.active_storage.*` into.
+    def with_ffprobe_arguments(value, &block)
+      with_active_storage_setting :ffprobe_arguments, value, &block
+    end
+
+    def with_video_preview_input_arguments(value, &block)
+      with_active_storage_setting :video_preview_input_arguments, value, &block
+    end
+
+    def with_active_storage_setting(name, value)
+      was = ActiveStorage.public_send(name)
+      ActiveStorage.public_send "#{name}=", value
+      yield
+    ensure
+      ActiveStorage.public_send "#{name}=", was
+    end
+
     def identify(path)
       lines = `magick identify -format '%w %h %m\n' #{path.shellescape} 2>/dev/null`.lines
       skip "ImageMagick is not installed" if lines.empty?

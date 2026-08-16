@@ -32,6 +32,18 @@ class MediaAnalyzerTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # `config.active_storage.ffprobe_arguments` is a shell string an application already sets for the in-process
+  # analyzer, and it must mean the same thing here: split the way Rails splits it, carried in the request, and
+  # spliced by the cell before the input. Excluding the fixture's own codec is the proof, because a whitelist
+  # that never reached ffprobe would leave the analysis returning dimensions as it does above.
+  def test_ffprobe_arguments_reach_the_cell_split_the_way_rails_splits_them
+    with_ffprobe_arguments "-codec_whitelist aac" do
+      with_cell do
+        assert_equal({}, Video.new(Blob.new(fixture("sample.mp4"))).metadata)
+      end
+    end
+  end
+
   # Exactly Rails' AudioAnalyzer keys, minus tags.
   def test_the_audio_analyzer_returns_rails_audio_metadata_without_tags
     with_cell do

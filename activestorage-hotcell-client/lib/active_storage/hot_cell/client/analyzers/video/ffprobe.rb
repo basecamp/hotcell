@@ -2,6 +2,7 @@
 
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/analyzers/video"
+require "active_storage/hot_cell/client/analyzers/probing"
 
 module ActiveStorage
   module HotCell
@@ -15,6 +16,8 @@ module ActiveStorage
           # One probe operation serves this and the audio analyzer: ffprobe reports both stream kinds in one
           # pass, and each analyzer slices the shared result to its own keys.
           class Ffprobe < Video
+            include Probing
+
             self.client = Operations::Analyzers::Media::Ffprobe
           end
 

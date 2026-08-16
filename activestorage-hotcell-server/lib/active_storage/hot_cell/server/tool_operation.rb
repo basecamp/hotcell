@@ -47,6 +47,16 @@ module ActiveStorage
 
             refuse! "#{name} #{value.inspect} must be an integer between 1 and #{maximum}"
           end
+
+          # Extra command-line arguments an application configures — `config.active_storage.ffprobe_arguments`
+          # and its siblings — spliced into the tool's argv at the position that setting names. The client
+          # splits the shell string, so what arrives is already argv, and this checks only that it is: what
+          # the flags mean is the application's decision, exactly as it is when Rails runs the tool itself.
+          def arguments!(name, value)
+            return value if value.is_a?(Array) && value.all?(String)
+
+            refuse! "#{name} must be an array of strings, and this is #{value.inspect[0, 80]}"
+          end
       end
     end
   end

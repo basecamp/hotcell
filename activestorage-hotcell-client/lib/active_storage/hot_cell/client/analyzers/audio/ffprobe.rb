@@ -2,6 +2,7 @@
 
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/analyzers/audio"
+require "active_storage/hot_cell/client/analyzers/probing"
 
 module ActiveStorage
   module HotCell
@@ -14,6 +15,8 @@ module ActiveStorage
           #
           # Shares the probe operation with the video analyzer; see Analyzers::Video::Ffprobe.
           class Ffprobe < Audio
+            include Probing
+
             self.client = Operations::Analyzers::Media::Ffprobe
           end
 

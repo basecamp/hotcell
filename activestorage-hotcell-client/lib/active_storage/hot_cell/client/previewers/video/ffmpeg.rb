@@ -3,6 +3,7 @@
 require "active_storage/previewer/video_previewer"
 
 require "active_storage/hot_cell/client/previewers/previewing"
+require "active_storage/hot_cell/client/tool_arguments"
 
 module ActiveStorage
   module HotCell
@@ -20,6 +21,13 @@ module ActiveStorage
             def self.accept?(blob)
               blob.video?
             end
+
+            private
+              # `config.active_storage.video_preview_input_arguments`, which Rails splices before `-i`, carried
+              # to the cell so it can do the same. Split here, the way Rails splits it, and omitted when empty.
+              def payload
+                ToolArguments.payload(:input_arguments, ActiveStorage.video_preview_input_arguments)
+              end
           end
 
           FFmpeg = Ffmpeg

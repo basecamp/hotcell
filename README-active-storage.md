@@ -53,6 +53,31 @@ and audio analyzers present exactly Rails' metadata, with one deliberate excepti
 file's raw container `tags` into the database, and the cell refuses them, because those bytes are
 attacker-controlled.
 
+## Arguments to ffprobe and ffmpeg
+
+Two Rails settings shape how the media tools read their input, and they mean the same thing under a cell
+that they mean in process:
+
+```ruby
+config.active_storage.ffprobe_arguments = "-codec_whitelist h264,aac"
+config.active_storage.video_preview_input_arguments = "-f mp4 -codec_whitelist h264,aac"
+```
+
+Both are shell strings, the shape Rails chose for `video_preview_arguments`, and both default to nothing.
+Rails' own analyzers splice the first before the input path, and its video previewer splices the second
+before `-i`, because an option that constrains how the input is read has to come before the input.
+The client splits each string with `Shellwords` — in the application, so a malformed string raises against
+the configuration rather than arriving in the cell as a failed conversion — and carries the result in the
+request. The operation splices it at the same position.
+
+The settings arrive in Rails with [rails/rails#58461](https://github.com/rails/rails/pull/58461). On an
+older Rails the client gem defines them itself, so the two lines above work either way.
+
+An empty setting sends nothing, and the operation runs its default command line unchanged. What the flags
+mean is the application's decision, exactly as it is in process; the cell checks only that what arrives is
+an array of strings. Set them to bind a demuxer or a decoder list — this is where a hardening flag goes,
+and one that lives here applies to every conversion rather than only where a caller remembered it.
+
 ## What inherits from Rails, and what does not
 
 The client classes subclass Rails' own. The previewers subclass

@@ -43,7 +43,7 @@ module ActiveStorage
               Tempfile.create("hotcell-preview", binmode: true) do |output|
                 result = File.open(input.path, "rb") do |readable|
                   File.open(output.path, "wb") do |writable|
-                    self.class.client.perform_in_hotcell [ readable ], [ writable ]
+                    self.class.client.perform_in_hotcell [ readable ], [ writable ], payload
                   end
                 end
 
@@ -52,6 +52,12 @@ module ActiveStorage
                         content_type: result[:content_type]
                 end
               end
+            end
+
+            # What travels with the request beyond the two descriptors. Nothing, for a previewer that has no
+            # configuration to carry; the video previewer overrides it with the application's input arguments.
+            def payload
+              {}
             end
         end
       end

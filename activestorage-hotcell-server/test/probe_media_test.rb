@@ -52,6 +52,31 @@ class ProbeMediaTest < ActiveStorageHotCellTest
     end
   end
 
+  # An application's `config.active_storage.ffprobe_arguments` reaches ffprobe before the input path — the
+  # position an input option needs. Excluding the fixture's own codec is the proof: the same probe succeeds
+  # above, so a whitelist that never reached the tool would leave it succeeding here. The operation runs
+  # ffprobe with `-v quiet`, so the refusal carries an exit status and no diagnostic.
+  def test_probe_arguments_reach_ffprobe_before_the_input
+    Cell.boot do |cell|
+      failure = assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
+                                                      inputs: [ fixture("sample.mp4") ],
+                                                      payload: { probe_arguments: [ "-codec_whitelist", "aac" ] })
+
+      assert_predicate failure, :permanent?
+      assert_match "ffprobe exited 1", failure.message
+    end
+  end
+
+  def test_probe_arguments_that_are_not_an_array_of_strings_are_a_caller_bug
+    Cell.boot do |cell|
+      failure = assert_failed "invalid", cell.call("active_storage.analyzers.media.ffprobe",
+                                                   inputs: [ fixture("sample.mp4") ],
+                                                   payload: { probe_arguments: "-codec_whitelist aac" })
+
+      assert_match "probe_arguments must be an array of strings", failure.message
+    end
+  end
+
   def test_something_that_is_not_media_is_unreadable
     Cell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
