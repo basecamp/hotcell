@@ -30,7 +30,7 @@ module Examples
     def run
       check("describe lists the example operations") { describe }
       check("echo round-trips through the caller's descriptors") { echo }
-      check("an operation re-opens its input by path") { reopen }
+      check("an operation re-opens both descriptors by path") { reopen }
       check("a sleep past the deadline is killed: deadline") { deadline }
 
       if @memory_enforceable
@@ -77,14 +77,16 @@ module Examples
         end
       end
 
-      # The same round trip as echo, through the input's path rather than its descriptor. Echo passes
-      # whatever the two sides' uids are; this one passes only when the cell can open the caller's file.
+      # The same round trip as echo, through both paths rather than both descriptors. Echo passes whatever
+      # the two sides' uids are; this one passes only when the cell can open the caller's files by name.
+      # The message arriving proves both halves: the read of the input and the write of the output are
+      # separate permissions, and a cell can hold one without the other.
       def reopen
         with_files do |input, output, output_path|
           result = Reopen.perform_in_hotcell([ input ], [ output ])
 
-          assert_equal MESSAGE, File.binread(output_path), "the message read back through the input's path"
-          assert_equal false, result[:staged], "the input was staged onto scratch rather than read in place"
+          assert_equal MESSAGE, File.binread(output_path), "the message carried through both paths"
+          assert_equal false, result[:staged], "a descriptor was staged onto scratch rather than used in place"
         end
       end
 

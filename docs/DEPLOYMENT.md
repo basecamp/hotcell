@@ -501,15 +501,20 @@ or probe reports the cell's health. `examples/operations/echo.rb` and `examples/
 the hotcell repository are written for this. Copy both into your own `operations/`. Neither loads a
 library or runs a tool, so together they cost the blast radius nothing.
 
-**They prove different things, and you need both.** `echo` reads the descriptor directly, so one round
-trip proves descriptor passing end to end. `reopen` reads the input by name, which is what every operation
+**They prove different things, and you need both.** `echo` reads both descriptors directly, so one round
+trip proves descriptor passing end to end. `reopen` opens both **by name**, which is what every operation
 that hands a tool a filename does. A cell with the shared group missing answers `echo` perfectly and fails
 `reopen` with `EACCES`. That is the whole difference between a cell that works and one that fails on every
 real conversion, and only `reopen` sees it.
 
+**`reopen` covers both directions on purpose.** An input is readable by the group and an output is
+writable by it, and those are separate permissions a cell can hold one of. Most shipped operations
+re-open only their source, but the ffmpeg video previewer re-opens its destination too. A probe that read
+the input alone would go green on a cell where every video preview fails on the write.
+
 Four checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
 supervisor, one `echo` for the socket that real files travel over, and one `reopen` for the group they
-travel in.
+travel in, in both directions.
 
 When you move an existing application onto a cell, consider doing it in phases. A first phase that deploys
 the accessory and confirms those four answers correctly separates a deployment problem from a conversion
