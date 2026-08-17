@@ -153,13 +153,23 @@ module HotCell
       # what you want to watch after a library upgrade. `capacity` matters for the same reason: without its
       # rate you cannot size a worker pool.
       #
+      # The cause, signal and verdict go with it, because the code alone cannot classify a kill: `killed`
+      # is permanent for fsize and memory and transient for deadline and crashed. A subscriber with only
+      # the code filed every fsize kill as transient. `permanent` is the Failure's own answer, so no
+      # subscriber re-derives it.
+      #
       # A subscriber's own duration minus perform_ms is transport plus queueing, and those want separate
       # metrics: a rising perform_ms means the work got more expensive, and a rising difference means the
       # cell is saturated.
       def publish(event, cell, response, inputs, outputs)
+        failure = response.failure
+
         event[:operation] = self.class.operation
         event[:cell] = cell.name
-        event[:code] = response.failure&.code
+        event[:code] = failure&.code
+        event[:cause] = failure&.cause
+        event[:signal] = failure&.signal
+        event[:permanent] = failure&.permanent?
         event[:bytes_in] = byte_count(inputs)
         event[:bytes_out] = byte_count(outputs)
         event[:perform_ms] = response.timing[:perform_ms]

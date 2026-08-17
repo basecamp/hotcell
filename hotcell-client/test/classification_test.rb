@@ -118,12 +118,43 @@ class ClassificationTest < HotCellClientTest
     assert_equal "test.anything", events.first.payload[:operation]
   end
 
+  # `code` alone cannot classify a kill: `killed` is permanent for fsize and memory and transient for
+  # deadline and crashed. A subscriber that only had the code filed every fsize kill as transient. So the
+  # event carries what the Failure knows — the cause, the signal, and the verdict itself.
+  def test_the_event_carries_the_cause_and_the_verdict_so_a_subscriber_can_classify_a_kill
+    register_with failed(code: "killed", cause: "fsize", signal: "XFSZ")
+
+    event = events_for do
+      assert_raises(Unprocessable) { Anything.perform_in_hotcell [], [], {} }
+    end.first.payload
+
+    assert_equal "killed", event[:code]
+    assert_equal "fsize", event[:cause]
+    assert_equal "XFSZ", event[:signal]
+    assert_equal true, event[:permanent]
+  end
+
+  def test_the_event_carries_a_transient_verdict_for_a_deadline_kill
+    register_with failed(code: "killed", cause: "deadline")
+
+    event = events_for do
+      assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+    end.first.payload
+
+    assert_equal "deadline", event[:cause]
+    assert_nil event[:signal]
+    assert_equal false, event[:permanent]
+  end
+
   def test_the_event_carries_no_code_on_success
     register_with HotCell::Response.ok(result: {}, timing: { perform_ms: 12, operation_ms: 9 })
 
     event = events_for { Anything.perform_in_hotcell [], [], {} }.first.payload
 
     assert_nil event[:code]
+    assert_nil event[:cause]
+    assert_nil event[:signal]
+    assert_nil event[:permanent]
     assert_equal 12, event[:perform_ms]
     assert_equal({ perform_ms: 12, operation_ms: 9 }, event[:timing])
   end
@@ -166,9 +197,9 @@ class ClassificationTest < HotCellClientTest
       end
     end
 
-    def failed(code:, cause: nil, error_class: nil, message: nil)
-      HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, error_class: error_class,
-                                                    message: message),
+    def failed(code:, cause: nil, signal: nil, error_class: nil, message: nil)
+      HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, signal: signal,
+                                                    error_class: error_class, message: message),
                                timing: { perform_ms: 1 }
     end
 end

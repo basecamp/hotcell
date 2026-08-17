@@ -11,9 +11,13 @@ You cannot tune what you cannot see, and two signals are independent of each oth
 change any number.
 
 **The `perform.hot_cell` notification.** It fires on every call, success or failure, and carries the
-operation, the cell, the failure `code`, `bytes_in`, `bytes_out`, `perform_ms` and the full timing. It is
-the only signal that survives a dead cell — an unreachable socket arrives here as `unavailable`, so the
-primary alarm belongs on this and not on the cell's own metrics.
+operation, the cell, the failure's `code`, `cause`, `signal` and `permanent`, `bytes_in`, `bytes_out`,
+`perform_ms` and the full timing. It is the only signal that survives a dead cell — an unreachable socket
+arrives here as `unavailable`, so the primary alarm belongs on this and not on the cell's own metrics.
+
+Classify by `permanent`, not by `code`. A `killed` is permanent for `fsize` and `memory` and transient
+for `deadline` and `crashed`, so the code alone cannot say which side of the split a kill is on;
+`permanent` is the cell's own answer, and `cause` is why.
 
 **The cell's `metrics`, on its control socket.** Poll it on a schedule. It answers while the work socket is
 saturated, and it is host-local, so the poller has to be a process on the cell's own host. It reports
