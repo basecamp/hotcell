@@ -53,10 +53,16 @@ module HotCell
         @operation_name || derived_operation_name
       end
 
+      # A class-level declaration that accumulates. Naming one limit changes one and keeps the rest — of this
+      # class's own declaration, or of the nearest ancestor's when this class has none yet. That is what
+      # lets a subclass narrow a single number, and what lets an operator give a shipped operation a
+      # different budget from an operations file, after the operation loads, without editing the gem. The
+      # cell's own limits still clamp whatever is declared. docs/DEPLOYMENT.md, "Changing a shipped
+      # operation's limits".
       def limits(**values)
         return inherited_value(:@limits) || Limits.new if values.empty?
 
-        @limits = Limits.new(**values)
+        @limits = limits.merge(**values)
       end
 
       # Runs in the supervisor, once, at boot. It may require and it may configure, and it must never

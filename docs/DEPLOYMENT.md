@@ -176,6 +176,56 @@ These four are sized like performance settings and exist as limits on a hostile 
 An operation can declare `limits deadline:, memory:, file_size:, open_files:` of its own. Those values
 narrow the limit for that request. They never widen it, because the cell's numbers are the ceiling.
 
+### Changing a shipped operation's limits
+
+An operation's `limits` is a class-level declaration that accumulates: naming one limit changes that one
+and keeps the rest. So an operator can give a shipped operation a different budget without editing the
+gem, by redeclaring the one number after the operation loads:
+
+```ruby
+# hotcell/operations/zz_limits.rb
+require "active_storage/hot_cell/server/transformers/image/vips"
+
+ActiveStorage::HotCell::Server::Transformers::Image::Vips.limits file_size: 128 * 1024**2
+```
+
+The transformer's `deadline`, `memory` and `open_files` are unchanged. Naming a limit to `nil` withdraws
+it, which hands that one back to the cell's number.
+
+Three things about that file.
+
+**Require the operation first.** The class has to exist before it can be redeclared. `config.rb` loads
+before any operations file, and operations load in sorted order, so a redeclaration that relies on load
+order alone belongs in an operations file that sorts last — hence the `zz_` prefix. The `require` at the
+top removes that dependency: with it, the same two lines work from any operations file, or from
+`config.rb`. Prefer an operations file anyway, so every declaration about operations lives in one place.
+
+**A subclass works the same way, and copies at the moment it declares.** One that declares
+`limits deadline: 5` takes every other value from its parent, so a narrowing subclass writes the number it
+narrows and nothing else. It takes them once: `limits` resolves to the first ancestor that declared any,
+and once a class has stored its own it stops looking up. So redeclaring the parent afterwards does not
+reach a child that has already declared — redeclare the child too. A subclass that never declares follows
+its parent live.
+
+**The cell's numbers are still the ceiling.** A redeclaration can only ask; the cell clamps it the way it
+clamps the original, so the effective value is the smaller of the two. To receive 128MB the cell's own
+`file_size` has to allow at least 128MB. A cell at 64MB gives that redeclaration 64MB — a change, but not
+the one asked for.
+
+For reference, the shipped Active Storage operations declare:
+
+| Operation | `deadline` | `memory` | `file_size` | `open_files` |
+| --- | --- | --- | --- | --- |
+| `transformers.image.vips`, `transformers.image.magick` | 30 | 1280MB | 48MB | 256 |
+| `analyzers.image.vips`, `analyzers.image.magick` | 10 | 1024MB | 48MB | 64 |
+| `analyzers.media.ffprobe` | 30 | 1024MB | 48MB | 128 |
+| `previewers.pdf.mutool`, `previewers.pdf.poppler` | 30 | 1024MB | 48MB | 128 |
+| `previewers.video.ffmpeg` | 120 | 1536MB | 128MB | 128 |
+
+The 48MB is arithmetic from the example accessory — four workers, two staged files each, on a 512MB
+tmpfs — and not a property of any operation. An operation that reads its input through the descriptor
+stages only its output, so it needs half of what that arithmetic assumed.
+
 ## Application settings
 
 Per registered cell. They set how the application responds to what a cell answers.

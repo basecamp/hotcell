@@ -39,6 +39,36 @@ class LimitsTest < HotCellServerTest
     assert_equal 48 * 1024**2, limits.file_size
   end
 
+  def test_merge_lays_named_values_over_the_rest
+    merged = HotCell::Limits.new(deadline: 30, file_size: 100).merge(file_size: 200)
+
+    assert_equal 200, merged.file_size
+    assert_equal 30, merged.deadline
+  end
+
+  # Naming a limit to nil withdraws it, so a redeclaration can hand a limit back to the cell as well as
+  # change it. Otherwise there would be no way to undeclare one short of rebuilding from scratch.
+  def test_merge_withdraws_a_limit_named_to_nil
+    merged = HotCell::Limits.new(deadline: 30, file_size: 100).merge(file_size: nil)
+
+    assert_nil merged.file_size
+    assert_equal 30, merged.deadline
+  end
+
+  # merge builds through the constructor, so it validates like a declaration does.
+  def test_merge_refuses_a_memory_below_the_floor
+    limits = HotCell::Limits.new(memory: HotCell::Limits::MEMORY_FLOOR)
+
+    assert_raises(HotCell::ConfigurationError) { limits.merge(memory: HotCell::Limits::MEMORY_FLOOR - 1) }
+  end
+
+  def test_merge_does_not_change_the_original
+    original = HotCell::Limits.new(deadline: 30)
+    original.merge(deadline: 5)
+
+    assert_equal 30, original.deadline
+  end
+
   def test_clamping_takes_the_smaller_of_each
     operation = HotCell::Limits.new(deadline: 30, file_size: 100, open_files: 500)
     cell = HotCell::Limits.new(deadline: 60, file_size: 50, open_files: 256)

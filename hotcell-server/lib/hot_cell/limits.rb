@@ -60,6 +60,13 @@ module HotCell
       to_h.compact
     end
 
+    # A new Limits with these values over this one's — what a redeclaration means. A key that is not
+    # named keeps its value; one that is named to nil is withdrawn, so a redeclaration can also hand a
+    # limit back to the cell.
+    def merge(**values)
+      self.class.new(**to_h.merge(values))
+    end
+
     # An operation cannot exceed its cell's limits, whatever it declares. This is invariant 6, and a
     # clamp that silently stops clamping looks exactly like a clamp, which is why it is tested.
     def clamped_to(ceiling)

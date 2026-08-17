@@ -66,6 +66,35 @@ class ResourceLimitsTest < HotCellServerTest
     end
   end
 
+  # An operation's own `limits` is a class-level declaration, so an operator can redeclare it after the
+  # operation loads and give a shipped operation a different budget without editing the gem. Read from
+  # the worker rather than the class, so a redeclaration that the worker never saw would fail here.
+  def test_a_redeclared_limit_is_what_the_worker_runs_under
+    HotCell::Fixtures::Frugal.limits file_size: 16 * 1024 * 1024
+
+    boot(file_size: 32 * 1024 * 1024) do |cell|
+      limits = assert_ok(cell.call("test.frugal")).result
+
+      assert_equal [ 16 * 1024 * 1024, 32 * 1024 * 1024 ], limits[:file_size]
+    end
+  ensure
+    HotCell::Fixtures::Frugal.limits memory: 1024 * 1024**2, file_size: 4 * 1024 * 1024, open_files: 64
+  end
+
+  # Redeclaring one limit leaves the others as they were, all the way down to the worker. Frugal declares
+  # three; raising `file_size` must not hand `open_files` back to the cell.
+  def test_a_redeclaration_of_one_limit_keeps_the_others_in_the_worker
+    HotCell::Fixtures::Frugal.limits file_size: 16 * 1024 * 1024
+
+    boot(file_size: 32 * 1024 * 1024) do |cell|
+      limits = assert_ok(cell.call("test.frugal")).result
+
+      assert_equal [ 64, 256 ], limits[:open_files], "open_files fell back to the cell's after file_size was redeclared"
+    end
+  ensure
+    HotCell::Fixtures::Frugal.limits memory: 1024 * 1024**2, file_size: 4 * 1024 * 1024, open_files: 64
+  end
+
   def test_core_dumps_are_off
     boot { |cell| assert_equal [ 0, 0 ], assert_ok(cell.call("test.rlimits")).result[:core] }
   end

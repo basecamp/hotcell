@@ -43,6 +43,87 @@ class OperationTest < RegistryIsolatedTest
     assert_equal 300, Fixtures::Patient.limits.deadline
   end
 
+  # An operator raising one number from an operations file must not lose the others. The declaration is
+  # a set of values, and naming one changes one.
+  def test_redeclaring_one_limit_keeps_the_others
+    operation = Class.new(HotCell::Operation) do
+      operation "operation_test.redeclared"
+      limits deadline: 30, memory: 1280 * 1024**2, file_size: 48 * 1024**2, open_files: 256
+    end
+
+    operation.limits file_size: 128 * 1024**2
+
+    assert_equal 128 * 1024**2, operation.limits.file_size
+    assert_equal 30, operation.limits.deadline
+    assert_equal 1280 * 1024**2, operation.limits.memory
+    assert_equal 256, operation.limits.open_files
+  end
+
+  # A subclass narrowing one limit inherits the rest of its parent's declaration rather than starting
+  # from nothing, for the same reason.
+  def test_a_subclass_declaring_one_limit_inherits_the_rest
+    parent = Class.new(HotCell::Operation) do
+      operation "operation_test.roomy_parent"
+      limits deadline: 60, file_size: 64 * 1024**2
+    end
+    child = Class.new(parent) do
+      operation "operation_test.hurried_child"
+      limits deadline: 5
+    end
+
+    assert_equal 5, child.limits.deadline
+    assert_equal 64 * 1024**2, child.limits.file_size
+    assert_equal 60, parent.limits.deadline, "declaring on the child changed the parent"
+  end
+
+  # Withdrawing goes through the declaration too, not only through Limits#merge, so a future filter that
+  # dropped nils on the way in would fail here rather than silently making a limit un-withdrawable.
+  def test_redeclaring_a_limit_to_nil_withdraws_it_and_keeps_the_others
+    operation = Class.new(HotCell::Operation) do
+      operation "operation_test.withdrawn"
+      limits deadline: 30, file_size: 48 * 1024**2
+    end
+
+    operation.limits file_size: nil
+
+    assert_nil operation.limits.file_size
+    assert_equal 30, operation.limits.deadline
+  end
+
+  # A subclass copies its parent's values when it first declares, the way every other class-level
+  # declaration here resolves: the first ancestor with a value wins, and once a class has its own it stops
+  # looking up. So a parent redeclared later does not reach a child that has already declared. Pinned so
+  # the choice is visible; live per-key inheritance would be a different design.
+  def test_a_parents_later_redeclaration_does_not_reach_a_child_that_has_declared
+    parent = Class.new(HotCell::Operation) do
+      operation "operation_test.parent_redeclared"
+      limits file_size: 48 * 1024**2
+    end
+    child = Class.new(parent) do
+      operation "operation_test.child_snapshot"
+      limits deadline: 5
+    end
+
+    parent.limits file_size: 16 * 1024**2
+
+    assert_equal 48 * 1024**2, child.limits.file_size
+    assert_equal 16 * 1024**2, parent.limits.file_size
+  end
+
+  # The other half of the snapshot rule: a subclass that has declared nothing of its own has nothing to
+  # snapshot, so it keeps following its parent, including a redeclaration made after the subclass exists.
+  def test_a_subclass_that_never_declares_follows_its_parent_live
+    parent = Class.new(HotCell::Operation) do
+      operation "operation_test.parent_live"
+      limits file_size: 48 * 1024**2
+    end
+    child = Class.new(parent) { operation "operation_test.child_live" }
+
+    parent.limits file_size: 16 * 1024**2
+
+    assert_equal 16 * 1024**2, child.limits.file_size
+  end
+
   def test_callbacks_collect_rather_than_replace
     assert_equal [ :required, :also_required ], Callbacks.new.tap { Callbacks.before_fork.each(&:call) }.log
   end
