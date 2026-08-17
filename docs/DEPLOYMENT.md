@@ -1,14 +1,105 @@
 # Deploying a cell
 
-A cell is a second container beside the application. Three requirements hold whatever you deploy with:
+A cell is a second container beside the application. Four things have to be true, whatever you deploy
+with:
 
 1. **The same host as the caller.** `SCM_RIGHTS` works only over `AF_UNIX`, so a descriptor cannot cross
    machines.
 2. **One volume shared by both containers**, holding the cell's sockets. The cell writes them at
    `HOTCELL_DIR`, and the app finds them at `$HOTCELL_ROOT/<cell name>`.
 3. **The container flags under "Container settings"**, which are what makes a cell a cell.
+4. **`kernel.yama.ptrace_scope >= 1` on the host.** A cell refuses to boot below this, and no container
+   flag can supply it — it is what stops one worker reading another request's memory through
+   `/proc/<pid>/mem`.
 
-The examples below use Kamal. Any orchestrator that can set the same `docker run` flags will do.
+This document is in the order you do it: build the image, set the container flags, agree the three things
+both sides share, then the settings, then verify. The examples use Kamal; any orchestrator that can set
+the same `docker run` flags will do.
+
+## Building an image
+
+There is no published base image to derive from. `bin/rails hotcell:install` writes a `hotcell/` directory
+into the application holding a complete `Dockerfile`, the cell's `Gemfile`, its `config.rb`, and an
+`operations/` directory. That Dockerfile is the whole recipe, and it is yours to change. Build it from its
+own directory:
+
+```
+docker build -t your-image:latest hotcell/
+```
+
+Three places to change, and nothing else is required.
+
+**The `Dockerfile`'s apt line.** Install the tools your operations run, and nothing else. The toolchain a
+cell carries is what decides its blast radius.
+
+```dockerfile
+# hotcell/Dockerfile
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libvips42 imagemagick && \
+    rm -rf /var/lib/apt/lists/*
+```
+
+**The `Gemfile`.** Add the gems your operations need. Keep it short: every gem is inside the blast radius,
+and a larger supervisor heap costs every request — see "Sizing the numbers".
+
+**`config.rb`.** The cell settings. It loads before the operations, which then load in sorted order.
+
+```ruby
+# hotcell/config.rb
+HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
+               memory: 1536 * 1024**2, file_size: 48 * 1024**2
+```
+
+Read "Sizing the numbers" before copying those. They are arithmetic against one set of container flags,
+and they are below what some shipped operations declare.
+
+Running the installer again leaves every file that already exists untouched, so customizing is safe.
+
+**Load only the operations your image has tools for.** A cell advertises what it loaded, on `describe`, and
+a client checks that inventory at boot to catch a cell that does not carry the operation it wants. An
+operation whose tool is missing makes that check pass and fails at the first request instead. A gem that
+ships several toolchains loads them all through its entry point, so require the files you want:
+
+```ruby
+# hotcell/operations/active_storage.rb
+require "active_storage/hot_cell/server/transformers/image/vips"
+require "active_storage/hot_cell/server/analyzers/image/vips"
+require "active_storage/hot_cell/server/previewers/pdf/mutool"
+```
+
+**Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately. A skew between the
+client the app loads and the server the cell runs answers `protocol` on every request. While either tracks
+a branch rather than a released version, assert in a test that both lockfiles name the same revision.
+
+### Sizing the numbers
+
+These numbers are arithmetic against the container flags under "Container settings". Against the
+`cpus: 2`, `memory: 2g`, `size=512m` accessory there: `concurrency: 4` because a request spends much of
+its life off the CPU, so twice `cpus` is where to start; `file_size: 48MB` because that bounds what one
+worker writes; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
+
+**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
+so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
+set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
+`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
+nothing else, which is a hard failure to place.
+
+Three more results change how you read those numbers.
+
+**`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
+of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
+`RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount an input may consume.
+The cgroup limit is what bounds real memory across the cell.
+
+**An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
+place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
+`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
+charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
+write, and count a staged input as one of them.
+
+**A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and it
+is proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's own
+operations need is paid on every request for the life of the deployment.
 
 ## If you deploy with Kamal
 
@@ -91,7 +182,7 @@ env:
 ```
 
 Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the flags
-below on the cell, and `--volume hotcell-sockets:/run/hotcell/images`, `--group-add 10001` and
+under "Security" on the cell, and `--volume hotcell-sockets:/run/hotcell/images`, `--group-add 10001` and
 `HOTCELL_ROOT=/run/hotcell` on the app.
 
 The two mount paths differ, and only the volume name has to match. A cell always writes its sockets to
@@ -141,6 +232,84 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where slot homes and scratch live. On the accessory this is the tmpfs. |
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with its slot's home before it serves a request. |
+
+## The volume
+
+Nobody creates it. Docker creates a named volume when the first container that references it starts, so
+either the cell or the app makes it, whichever starts first.
+
+**Boot order does not matter.** An empty named volume takes its ownership from the image of whichever
+container mounts it, even when an earlier container already mounted it, as long as it is still empty. An
+app that starts first gives the volume its own ownership; the cell then mounts it while it is still empty
+and takes it back. Once the cell creates its sockets the volume is no longer empty, and ownership stops
+changing.
+
+Two mistakes both fail the same way, as `EACCES` when the cell creates its socket at boot.
+
+**The mount point must exist in the cell's image, owned by the cell's user.** The image the installer
+writes creates `/run/hotcell/cell` and chowns it, not only `/run/hotcell`. If an image creates only the
+parent, Docker creates the last level as root, and the cell cannot create a socket in it. The app's image
+needs nothing at its own mount point.
+
+**A bind mount inherits nothing.** It keeps the host directory's ownership. A bind mount in development
+needs the host directory chowned to `10001`, or the container run as the host user. Use named volumes in
+production.
+
+## The socket's file mode
+
+The cell creates both sockets `0666`. A Unix socket is a filesystem object, and `connect` needs write
+permission on it. The two sides do not share a uid — the cell runs as `10001` and the app runs as whatever
+its own image sets — so `0600` gives `EACCES` on the app's first request.
+
+The mount topology is what limits access: the directory is a volume mounted into two containers only.
+
+## The group both sides share
+
+Set `HotCell.group` to the cell's gid, and put the application in that group:
+
+```yaml
+# config/deploy.yml — the app
+servers:
+  web:
+    options:
+      group-add: 10001
+```
+
+**Why it is needed.** An operation that hands a tool a filename does not copy the input. It re-opens the
+descriptor as `/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user
+rather than the caller's. The two sides do not share a uid, so a mode `0600` file the application owns
+gives `EACCES`. An Active Storage tempfile is exactly that.
+
+Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
+because they stage first.
+
+**What the client does with it.** It puts each descriptor in the group and narrows the mode on the way
+out: `0640` for an input, `0620` for an output. It does this through the open file rather than a path, so
+it names nothing.
+
+**What that buys, and what it does not.** A cell may read an input and write an output. It may not write
+an input or read an output, and it cannot widen either, because it does not own these files and
+`cap-drop ALL` leaves it no capability that overrides a mode. The application must own them and be in the
+group, which is what lets it set the group at all.
+
+**Do not share a uid instead.** It is the obvious shortcut and it costs two things. The cell would own the
+files, so it could set any mode it liked and the one-way rule would stop holding. And a cell that escaped
+its container would land on the application's own user on the host, where it can read the environment of
+the application's processes. Keep the uids apart and share only the group.
+
+**How it fails.** Loudly, on the first operation that hands a tool a filename. Operations that read the
+descriptor directly keep working, which is why `echo` alone does not detect it. See "Checking a deployed
+cell".
+
+**What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
+like every other boot check here.
+
+- **Whether this process holds `HotCell.group`.** A missing `group-add` is then visible before any traffic
+  depends on it. This check is local and needs no cell, so it reports even when every cell is down.
+- **Whether the cell runs in that group.** `describe` reports the groups a cell holds, and the client
+  compares them. The number lives in your deploy file and the cell's gid is baked into an image built
+  somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
+  them says nothing.
 
 ## Cell settings
 
@@ -276,91 +445,6 @@ Nothing checks these three for you.
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
 
-## The volume
-
-Nobody creates it. Docker creates a named volume when the first container that references it starts, so
-either the cell or the app makes it, whichever starts first.
-
-**Boot order does not matter.** An empty named volume takes its ownership from the image of whichever
-container mounts it, even when an earlier container already mounted it, as long as it is still empty. An
-app that starts first gives the volume its own ownership; the cell then mounts it while it is still empty
-and takes it back. Once the cell creates its sockets the volume is no longer empty, and ownership stops
-changing.
-
-Two mistakes both fail the same way, as `EACCES` when the cell creates its socket at boot.
-
-**The mount point must exist in the cell's image, owned by the cell's user.** The image the installer
-writes creates `/run/hotcell/cell` and chowns it, not only `/run/hotcell`. If an image creates only the
-parent, Docker creates the last level as root, and the cell cannot create a socket in it. The app's image
-needs nothing at its own mount point.
-
-**A bind mount inherits nothing.** It keeps the host directory's ownership. A bind mount in development
-needs the host directory chowned to `10001`, or the container run as the host user. Use named volumes in
-production.
-
-## The socket's file mode
-
-The cell creates both sockets `0666`. A Unix socket is a filesystem object, and `connect` needs write
-permission on it. The two sides do not share a uid — the cell runs as `10001` and the app runs as whatever
-its own image sets — so `0600` gives `EACCES` on the app's first request.
-
-The mount topology is what limits access: the directory is a volume mounted into two containers only.
-
-## The group both sides share
-
-Set `HotCell.group` to the cell's gid, and put the application in that group:
-
-```yaml
-# config/deploy.yml — the app
-servers:
-  web:
-    options:
-      group-add: 10001
-```
-
-**Why it is needed.** An operation that hands a tool a filename does not copy the input. It re-opens the
-descriptor as `/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user
-rather than the caller's. The two sides do not share a uid, so a mode `0600` file the application owns
-gives `EACCES`. An Active Storage tempfile is exactly that.
-
-Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
-because they stage first.
-
-**What the client does with it.** It puts each descriptor in the group and narrows the mode on the way
-out: `0640` for an input, `0620` for an output. It does this through the open file rather than a path, so
-it names nothing.
-
-**What that buys, and what it does not.** A cell may read an input and write an output. It may not write
-an input or read an output, and it cannot widen either, because it does not own these files and
-`cap-drop ALL` leaves it no capability that overrides a mode. The application must own them and be in the
-group, which is what lets it set the group at all.
-
-**Do not share a uid instead.** It is the obvious shortcut and it costs two things. The cell would own the
-files, so it could set any mode it liked and the one-way rule would stop holding. And a cell that escaped
-its container would land on the application's own user on the host, where it can read the environment of
-the application's processes. Keep the uids apart and share only the group.
-
-**How it fails.** Loudly, on the first operation that hands a tool a filename. Operations that read the
-descriptor directly keep working, which is why `echo` alone does not detect it. See "Checking a deployed
-cell".
-
-**What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
-like every other boot check here.
-
-- **Whether this process holds `HotCell.group`.** A missing `group-add` is then visible before any traffic
-  depends on it. This check is local and needs no cell, so it reports even when every cell is down.
-- **Whether the cell runs in that group.** `describe` reports the groups a cell holds, and the client
-  compares them. The number lives in your deploy file and the cell's gid is baked into an image built
-  somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
-  them says nothing.
-
-## Host precondition
-
-`kernel.yama.ptrace_scope >= 1`.
-
-A cell refuses to boot below this value. No container flag can supply it. It is what stops one worker from
-reading another request's memory through `/proc/<pid>/mem`.
-
 ## What is not isolated
 
 Both of these are bounded by values you set here. [docs/DESIGN.md](DESIGN.md) gives the measurements.
@@ -375,114 +459,6 @@ toolchain per cell are what bound the exposure.
 does not restrict. A forked worker's environ is fixed at exec time, so `ENV.delete` changes nothing. Keep
 credentials out of a cell's environment, and spawn tools with `unsetenv_others`, which
 `HotCell::Operation#run_tool` does.
-
-## Building an image
-
-There is no published base image to derive from. `bin/rails hotcell:install` writes a `hotcell/` directory
-into the application holding a complete `Dockerfile`, the cell's `Gemfile`, its `config.rb`, and an
-`operations/` directory. That Dockerfile is the whole recipe, and it is yours to change. Build it from its
-own directory:
-
-```
-docker build -t your-image:latest hotcell/
-```
-
-Three places to change, and nothing else is required.
-
-**The `Dockerfile`'s apt line.** Install the tools your operations run, and nothing else. The toolchain a
-cell carries is what decides its blast radius.
-
-```dockerfile
-# hotcell/Dockerfile
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libvips42 imagemagick && \
-    rm -rf /var/lib/apt/lists/*
-```
-
-**The `Gemfile`.** Add the gems your operations need. Keep it short: every gem is inside the blast radius,
-and a larger supervisor heap costs every request — see "Sizing the numbers".
-
-**`config.rb`.** The cell settings. It loads before the operations, which then load in sorted order.
-
-```ruby
-# hotcell/config.rb
-HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
-               memory: 1536 * 1024**2, file_size: 48 * 1024**2
-```
-
-Read "Sizing the numbers" before copying those. They are arithmetic against one set of container flags,
-and they are below what some shipped operations declare.
-
-Running the installer again leaves every file that already exists untouched, so customizing is safe.
-
-**Load only the operations your image has tools for.** A cell advertises what it loaded, on `describe`, and
-a client checks that inventory at boot to catch a cell that does not carry the operation it wants. An
-operation whose tool is missing makes that check pass and fails at the first request instead. A gem that
-ships several toolchains loads them all through its entry point, so require the files you want:
-
-```ruby
-# hotcell/operations/active_storage.rb
-require "active_storage/hot_cell/server/transformers/image/vips"
-require "active_storage/hot_cell/server/analyzers/image/vips"
-require "active_storage/hot_cell/server/previewers/pdf/mutool"
-```
-
-**Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately. A skew between the
-client the app loads and the server the cell runs answers `protocol` on every request. While either tracks
-a branch rather than a released version, assert in a test that both lockfiles name the same revision.
-
-### Sizing the numbers
-
-The numbers above are arithmetic against the container flags. Against the `cpus: 2`, `memory: 2g`,
-`size=512m` accessory here: `concurrency: 4` because a request spends much of its life off the CPU, so
-twice `cpus` is where to start; `file_size: 48MB` because that bounds what one worker writes; and
-`memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
-
-**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
-so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
-set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
-`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
-nothing else, which is a hard failure to place.
-
-Three more results change how you read those numbers.
-
-**`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
-of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
-`RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount an input may consume.
-The cgroup limit is what bounds real memory across the cell.
-
-**An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
-place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
-`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
-charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
-write, and count a staged input as one of them.
-
-**A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and it
-is proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's own
-operations need is paid on every request for the life of the deployment.
-
-## Load testing a configuration
-
-[docs/TUNING.md](TUNING.md) covers arriving at these numbers for your own workload — what to instrument
-first, which settings to start generous on and why, and what to watch.
-
-`concurrency`, `queue_size` and `queue_wait` are the values that depend on how the work behaves under
-contention. Measure them rather than derive them.
-
-`bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]` runs a cell with the flags above and drives it from a
-second container. It reports throughput, the verdict breakdown, and latency split into time queued against
-time performing. That split is what separates saturation from slowness: queued time that grows while
-perform time stays flat means the cell needs more workers.
-
-Two limits of the script:
-
-- It fixes `cpus`, `memory`, the tmpfs size and `pids-limit` at the values above. Only the cell settings
-  vary, through `EXAMPLE_CONCURRENCY`, `EXAMPLE_QUEUE_SIZE`, `EXAMPLE_QUEUE_WAIT`, `EXAMPLE_DEADLINE`,
-  `EXAMPLE_MEMORY_MB` and `EXAMPLE_FILE_SIZE_MB`.
-- It drives the example operations, not yours. It measures the cell's scheduling, not your toolchain.
-
-A number you rely on must come from hardware like production's. [ADR 0001](../adr/0001-reuse-workers-across-requests.md)
-records that a development machine and the deployed image disagree.
 
 ## Verifying an image
 
@@ -569,3 +545,26 @@ travel in, in both directions.
 When you move an existing application onto a cell, consider doing it in phases. A first phase that deploys
 the accessory and confirms those four answers correctly separates a deployment problem from a conversion
 problem, before any traffic depends on it.
+
+## Load testing a configuration
+
+[docs/TUNING.md](TUNING.md) covers arriving at these numbers for your own workload — what to instrument
+first, which settings to start generous on and why, and what to watch.
+
+`concurrency`, `queue_size` and `queue_wait` are the values that depend on how the work behaves under
+contention. Measure them rather than derive them.
+
+`bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]` runs a cell with the flags above and drives it from a
+second container. It reports throughput, the verdict breakdown, and latency split into time queued against
+time performing. That split is what separates saturation from slowness: queued time that grows while
+perform time stays flat means the cell needs more workers.
+
+Two limits of the script:
+
+- It fixes `cpus`, `memory`, the tmpfs size and `pids-limit` at the values above. Only the cell settings
+  vary, through `EXAMPLE_CONCURRENCY`, `EXAMPLE_QUEUE_SIZE`, `EXAMPLE_QUEUE_WAIT`, `EXAMPLE_DEADLINE`,
+  `EXAMPLE_MEMORY_MB` and `EXAMPLE_FILE_SIZE_MB`.
+- It drives the example operations, not yours. It measures the cell's scheduling, not your toolchain.
+
+A number you rely on must come from hardware like production's. [ADR 0001](../adr/0001-reuse-workers-across-requests.md)
+records that a development machine and the deployed image disagree.

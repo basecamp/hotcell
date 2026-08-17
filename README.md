@@ -96,12 +96,13 @@ A **slot** is the numbered workspace a worker borrows — two directories. `home
 `$HOME` and survives between requests, because LibreOffice's profile is expensive and warm is better.
 `scratch` holds one request's staged files, and is removed before the caller hears the answer.
 
-An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a routing name, its
-own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payload keys it wants as
-keyword arguments. The examples above name themselves explicitly. Left unnamed, both sides derive the same
-name from the class path, and the cell-side `Operation` suffix is stripped — so `ExtractTextOperation` in
-the cell and `ExtractText` in the application both answer to `extract_text`. The set of operations a cell
-carries is its **inventory** — logged at boot, advertised on the control socket.
+An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a routing
+name, its own `limits`, and a `perform(inputs, outputs, **payload)` that declares the payload keys it
+wants as keyword arguments. The examples above name themselves explicitly. Left unnamed, both sides
+derive the same name from the class path, and the cell-side `Operation` suffix is stripped — so
+`ExtractTextOperation` in the cell and `ExtractText` in the application both answer to `extract_text`.
+The set of operations a cell carries is its **inventory** — logged at boot, advertised on the control
+socket.
 
 A **client** is the application-side mirror of an operation: a subclass of `HotCell::Client` that names
 the cell with `hotcell` and the operation with `operation`, and exposes `perform_in_hotcell`. That is a
@@ -213,8 +214,9 @@ environment the operation wrote.
 ### Configure and build the cell
 
 `bin/rails hotcell:install` writes the `hotcell/` directory — the `Dockerfile`, the `Gemfile`,
-`config.rb`, and an empty `operations/` directory. There is no published base image to inherit from. The installed Dockerfile is
-the complete recipe, and it is yours to customize. A file you have already edited is never overwritten.
+`config.rb`, and an empty `operations/` directory. There is no published base image to inherit from. The
+installed Dockerfile is the complete recipe, and it is yours to customize. A file you have already edited
+is never overwritten.
 
 Two customization points matter most. In the Dockerfile, install the tools your operations run — and
 nothing else, because which tools a cell holds is what decides its blast radius:
@@ -273,10 +275,19 @@ accessories:
     volumes:
       - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
     options:
-      read-only: true
-      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
+      # Performance. No defaults — Docker applies no limit to a flag you omit.
+      cpus: 2
       memory: 2g
+      memory-swap: 2g                           # equal to memory, or swap defeats the limit
+
+      # Security. All of these, every time. Omit one and the protection is gone while
+      # the cell keeps serving requests exactly as before.
+      read-only: true
       cap-drop: ALL
+      security-opt: no-new-privileges:true
+      user: 10001:10001
+      pids-limit: 512
+      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
 ```
 
 The application's own roles need `group-add: 10001`, the cell's gid. The two sides run as different users,
@@ -359,13 +370,13 @@ The recommended approach:
 | `activestorage-hotcell-client` | the application | The transformer, analyzer, and previewers Rails is configured with. |
 | `activestorage-hotcell-server` | the cell | The `transformers.image.*`, `analyzers.image.*`, `analyzers.media.ffprobe`, and `previewers.*` operations. |
 
-They are in one repository because they are one system today: writing the Active Storage gems has already twice
-required changing `hotcell-server` first. Splitting them is cheap while nothing is published.
+They are in one repository because they are one system today: writing the Active Storage gems has already
+twice required changing `hotcell-server` first. Splitting them is cheap while nothing is published.
 
-`hotcell-server` depends on `hotcell-core` and nothing else — not `activesupport` — because there is no reason
-for it to, and a smaller graph inside the blast radius is a smaller thing to audit. That is a budget, not a rule
-about what a cell may run: an operation is free to require whatever it needs, because the container is the
-control rather than the contents.
+`hotcell-server` depends on `hotcell-core` and nothing else — not `activesupport` — because there is no
+reason for it to, and a smaller graph inside the blast radius is a smaller thing to audit. That is a
+budget, not a rule about what a cell may run: an operation is free to require whatever it needs, because
+the container is the control rather than the contents.
 
 ## Active Storage
 
