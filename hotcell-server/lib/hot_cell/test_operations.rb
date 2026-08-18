@@ -2,9 +2,8 @@
 
 require "digest"
 
-# Fixture operations, so the whole surface can be exercised with no tool installed and no container
-# running. haystack#8538 does the same thing with a scripted stand-in for soffice, which lets it test the
-# whole surface in milliseconds.
+# Fixture operations, so the whole surface can be exercised in milliseconds, with no tool installed and no
+# container running.
 #
 # They ship rather than sitting in this gem's own test directory, for the reason hot_cell/test_cell.rb does:
 # hotcell-client boots a real cell and needs an inventory to point it at. It had written its own, and five of

@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.authors     = [ "Mike Dalessio" ]
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
-  spec.homepage    = "https://github.com/basecamp/activestorage-hotcell"
+  spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "Point Active Storage's transformer, analyzer, and previewers at a HotCell."
   spec.description = <<~TEXT
     The three classes an application configures Rails with, so that variants, image analysis, and previews

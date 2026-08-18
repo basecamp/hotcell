@@ -2,13 +2,13 @@
 
 module HotCell
   # The gem cannot pick an application's exception classes, because two applications already do
-  # irreconcilable things with the same one. HEY puts ActiveStorage::PreviewError in an
+  # irreconcilable things with the same one. One puts ActiveStorage::PreviewError in an
   # UNPROCESSABLE_ERRORS list and writes metadata["unprocessable"] = true, which no code path anywhere in
-  # that application ever un-writes. BC4 never marks at representation time and splits on the cache header
-  # instead, serving a file-icon placeholder with a hundred-year expiry for a permanent failure and
+  # that application ever un-writes. Another never marks at representation time and splits on the cache
+  # header instead, serving a file-icon placeholder with a hundred-year expiry for a permanent failure and
   # no-store for anything else.
   #
-  # So a gem that raised PreviewError for a capacity refusal would, on HEY, permanently destroy the
+  # So a gem that raised PreviewError for a capacity refusal would, in the first, permanently destroy the
   # thumbnail of every blob viewed during a cell restart, with no recovery short of a hand-written backfill.
   # `permanent` on the wire says which class to raise; injection is what stops the gem from guessing.
   #

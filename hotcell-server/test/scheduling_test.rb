@@ -188,8 +188,7 @@ class SchedulingTest < HotCellServerTest
 
   # Without queue_wait a queued connection waits until the client's own timeout fires, so the client
   # reports a transport error and the cell's capacity verdict is never delivered — making the code the
-  # queue exists to surface unreachable exactly when the cell is saturated. thimble shipped without this
-  # and documented the symptom.
+  # queue exists to surface unreachable exactly when the cell is saturated.
   def test_a_connection_that_waits_too_long_is_told_so_by_the_cell_rather_than_timing_out
     TestCell.boot(concurrency: 1, queue_size: 4, queue_wait: 0.3, deadline: 30) do |cell|
       blocker = cell.connect

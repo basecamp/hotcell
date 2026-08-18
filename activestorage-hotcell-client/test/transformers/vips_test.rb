@@ -83,17 +83,17 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
-  # The shape HEY has signed into variant URLs, minted on mini_magick. `coalesce` is not a libvips
-  # operation, so ImageProcessing forwards it to vips, which raises Vips::Error — and VipsOperation declares
-  # Vips::Error `unreadable`, so it lands permanent.
+  # The shape an application signs into variant URLs when it mints them on mini_magick. `coalesce` is not a
+  # libvips operation, so ImageProcessing forwards it to vips, which raises Vips::Error — and VipsOperation
+  # declares Vips::Error `unreadable`, so it lands permanent.
   #
   # KNOWN DEVIATION (resolved by the planned ImageMagick operations): this is a caller bug, not a bad
   # document, and Rails treats it as an unclassified job failure rather than a verdict on the blob. The
   # `unreadable Vips::Error` rule was written for the load phase, where a Vips::Error means bad pixels; a
   # bad operation name raising the same class slips through as a false permanent verdict. The real fix is an
   # ImageMagick transformer where `coalesce` is a real operation — until then an application moving from
-  # mini_magick to vips rewrites these URLs at its own boundary, the way BC4 does. This test pins the
-  # current behavior so the deviation is visible, not hidden.
+  # mini_magick to vips rewrites these URLs at its own boundary. This test pins the current behavior so the
+  # deviation is visible, not hidden.
   def test_an_imagemagick_only_operation_name_lands_permanent_for_now
     with_cell do
       error = assert_raises Unprocessable do

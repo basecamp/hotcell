@@ -8,7 +8,7 @@ Gem::Specification.new do |spec|
   spec.authors     = [ "Mike Dalessio" ]
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
-  spec.homepage    = "https://github.com/basecamp/activestorage-hotcell"
+  spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "The operations a cell runs on behalf of Active Storage."
   spec.description = <<~TEXT
     Transformations, image analysis, PDF and video previews, and media probing, written as HotCell

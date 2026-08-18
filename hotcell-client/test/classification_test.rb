@@ -6,8 +6,8 @@ require "test_helper"
 # straight through it rather than arranging a cell to produce it.
 #
 # Anything a client can raise that the consuming application does not classify becomes a user-facing 500.
-# That is not hypothetical: HEY carries a rails_ext that exists because `system(exception: true)` raised a
-# bare RuntimeError outside its rescue list.
+# That is not hypothetical: applications carry rails_ext patches that exist because
+# `system(exception: true)` raised a bare RuntimeError outside their rescue lists.
 class ClassificationTest < HotCellClientTest
   # Only the verdicts something actually knew: an operation naming what it could not decode, a caller
   # breaking the protocol, and the two limits this request provably hit by itself.

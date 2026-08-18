@@ -38,7 +38,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
   end
 
   # What tells a caller whether asking to keep the animation would mean anything. Rails' analyzer does not
-  # produce it; BC4's does, and this is the shape that makes it expressible.
+  # produce it, and this is the shape that makes it expressible.
   def test_analysis_says_how_many_frames_there_are
     Cell.boot do |cell|
       still = assert_ok(cell.call("active_storage.analyzers.image.vips", inputs: [ fixture("colour.png") ])).result
