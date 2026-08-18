@@ -517,6 +517,15 @@ module HotCell
       # itself an unbounded deadline on a request it was still holding. One from a busy worker is still
       # believed, because no check here can see the difference — what it buys is bounded instead: the next
       # dispatch restores a deadline, and retirement, where every worker ends, is enforced.
+      #
+      # **Accepted risk.** "Where every worker ends" is not true at `max_requests_per_worker: :unlimited`.
+      # `retire?` is false for every count there, so a worker that lies about being idle is neither busy nor
+      # retired, `wait_for` holds no timer for it, and the deadline is the only thing that could have killed
+      # it. A compromised worker at that setting is therefore unkillable by this cell until the container is
+      # replaced. The premise is that `:unlimited` already concedes the larger half of this: the worker holds
+      # every one of its requests in one address space, so an input that runs code reaches all of them, which
+      # is what adr/0001 and the deployment guide's trade-off section already say. A worker lifetime cap
+      # would close it and is a new setting, not a fix to this one.
       def apply_report(child, line)
         message = Payload.parse(line)
         return unreadable_report child, "report is a #{message.class} and must be an object" unless message.is_a?(Hash)

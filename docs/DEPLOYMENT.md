@@ -427,6 +427,11 @@ requests in the same address space, so an input that runs code can read and chan
 that worker serves. [ADR 0001](../adr/0001-reuse-workers-across-requests.md) records the measurements and
 the trade.
 
+At `:unlimited` it also gives up the deadline. A worker reports itself idle when it finishes, and the
+supervisor cannot tell a true report from a false one, so a worker that lies stops being timed. At every
+finite setting it is still retired and killed on a grace period; at `:unlimited` it is retired by nothing,
+and the cell cannot end it. Prefer a finite number, however large.
+
 **`concurrency`** sets how many requests hold bytes in the cell at once. Files are not isolated between
 concurrent workers, so this value is also the width of that exposure. See "What is not isolated".
 
