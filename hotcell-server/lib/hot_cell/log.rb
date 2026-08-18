@@ -11,7 +11,36 @@ module HotCell
   #
   # This is the channel for everything no response can carry: deadline kills, reaps that found a signal,
   # boot checks, and queue high-water.
+  #
+  # Lines follow docs/LOGS.md: ECS field names, domain fields under the hotcell namespace. The fleet's
+  # collector routes on service.name, takes the record timestamp from @timestamp, and severity from
+  # log.level, so those three are load-bearing: renaming any of them silently drops or mislabels every
+  # cell log line in production.
   class Log
+    # Severity lives here rather than in the collector so that adding an event never needs a collector
+    # change. An event missing from this table logs as INFO rather than not at all.
+    LEVELS = {
+      "cell.boot" => "INFO",
+      "cell.stopping" => "INFO",
+      "cell.stopped" => "INFO",
+      "cell.ptrace_scope_unknown" => "ERROR",
+      "request" => "INFO",
+      "request.abandoned" => "WARN",
+      "worker.forked" => "INFO",
+      "worker.reaped" => "INFO",
+      "worker.crashed" => "ERROR",
+      "worker.killed" => "WARN",
+      "worker.deadline" => "WARN",
+      "worker.lingered" => "WARN",
+      "worker.unforkable" => "ERROR",
+      "worker.undispatchable" => "ERROR",
+      "worker.unreadable_report" => "ERROR",
+      "control.abandoned" => "WARN",
+      "control.unanswerable" => "WARN",
+      "slot.uncleaned" => "WARN",
+      "slot.undiscarded" => "WARN",
+    }.freeze
+
     def self.null
       new File.open(File::NULL, "w")
     end
@@ -46,7 +75,46 @@ module HotCell
       end
 
       def line(event, fields)
-        JSON.generate({ at: Time.now.utc.iso8601(3), event: event }.merge(fields)) << "\n"
+        JSON.generate(document(event, fields.dup)) << "\n"
+      end
+
+      def document(event, fields)
+        {
+          "@timestamp": Time.now.utc.iso8601(3),
+          service: { name: "hotcell" },
+          event: event_fields(event, fields),
+          log: { level: LEVELS.fetch(event, "INFO") },
+          **process_fields(fields),
+          **prose_fields(fields),
+          **({ hotcell: fields } unless fields.empty?).to_h,
+        }
+      end
+
+      def event_fields(event, fields)
+        { action: event }.tap do |result|
+          result[:outcome] = fields.delete(:outcome) if fields.key?(:outcome)
+          result[:duration] = { ms: fields.delete(:duration_ms) } if fields.key?(:duration_ms)
+        end
+      end
+
+      def process_fields(fields)
+        process = {
+          pid: fields.delete(:pid),
+          exit_code: fields.delete(:exit_code),
+        }.compact
+
+        process.empty? ? {} : { process: process }
+      end
+
+      # `message` beside an exception is that exception's message; alone it is the line's prose.
+      def prose_fields(fields)
+        if fields.key?(:error)
+          { error: { type: fields.delete(:error), message: fields.delete(:message) }.compact }
+        elsif fields.key?(:message)
+          { message: fields.delete(:message) }
+        else
+          {}
+        end
       end
   end
 end

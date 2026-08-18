@@ -134,7 +134,7 @@ module HotCell
           nil
         end
 
-        parsed if parsed.is_a?(Hash) && parsed[:event] == event
+        parsed if parsed.is_a?(Hash) && parsed[:event].is_a?(Hash) && parsed[:event][:action] == event
       end
     end
 

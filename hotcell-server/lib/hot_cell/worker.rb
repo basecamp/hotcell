@@ -48,7 +48,7 @@ module HotCell
 
       exit! 0
     rescue Exception => error
-      log.write "worker.crashed", slot: slot.number, error: error.class.name,
+      log.write "worker.crashed", pid: Process.pid, slot: slot.number, error: error.class.name,
                                   message: Failure.sanitize(error.message)
       exit! 1
     end
@@ -125,7 +125,7 @@ module HotCell
       # the tree while remove_entry walks it. It cannot raise from an ensure, so it says so instead. One line
       # per request, from the ensure, because that is the attempt that knows the final state.
       def report_uncleaned
-        log.write "slot.uncleaned", slot: slot.number, home: slot.home
+        log.write "slot.uncleaned", pid: Process.pid, slot: slot.number, home: slot.home
       end
 
       def handle(line, received, timing)
@@ -243,7 +243,7 @@ module HotCell
 
         connection.write_line line_for(response)
       rescue SystemCallError, IOError
-        log.write "request.abandoned", slot: slot.number
+        log.write "request.abandoned", pid: Process.pid, slot: slot.number
       end
 
       def line_for(response)
@@ -255,9 +255,10 @@ module HotCell
       def record(response, timing)
         return if response.nil?
 
-        log.write "request", slot: slot.number, code: response.failure&.code || "ok",
-                             permanent: response.failure&.permanent?, elapsed_ms: timing.elapsed_ms,
-                             **response.timing
+        log.write "request", pid: Process.pid, slot: slot.number, code: response.failure&.code || "ok",
+                             permanent: response.failure&.permanent?,
+                             outcome: response.failure ? "failure" : "success",
+                             duration_ms: timing.elapsed_ms, timing: response.timing
       end
 
       def refuse(code, detail, timing, cause: nil)

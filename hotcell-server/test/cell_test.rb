@@ -522,7 +522,7 @@ class CellTest < HotCellServerTest
       assert_failed "failed", cell.call("test.broken")
       cell.stop
 
-      codes = cell.log_events("request").map { |line| line[:code] }
+      codes = cell.log_events("request").map { |line| line.dig(:hotcell, :code) }
       assert_equal [ "ok", "failed" ], codes
     end
   end

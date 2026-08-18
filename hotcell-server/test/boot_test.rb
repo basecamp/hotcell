@@ -76,8 +76,8 @@ class BootTest < RegistryIsolatedTest
       cell.stop
       booted = cell.log_events("cell.boot").first
 
-      assert_equal 2, booted[:concurrency]
-      assert_includes booted[:operations], "test.uppercase"
+      assert_equal 2, booted.dig(:hotcell, :configuration, :concurrency)
+      assert_includes booted.dig(:hotcell, :operations), "test.uppercase"
     end
   end
 

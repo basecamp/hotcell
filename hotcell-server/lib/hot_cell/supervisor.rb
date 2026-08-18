@@ -158,7 +158,7 @@ module HotCell
       trap_signals
 
       log.write "cell.boot", pid: Process.pid, directory: directory, operations: Registry.names,
-                             **configuration.to_h
+                             configuration: configuration.to_h
       self
     end
 
@@ -615,7 +615,7 @@ module HotCell
           # killed and no other request's deadline was enforced either.
           kill_group child
 
-          log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline: child.deadline
+          log.write "worker.deadline", pid: child.pid, slot: child.slot.number, deadline_s: child.deadline
         end
       end
 
@@ -633,7 +633,7 @@ module HotCell
 
           kill_group child
 
-          log.write "worker.lingered", pid: child.pid, slot: child.slot.number, grace: Configuration::KILL_GRACE
+          log.write "worker.lingered", pid: child.pid, slot: child.slot.number, grace_s: Configuration::KILL_GRACE
         end
       end
 
@@ -712,7 +712,7 @@ module HotCell
           child.control.close
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,
-                                     signal: signal_name(status), status: status.exitstatus
+                                     signal: signal_name(status), exit_code: status.exitstatus
         end
       rescue Errno::ECHILD
         nil
@@ -734,7 +734,7 @@ module HotCell
         counters.record_kill cause
 
         log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
-                                   signal: signal_name(status), elapsed_ms: Clock.ms_since(child.dispatched_at)
+                                   signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at)
 
         answer child.connection,
                Failure.new(code: Codes::KILLED, cause: cause, signal: signal_name(status)),
@@ -822,7 +822,7 @@ module HotCell
       def verify_ptrace_scope!
         unless File.readable?(@ptrace_scope_path)
           return log.write "cell.ptrace_scope_unknown", path: @ptrace_scope_path,
-                                                        warning: "cannot verify that a worker is unable to read a sibling's memory"
+                                                        message: "cannot verify that a worker is unable to read a sibling's memory"
         end
 
         scope = File.read(@ptrace_scope_path).strip
@@ -854,7 +854,7 @@ module HotCell
           next if slot.prepare
 
           log.write "slot.uncleaned", slot: number, home: slot.home,
-                                      warning: "an earlier boot's files are still here"
+                                      message: "an earlier boot's files are still here"
         end
       end
 
