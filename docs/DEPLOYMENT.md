@@ -214,10 +214,10 @@ serves requests exactly as before.
 | --- | --- | --- |
 | `network` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. Set it as an accessory key, not under `options:`. |
 | `read-only` | `true` | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
-| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` prevents execution from scratch, which is where a dropped payload lands. |
+| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` stops a dropped binary running from `/tmp`, which is where a request's files live. It does not cover the socket volume, and it does not stop `ruby payload.rb`. |
 | `cap-drop` | `ALL` | Removes every Linux capability. |
 | `security-opt` | `no-new-privileges:true` | Prevents a setuid binary from regaining what `cap-drop` removed. |
-| `user` | `10001:10001` | Runs the cell as a high uid outside any host user range, with no home directory and no shell. |
+| `user` | `10001:10001` | Runs the cell with no home directory and no shell. Without user namespace remapping this is a host uid, and it is inside the ordinary range, so pick one your hosts do not give to a person. |
 | `pids-limit` | `512` | Bounds the number of processes in the cell. It must clear `concurrency` plus the threads and subprocesses one toolchain starts, so check it when you raise `concurrency`. |
 
 ### General

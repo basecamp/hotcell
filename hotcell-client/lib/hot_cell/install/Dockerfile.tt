@@ -13,12 +13,14 @@ FROM ruby:${RUBY_VERSION}-slim
 #     apt-get install -y --no-install-recommends libvips42 mupdf-tools ffmpeg && \
 #     rm -rf /var/lib/apt/lists/*
 
-# The cell's user: high and outside any host user range, with no home directory and no shell.
+# The cell's user: no home directory and no shell. Pick a uid your host does not also use for a person —
+# without user namespace remapping this uid is the host's uid, and Debian's own range runs to 60000, so
+# 10001 is not outside it. What isolates the cell is the container, not the number.
 RUN groupadd --gid 10001 hotcell && \
     useradd --uid 10001 --gid 10001 --no-create-home --shell /usr/sbin/nologin hotcell
 
 # The socket volume's mount point must exist here, owned by the cell's user, because a new named volume
-# takes its ownership from the directory it covers.
+# takes its ownership from the directory it covers. /hotcell is not: see the chown back to root below.
 RUN mkdir -p /run/hotcell/cell /hotcell/operations && chown -R hotcell:hotcell /run/hotcell /hotcell
 
 # HOME is /tmp because the cell's user has no home directory, and bundler wants one. A worker replaces
@@ -35,8 +37,16 @@ COPY --chown=hotcell:hotcell Gemfile* ./
 USER hotcell
 RUN bundle install
 
-COPY --chown=hotcell:hotcell config.rb /hotcell/config.rb
-COPY --chown=hotcell:hotcell operations/ /hotcell/operations/
+COPY config.rb /hotcell/config.rb
+COPY operations/ /hotcell/operations/
+
+# The cell reads its own code and must not be able to write it. `HotCell.load!` requires config.rb and
+# every operation file at boot, so a worker that could write here would choose what the next supervisor
+# runs. Bundler needed to write during the build and nothing needs to afterwards, so hand the tree back to
+# root once the build is done. `read-only: true` covers this as well, and this holds without it.
+USER root
+RUN chown -R root:root /hotcell && chmod -R go-w /hotcell
+USER hotcell
 
 # Probes the supervisor's control socket from inside the container, where network: none does not apply.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
