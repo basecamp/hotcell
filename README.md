@@ -1,3 +1,5 @@
+![hotcell-logo](docs/hotcell-logo.png)
+
 # HotCell
 
 Securely run untrusted code on untrusted inputs. HotCell lets you move that work out of your application
