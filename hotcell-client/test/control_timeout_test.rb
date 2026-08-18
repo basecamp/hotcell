@@ -35,10 +35,10 @@ class ControlTimeoutTest < HotCellClientTest
     cell.metrics
     Echo.perform_in_hotcell [], [], {}
 
-    control, work = transport.calls.partition { it[:socket].end_with?("control.sock") }
+    control, work = transport.calls.partition { |recorded| recorded[:socket].end_with?("control.sock") }
 
-    assert_equal [ 3, 3 ], control.map { it[:timeout] }
-    assert_equal [ 300 ], work.map { it[:timeout] }
+    assert_equal [ 3, 3 ], control.map { |recorded| recorded[:timeout] }
+    assert_equal [ 300 ], work.map { |recorded| recorded[:timeout] }
   end
 
   def test_a_cell_bounds_its_control_calls_at_five_seconds_unless_told_otherwise

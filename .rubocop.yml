@@ -235,6 +235,11 @@ Lint/InterpolationCheck:
   Exclude:
     - '**/test/**/*'
 
+# `it` is a method call on 3.3 and the first block parameter from 3.4, so it parses either way and means
+# something different. TargetRubyVersion alone does not catch that; this cop is what does.
+Lint/ItWithoutArgumentsInBlock:
+  Enabled: true
+
 Style/EvalWithLocation:
   Enabled: true
   Exclude:
