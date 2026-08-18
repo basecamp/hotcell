@@ -50,10 +50,16 @@ docker run --detach --name "$CELL" \
   --volume "$VOLUME:/run/hotcell/cell" \
   "$IMAGE" >/dev/null
 
+# The driver runs as its own uid and joins the cell's group, which is the deployment the docs describe. As
+# root it would bypass the sockets' 0660 and prove nothing about the group that is meant to be carrying
+# the access control.
 echo "driving the battery from a second container over the shared volume"
 if ! docker run --rm \
+  --user 2000:2000 \
+  --group-add 10001 \
   --volume "$REPO:/repo:ro" \
   --volume "$VOLUME:/run/hotcell/cell" \
+  --env HOME=/tmp/driver \
   --env HOTCELL_DIR="$DIRECTORY" \
   --env HOTCELL_GROUP=10001 \
   --env HOTCELL_REPO=/repo \

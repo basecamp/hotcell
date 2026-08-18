@@ -73,7 +73,7 @@ module HotCell
 
       response = control(DESCRIBE)
       unless response.ok?
-        HotCell.logger.warn "hotcell #{name}: could not describe the cell (#{response.failure})"
+        HotCell.logger.warn "hotcell #{name}: #{unreachable_because response.failure}"
         return nil
       end
 
@@ -88,6 +88,20 @@ module HotCell
     end
 
     private
+      # A cell's sockets are `0660`, so the group that lets a worker re-open a descriptor is also the group
+      # that admits a caller. EACCES therefore means one thing, and it is worth saying rather than leaving an
+      # operator to read "could not describe the cell" as "the cell is down". Every other failure reads that
+      # way correctly, because a restarting accessory is the common one.
+      def unreachable_because(failure)
+        if failure.error_class == "Errno::EACCES"
+          "this process may not open the cell's socket. Both sides share a group, and this one is in " \
+          "#{Process.groups.sort.inspect}. Add the cell's gid to this container (Kamal: `group-add` under " \
+          "the role's `options:`)."
+        else
+          "could not describe the cell (#{failure})"
+        end
+      end
+
       def control(op)
         transport.call self, Request.new(op: op).to_line, [], socket: control_socket, timeout: control_timeout
       end

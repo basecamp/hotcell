@@ -257,11 +257,12 @@ production.
 
 ## The socket's file mode
 
-The cell creates both sockets `0666`. A Unix socket is a filesystem object, and `connect` needs write
-permission on it. The two sides do not share a uid — the cell runs as `10001` and the app runs as whatever
-its own image sets — so `0600` gives `EACCES` on the app's first request.
+The cell creates both sockets `0660`, owned by its own user and group. A Unix socket needs write
+permission to connect, so the shared group in the next section is what lets your application reach a cell
+at all. It is not optional.
 
-The mount topology is what limits access: the directory is a volume mounted into two containers only.
+Without it every call fails with `EACCES` from `connect`, and `HotCell.describe_cells` says so at boot,
+before any traffic depends on it.
 
 ## The group both sides share
 
@@ -275,10 +276,15 @@ servers:
       group-add: 10001
 ```
 
-**Why it is needed.** An operation that hands a tool a filename does not copy the input. It re-opens the
-descriptor as `/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user
-rather than the caller's. The two sides do not share a uid, so a mode `0600` file the application owns
-gives `EACCES`. An Active Storage tempfile is exactly that.
+**Why it is needed.** Two reasons.
+
+The sockets are `0660` and owned by the cell's user and group, so without the group your application
+cannot connect to a cell at all.
+
+And an operation that hands a tool a filename does not copy the input. It re-opens the descriptor as
+`/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user rather than the
+caller's. The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
+Active Storage tempfile is exactly that.
 
 Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
 because they stage first.
@@ -297,9 +303,8 @@ files, so it could set any mode it liked and the one-way rule would stop holding
 its container would land on the application's own user on the host, where it can read the environment of
 the application's processes. Keep the uids apart and share only the group.
 
-**How it fails.** Loudly, on the first operation that hands a tool a filename. Operations that read the
-descriptor directly keep working, which is why `echo` alone does not detect it. See "Checking a deployed
-cell".
+**How it fails.** Immediately, on every call, with `EACCES` from `connect`. There is no partly working
+state to misread as healthy.
 
 **What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
 like every other boot check here.

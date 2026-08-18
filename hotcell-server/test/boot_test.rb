@@ -39,6 +39,18 @@ class BootTest < RegistryIsolatedTest
     end
   end
 
+  # The mode on the socket is the access control on speaking to a cell, and the group is what grants it.
+  # World write would give both sockets away to anything else sharing either container.
+  def test_the_sockets_admit_the_cells_group_and_nobody_else
+    TestCell.boot do |cell|
+      %w[ work.sock control.sock ].each do |name|
+        mode = File.stat(File.join(cell.directory, name)).mode & 0o777
+
+        assert_equal 0o660, mode, "#{name} is #{mode.to_s(8)}"
+      end
+    end
+  end
+
   def test_a_socket_path_too_long_for_the_platform_says_which_limit_it_broke
     supervisor = HotCell::Supervisor.new(directory: "/tmp/#{"d" * 200}", log: HotCell::Log.null)
 

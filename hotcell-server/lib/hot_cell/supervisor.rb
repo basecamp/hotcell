@@ -757,11 +757,23 @@ module HotCell
         (0...configuration.concurrency).find { |number| !@children.key?(number) }
       end
 
+      # A Unix socket is a filesystem object and `connect` needs write permission on it, so this mode is the
+      # access control on speaking to a cell at all.
+      #
+      # The group is what grants it. An application is already in this cell's gid so that a worker can
+      # re-open the descriptors it is handed, which every operation that gives a tool a filename needs — and
+      # nothing outside that group has business speaking to a cell. So the group carries both, and world
+      # write would give the socket away to anything else sharing either container.
+      #
+      # The group is therefore load-bearing rather than advisory: without it an application cannot connect
+      # and every call is EACCES. `HotCell.describe_cells` catches that at boot.
+      SOCKET_MODE = 0o660
+
       def listen(name)
         path = socket_path(name)
         File.unlink path if File.socket?(path)
 
-        UNIXServer.new(path).tap { File.chmod 0o666, path }
+        UNIXServer.new(path).tap { File.chmod SOCKET_MODE, path }
       end
 
       def socket_path(name)
