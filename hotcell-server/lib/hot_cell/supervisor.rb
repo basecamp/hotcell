@@ -221,6 +221,14 @@ module HotCell
       # report its own death, so the supervisor reports it — and a supervisor that only reaps when the next
       # connection arrives never reports it on an idle cell, leaving the caller to wait out its whole
       # timeout for a worker that died in the first second.
+      #
+      # **Accepted risk.** Handling TERM is also how a worker stops the whole cell. Workers share this
+      # process's uid, so they may signal it; the kernel protects a namespace's pid 1 from signals it has no
+      # handler for, and this installs one. A worker can SIGKILL its siblings for the same reason, which
+      # `Codes` already relies on when it refuses to attribute a signal to the input a worker was holding.
+      # The premise is that handling TERM is not optional — it is how an orchestrator stops a cell without
+      # killing requests in flight — and that denial of service against a cell is out of scope per
+      # docs/DESIGN.md.
       def trap_signals
         @signals, @signal_writer = IO.pipe
         trap("CHLD") { @signal_writer.write_nonblock "C", exception: false }
@@ -425,11 +433,18 @@ module HotCell
       def become_worker(supervisor_side)
         [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
 
-        # Its own process group, so the deadline can kill everything this request started rather than only
-        # the Ruby process that started it. A tool is a grandchild — the worker spawns it — and killing
-        # the worker alone left it running, reparented to this supervisor as pid 1, with no deadline, no slot
+        # Its own process group, so the deadline reaches the tools this request started rather than only the
+        # Ruby process that started them. A tool is a grandchild — the worker spawns it — and killing the
+        # worker alone left it running, reparented to this supervisor as pid 1, with no deadline, no slot
         # and nothing watching it. A document that hangs ffmpeg would have accumulated one orphan per
         # request until the cgroup ended the cell.
+        #
+        # **Accepted risk.** A process group is voluntary, so it holds for a tool that behaves and not for
+        # one that does not. Code running in a worker's child can call `setsid` and leave, which needs no
+        # capability and so survives `cap-drop ALL`, and neither the deadline kill nor the reap sweep reaches
+        # it afterwards. It then runs untimed until `pids-limit` or the cgroup ends it. The premise is that
+        # this is containment of a *compromise*, which is denial of service against a cell and out of scope
+        # per docs/DESIGN.md, and that the bounds which do not depend on cooperation are the container's.
         Process.setpgid 0, 0
 
         supervisor_side.close
