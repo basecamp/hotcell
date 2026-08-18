@@ -42,12 +42,23 @@ module HotCell
       home
     end
 
-    # A slot whose home is already gone, or which another process removed between the check and the
-    # unlink, is the outcome this wants either way.
+    # **Returns whether the directory is gone, and every caller logs when it is not.**
+    #
+    # A home that was already removed, or that another process removed between the check and the unlink, is
+    # the outcome this wants either way, so that answers true. Failing to remove one is a different fact and
+    # it used to arrive as the same swallowed nil. This is the call that deletes a request's staged input and
+    # output before the caller is told anything, so a failure leaves those bytes on the tmpfs for the life of
+    # the container — and a sibling worker can cause one, by creating entries under the tree while
+    # remove_entry walks it. Same uid, no defence, and it was silent.
+    #
+    # It still cannot raise. Worker#serve calls this from an ensure, where a raise would replace the caller's
+    # response with a crash, and the supervisor calls discard_home from finish and reap, where nothing above
+    # rescues anything and a raise stops the cell with every request it holds.
     def remove_home
       FileUtils.remove_entry home if Dir.exist?(home)
+      true
     rescue SystemCallError
-      nil
+      false
     end
 
     # **The supervisor renames rather than deletes, and that is a scheduling decision.**
@@ -67,26 +78,29 @@ module HotCell
     # rename exists to avoid. On any rename failure the tree is left where it is, for a later worker's own
     # cleanup to remove off the hot path. The supervisor never deletes a tree inline, whatever goes wrong.
     def discard_home
-      return unless Dir.exist?(home)
+      return true unless Dir.exist?(home)
 
       File.rename home, "#{home}.discarded-#{Process.pid}-#{SecureRandom.hex(8)}"
+      true
     rescue SystemCallError
-      nil
+      false
     end
 
     # Nothing here is created at boot, because nothing survives a request. This only clears what an earlier
     # boot left behind.
     def prepare
-      remove_home
-      sweep
+      # Both, rather than short-circuiting: a home that could not be removed must not stop the sweep.
+      cleared = remove_home
+      sweep && cleared
     end
 
     # Unlinks whatever discard_home renamed out of the way. Partial progress is fine: a sweep killed
     # part-way leaves fewer entries for the next one, so this converges rather than repeating.
     def sweep
       Dir.glob("#{home}.discarded-*").each { |path| FileUtils.remove_entry path }
+      true
     rescue SystemCallError
-      nil
+      false
     end
   end
 end

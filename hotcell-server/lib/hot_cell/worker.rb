@@ -107,7 +107,7 @@ module HotCell
       ensure
         received.each(&:close)
         connection.close
-        slot.remove_home
+        swept = slot.remove_home
 
         # After the answer and before reporting idle, which is the only window where this costs nobody. How
         # long it takes is chosen by whatever filled the directory, so it must not run where somebody is
@@ -116,7 +116,16 @@ module HotCell
         # caller already has its response, and `report_idle` is what makes this worker available — so the
         # supervisor will not dispatch into a worker that is still sweeping.
         slot.sweep
+        report_uncleaned unless swept
         report_idle response&.failure&.code
+      end
+
+      # A removal that failed is the one thing here nobody else can see. The bytes stay on the shared tmpfs
+      # after the caller has been told the request is over, and a sibling worker can cause it by writing into
+      # the tree while remove_entry walks it. It cannot raise from an ensure, so it says so instead. One line
+      # per request, from the ensure, because that is the attempt that knows the final state.
+      def report_uncleaned
+        log.write "slot.uncleaned", slot: slot.number, home: slot.home
       end
 
       def handle(line, received, timing)
@@ -152,6 +161,8 @@ module HotCell
         # Before answering rather than after, so the window in which a sibling worker could read this
         # request's bytes off the shared tmpfs closes before the caller is told anything. Files are not
         # isolated between concurrent workers and cannot be, so the window's size is the whole control.
+        # Not reported here. The ensure below runs after every path through this method and tries again, so
+        # it is the one that knows whether the directory is still there when the request is over.
         slot.remove_home
 
         response

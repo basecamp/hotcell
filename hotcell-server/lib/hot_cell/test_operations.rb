@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "fileutils"
 
 # Fixture operations, so the whole surface can be exercised in milliseconds, with no tool installed and no
 # container running.
@@ -64,6 +65,22 @@ module HotCell
 
       def perform(_inputs, _outputs)
         { pid: Process.pid, home: ENV["HOME"] }
+      end
+    end
+
+    # Leaves its $HOME in a state the worker cannot remove, by taking write permission off a subdirectory
+    # that still has a file in it. A tool running as this user can do the same to a sibling's directory,
+    # which is why a removal that fails has to be reported rather than swallowed.
+    class UnremovableHome < HotCell::Operation
+      operation "test.unremovable_home"
+
+      def perform(_inputs, _outputs)
+        blocked = File.join(ENV["HOME"].to_s, "blocked")
+        FileUtils.mkdir_p blocked
+        File.write File.join(blocked, "file"), "x"
+        File.chmod 0o500, blocked
+
+        { blocked: blocked }
       end
     end
 

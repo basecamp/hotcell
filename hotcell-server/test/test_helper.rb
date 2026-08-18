@@ -21,6 +21,20 @@ class HotCellServerTest < Minitest::Test
   include HotCell::TestSupport
 
   private
+    # A cell writes some lines after it has answered — a worker's own reporting runs from an ensure, past the
+    # response the caller already has. So a test that reads the log once races the process it is testing.
+    def wait_for_event(cell, event, within: 10)
+      deadline = HotCell::Clock.now + within
+
+      until HotCell::Clock.now > deadline
+        return cell.log_events(event) if cell.log_events(event).any?
+
+        sleep 0.02
+      end
+
+      []
+    end
+
     def assert_ok(response)
       assert response, "expected a response and got none"
       assert_predicate response, :ok?, "expected ok and got #{response.failure&.to_s.inspect}"

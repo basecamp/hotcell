@@ -477,6 +477,24 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # The removal is what closes the window where a sibling worker reads this request's staged bytes, and it
+  # runs from an ensure where it cannot raise. It used to swallow the failure, so the bytes stayed on the
+  # shared tmpfs after the caller had been told the request was over, and nothing anywhere said so.
+  def test_a_home_that_cannot_be_removed_is_reported
+    cell = TestCell.boot
+    assert_ok cell.call("test.unremovable_home")
+
+    # Polled, because the worker writes this from its ensure, after the caller already has the answer.
+    assert_equal 1, wait_for_event(cell, "slot.uncleaned").size, "the failed removal was silent: #{cell.log}"
+  ensure
+    # Stop the cell first: it is still sweeping, so a directory found by the glob can be gone by the chmod.
+    # Then hand write permission back wherever the blocked directory landed, because the supervisor renames
+    # a home it could not remove and the suite's own cleanup would otherwise fail exactly as the worker did.
+    cell&.stop
+    Dir.glob("#{cell.workspace}/**/").each { |path| File.chmod 0o700, path if File.directory?(path) } if cell
+    cell&.cleanup
+  end
+
   def test_a_home_is_gone_once_the_request_is_answered
     TestCell.boot do |cell|
       result = assert_ok(cell.call("test.whoami")).result

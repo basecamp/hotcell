@@ -532,6 +532,17 @@ module HotCell
         unreadable_report child, Failure.sanitize(error.message)
       end
 
+      # The rename that takes a finished request's directory out of the way, and a line when it does not
+      # happen. A failure is tolerated by design — the tree is left where it is, for a later worker to sweep
+      # off the hot path, because the supervisor must never delete one inline. It is not tolerated silently:
+      # the random suffix exists because a tool running as this user can pre-create a colliding name, so a
+      # rename that fails is the shape of that attempt as well as of an ordinary error.
+      def discard(child)
+        return if child.slot.discard_home
+
+        log.write "slot.undiscarded", pid: child.pid, slot: child.slot.number, home: child.slot.home
+      end
+
       def unreadable_report(child, message)
         log.write "worker.unreadable_report", pid: child.pid, message: message
         nil
@@ -540,7 +551,7 @@ module HotCell
       def finish(child, code)
         counters.record outcome_code(code)
         child.finished
-        child.slot.discard_home
+        discard child
 
         retire child if configuration.retire?(child.served)
       end
@@ -673,7 +684,7 @@ module HotCell
           sweep_group child
           @children.delete child.slot.number
           answer_for child, status
-          child.slot.discard_home
+          discard child
           child.control.close
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,
@@ -798,7 +809,13 @@ module HotCell
       def prepare_directories
         FileUtils.mkdir_p directory
 
-        configuration.concurrency.times { |number| Slot.build(workspace, number).prepare }
+        configuration.concurrency.times do |number|
+          slot = Slot.build(workspace, number)
+          next if slot.prepare
+
+          log.write "slot.uncleaned", slot: number, home: slot.home,
+                                      warning: "an earlier boot's files are still here"
+        end
       end
 
       def preload

@@ -52,9 +52,43 @@ class SlotTest < HotCellServerTest
                  "the discarded name should end in a random suffix a tool cannot pre-create")
   end
 
+  # Every cleanup here runs where a raise is not survivable: the worker's ensure, and the supervisor's own
+  # loop. So they answer rather than raise, and the callers log a false. Reporting a failure as success is
+  # what made a request's staged bytes outlive the answer with nothing said — and a sibling worker can cause
+  # one, by writing into the tree while remove_entry walks it.
+  def test_a_cleanup_that_could_not_run_answers_false
+    @slot.make_home
+
+    stub_remove_entry_to_fail do
+      refute @slot.remove_home, "a removal that failed reported success"
+      refute @slot.prepare, "prepare reported success while the home was still there"
+    end
+
+    stub_rename_to_fail do
+      refute @slot.discard_home, "a rename that failed reported success"
+    end
+  end
+
+  def test_a_cleanup_that_ran_answers_true
+    @slot.make_home
+
+    assert @slot.discard_home
+    assert @slot.sweep
+    assert @slot.remove_home, "a home that is already gone is the outcome this wants"
+    assert @slot.prepare
+  end
+
   private
     def discarded_names
       Dir.glob("#{@slot.home}.discarded-*").map { |path| File.basename(path) }
+    end
+
+    def stub_remove_entry_to_fail
+      original = FileUtils.method(:remove_entry)
+      FileUtils.define_singleton_method(:remove_entry) { |*| raise Errno::ENOTEMPTY, "induced" }
+      yield
+    ensure
+      FileUtils.define_singleton_method(:remove_entry, original)
     end
 
     def stub_rename_to_fail
