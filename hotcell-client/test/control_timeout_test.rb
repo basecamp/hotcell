@@ -76,8 +76,12 @@ class ControlTimeoutTest < HotCellClientTest
 
   private
     # A cell whose sockets exist and whose supervisor never writes a byte back.
+    #
+    # The prefix is two characters because the whole path has to fit a `sockaddr_un`, which holds 104 bytes
+    # on Darwin. A macOS runner's `Dir.tmpdir` is around fifty of them before this adds a name, a cell
+    # directory and `control.sock`, and "hotcell-unanswering" put it two bytes over.
     def with_unanswering_cell(name: "test", **register)
-      Dir.mktmpdir "hotcell-unanswering" do |root|
+      Dir.mktmpdir "hc" do |root|
         directory = File.join(root, name)
         Dir.mkdir directory
 
