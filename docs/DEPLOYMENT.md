@@ -289,9 +289,15 @@ Active Storage tempfile is exactly that.
 Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
 because they stage first.
 
-**What the client does with it.** It puts each descriptor in the group and narrows the mode on the way
-out: `0640` for an input, `0620` for an output. It does this through the open file rather than a path, so
-it names nothing.
+**What the client does with it.** It puts each descriptor in the group and sets the mode on the way out:
+`0640` for an input, `0620` for an output. It does this through the open file rather than a path, so it
+names nothing.
+
+**It sets those and does not put them back.** The file you hand over keeps the cell's group and the new
+mode after the call returns, so a `0600` file of your own comes back readable by that group. Active
+Storage hands over tempfiles and unlinks them, so this is invisible there. If you write your own client,
+hand over files you are willing to share with the cell's group, and do not pass one whose permissions
+something else depends on.
 
 **What that buys, and what it does not.** A cell may read an input and write an output. It may not write
 an input or read an output, and it cannot widen either, because it does not own these files and

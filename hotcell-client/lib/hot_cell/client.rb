@@ -118,6 +118,13 @@ module HotCell
 
       # Through the descriptor rather than the path, so this names no file: fchown and fchmod take the open
       # file the caller already gave us. Both need ownership, which the caller has and the cell does not.
+      #
+      # **Accepted risk.** These are set and not put back, so the caller's file keeps this group and this
+      # mode after the request — a `0600` file of the caller's own returns readable by the cell's group. The
+      # premise is that restoring is worse than carrying it: the cell may still hold the descriptor, undoing
+      # it mid-request adds a failure path to the answer, and a caller that could not share the file could
+      # not use this at all. Active Storage hands over tempfiles it then unlinks, so nothing survives there.
+      # docs/DEPLOYMENT.md tells anyone writing their own client to pass files they are willing to share.
       def shared(io, mode)
         return io if HotCell.group.nil?
 
