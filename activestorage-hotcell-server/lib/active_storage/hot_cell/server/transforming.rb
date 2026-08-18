@@ -43,6 +43,15 @@ module ActiveStorage
           # What Rails validates, and no more. `combine_options` is refused because it can never be one
           # pipeline, and a blank argument means "skip this operation" — Rails filters on `present?`, and the
           # test below is that semantic reimplemented, because the cell does not load Active Support.
+          #
+          # **Accepted risk.** Any other name reaches ImageProcessing, which dispatches it to the backend.
+          # `ImageProcessing.unsafe_method?` stops the Ruby core methods, so `send` and `system` cannot be
+          # reached, and it does not stop a genuine one: `write_to_file` and `dzsave` are real libvips
+          # operations that write where they are told. The premise is that the transformations come from the
+          # trusted side, and that this is no more permissive than stock Rails, whose own Vips transformer
+          # refuses `combine_options` and nothing else. The ImageMagick allowlist Rails added after
+          # CVE-2022-21831 runs on the client, where the application's configuration for it applies — see
+          # `Transformers::Image::Magick` on that side, which calls `operations` for that effect.
           def operations_for(declared)
             refuse! "operations must be an object, and this is a #{declared.class}" unless declared.is_a?(Hash)
 

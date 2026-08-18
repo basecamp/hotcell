@@ -206,6 +206,27 @@ Comments in this codebase carry the reasoning, not the mechanics. A comment that
 is noise; a comment that says why the obvious version does not work is the whole value. Match what is
 already there.
 
+### Accepted risk
+
+A comment opening with **`Accepted risk.`** marks a decision rather than a claim. Somebody weighed that
+exposure with the risk in view and chose to carry it, and the comment states the premise the choice rests
+on. Grep for the phrase to find them all.
+
+Two kinds of comment sit near risky code and they are read differently. A **safety claim** says how
+something works — "`cap-drop ALL` leaves no capability that overrides a mode". It can be wrong, and a
+review should try to falsify it. An **accepted risk** is a preference, and restating the exposure it names
+is not a finding.
+
+**So an accepted risk may only be re-opened by attacking its premise, never by restating its risk.** If the
+premise still holds, there is nothing to report, whatever the exposure looks like. If you can show the
+premise is false, report the premise: that is what changed, and it is what makes the decision worth taking
+again. [ADR 0003](adr/0003-remove-the-persistent-slot-home.md) is the shape of a good one — the warm slot
+home was an accepted risk whose premise, "the exposure is a write rather than a read", turned out to be
+false, because what a tool reads from `$HOME` is configuration and configuration is executable.
+
+This applies to security reviews in particular, including ones run by agents. Reporting a priced risk back
+as a new finding costs a maintainer the same argument every time.
+
 ## CI
 
 | Job | Runs |

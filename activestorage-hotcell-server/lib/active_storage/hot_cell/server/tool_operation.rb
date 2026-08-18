@@ -52,6 +52,14 @@ module ActiveStorage
           # and its siblings — spliced into the tool's argv at the position that setting names. The client
           # splits the shell string, so what arrives is already argv, and this checks only that it is: what
           # the flags mean is the application's decision, exactly as it is when Rails runs the tool itself.
+          #
+          # **Accepted risk.** These are tool options and nothing here restricts which. `-o` makes ffprobe
+          # write a file, `-dump_attachment` makes ffmpeg extract one, and no shell is involved in either.
+          # The premise is that the payload comes from the trusted side: an application's own configuration
+          # crosses a socket only that application can reach, and Rails hands the same strings to the same
+          # tools when it runs them itself. An allowlist here would be a second, worse copy of a decision the
+          # application already made. What would change the premise is the work socket becoming reachable by
+          # something other than the application.
           def arguments!(name, value)
             return value if value.is_a?(Array) && value.all?(String)
 

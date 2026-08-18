@@ -777,8 +777,12 @@ module HotCell
       # voids the guarantee, and a warning in a log is how a dead control stays dead. This is the one boot
       # check that is worth having now.
       #
-      # An unreadable file means this is not Linux or the kernel has no Yama, which is development rather
-      # than a deployment with a broken precondition — so that warns instead.
+      # **Accepted risk.** An unreadable file means this is not Linux or the kernel has no Yama, which is
+      # development rather than a deployment with a broken precondition — so that warns instead. The second
+      # of those is a real hole: on a Linux kernel built without Yama the file is absent, same-uid ptrace is
+      # unrestricted, and invariant 8 is gone while this boots anyway. The premise is that the kernels this
+      # deploys on ship Yama, so refusing to boot on an absent file would fail development far more often
+      # than it would catch a broken host.
       def verify_ptrace_scope!
         unless File.readable?(@ptrace_scope_path)
           return log.write "cell.ptrace_scope_unknown", path: @ptrace_scope_path,

@@ -29,6 +29,14 @@ module HotCell
       # `ok` has to be the boolean it says it is rather than anything truthy. This is the field the whole
       # taxonomy turns on, and Ruby's truthiness would read `"false"`, `0` and `[]` as success — so a
       # malformed or hostile response could turn a failure into an `ok` carrying no result at all.
+      #
+      # **Accepted risk.** Nothing inside `result` is checked, and a compromised cell chooses all of it.
+      # `Payload.validate!` is not run on the way in, so a value JSON can carry but Ruby cannot serialize
+      # again reaches the caller — `1e400` parses to `Float::INFINITY`, and an application that writes a
+      # result to a JSON column raises there rather than here. The premise is that a result is data the
+      # caller acts on and only the caller knows its shape, so the framework has no rule to apply and a
+      # client with a specific expectation states it itself. `ok` is the exception because the taxonomy
+      # turns on it and every caller depends on it equally.
       def parse(line)
         parse_message(line) do |parsed|
           ok = parsed[:ok]

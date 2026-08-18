@@ -39,6 +39,17 @@ module ActiveStorage
             # The filename extension and content type come from the cell's own result rather than being
             # restated here, so the operation is the one source of truth for what it produced. The scratch
             # tempfile's name never reaches Rails — only the yielded filename does.
+            #
+            # **Accepted risk.** A compromised cell chooses both of these values. It does not need to be
+            # believed for them to matter, and validating them here buys nothing, because the cell wrote the
+            # preview's bytes into this descriptor as its whole job. Active Storage re-identifies the
+            # attachment from those bytes and Marcel treats the declared type only as a hint, so bytes that
+            # carry script are identified as what they are and served under Rails' own
+            # `content_types_allowed_inline` and `content_types_to_serve_as_binary` rules. Lying about the
+            # label adds nothing to controlling the bytes. What is left is a preview that renders wrong,
+            # which is one of many things a compromised cell can do. The premise is that the bytes are
+            # already the cell's to choose; a caller that stops handing the cell an output descriptor would
+            # be the thing that changes it.
             def render_through(input)
               Tempfile.create("hotcell-preview", binmode: true) do |output|
                 result = File.open(input.path, "rb") do |readable|
