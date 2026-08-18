@@ -126,6 +126,16 @@ requests that were never concurrent with it. That is a deliberate setting with a
 [ADR 0001](../adr/0001-reuse-workers-across-requests.md). It is the only place in this design where the
 isolation between two requests is a configuration value.
 
+**Nothing on disk carries from one request to the next.** A slot holds one directory per request, which is
+that request's `$HOME` and also where its inputs and outputs are staged, and it is created when the request
+starts and removed before the caller hears the answer. It used to survive across worker processes, to keep
+an expensive per-user profile warm. That was a hole rather than a trade: what a tool reads from `$HOME` is
+configuration, and for these toolchains configuration is executable — ImageMagick runs the command lines in
+`delegates.xml` and applies the rights in `policy.xml`, both read from `$HOME/.config/ImageMagick`. So one
+input that achieved code execution could reconfigure every later request on that slot, which is precisely
+the bound `max_requests_per_worker: 1` exists to hold. [ADR 0003](../adr/0003-remove-the-persistent-slot-home.md)
+records the reversal.
+
 **Files are not isolated between concurrent workers, and cannot be.** Every worker runs as the same uid in
 one mount namespace, so a worker that reads another worker's scratch directory — by listing it, or through
 `/proc/<sibling>/fd/N` — gets that request's input and output bytes. Unlinking the scratch file does not

@@ -63,12 +63,27 @@ module HotCell
       operation "test.whoami"
 
       def perform(_inputs, _outputs)
-        { pid: Process.pid, home: ENV["HOME"], scratch: Dir.exist?(scratch_path) }
+        { pid: Process.pid, home: ENV["HOME"] }
+      end
+    end
+
+    # Leaves a file in $HOME and says whether an earlier request already left one. A tool reads its
+    # configuration from $HOME and a configuration file is executable — ImageMagick runs the command lines
+    # in delegates.xml and applies the rights in policy.xml — so a home that outlives its request lets one
+    # compromised conversion reconfigure every later one on that slot. See adr/0003.
+    class HomeMarker < HotCell::Operation
+      operation "test.home_marker"
+
+      def perform(_inputs, _outputs)
+        found = File.exist?(marker)
+        File.write marker, "planted"
+
+        { found: found, home: ENV["HOME"] }
       end
 
       private
-        def scratch_path
-          File.join ENV["HOME"].to_s, "..", "scratch"
+        def marker
+          File.join ENV["HOME"].to_s, "planted-by-an-earlier-request"
         end
     end
 

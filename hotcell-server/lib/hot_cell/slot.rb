@@ -9,39 +9,43 @@ module HotCell
   # leasing: a slot is always free when a worker starts, because the thing that bounds workers is the same
   # thing that counts slots. A request never waits for a slot, it waits in the cell's queue.
   #
-  # The home survives on purpose, and it survives across worker processes, not merely between the requests
-  # one worker serves: it is created once at boot and removed by nothing, so a slot's home is the same
-  # directory whichever worker holds the slot next. Some tools cannot share one — LibreOffice keeps a
-  # profile under $HOME and corrupts itself when two instances share it — and a surviving per-slot home
-  # gives that expensive profile a warm copy without a warming pass and without the supervisor spawning
-  # anything. Reusing a worker is a separate axis: it amortizes a process's first-request cost, and the
-  # home is warm at `max_requests_per_worker: 1` all the same.
+  # **A slot has one directory per request and it is that request's `$HOME`.** It is created when the
+  # request starts and removed when the request ends, so nothing a tool writes under `$HOME` reaches the
+  # next request on this slot. The name is stable and the directory behind it is not, which is why a
+  # reused worker reports the same path twice.
   #
-  # This is a trade-off we accept rather than a channel we close. It is the one place two requests are not
-  # fully isolated from each other: one can leave a file in the slot's home that a later request on that
-  # slot reads. Scratch is separate and per-request, so a request's own bytes do not leak this way; what
-  # leaks is what a tool chose to persist. The exposure is a write, not a read — for LibreOffice the user
-  # layer composes last, so a write there can disable the tool's own hardening for every later request on
-  # that slot. We keep the warm home because the alternatives cost more than the exposure is worth, and
-  # adr/0002 records that reasoning and the option to revisit it.
+  # This directory used to survive, to give a tool with an expensive per-user profile a warm one. That is
+  # withdrawn. What a tool reads from `$HOME` is configuration, and for the toolchains a cell carries
+  # configuration is executable: ImageMagick runs the command lines in `delegates.xml` and applies the
+  # rights in `policy.xml`, both read from `$HOME/.config/ImageMagick`. A surviving home therefore let an
+  # input that achieved code execution reconfigure every later request on the slot, which is the bound
+  # `max_requests_per_worker: 1` is supposed to hold. adr/0003 records the reversal and adr/0002 the
+  # reasoning it supersedes.
   #
-  # The filesystem behaviour belongs here rather than in the two processes that call it. Scratch is removed
-  # from both — the worker before it answers, the supervisor at finish and at reap — so the guard and the
-  # swallowed SystemCallError are a rule that has to hold on both sides of a fork, and it had a copy on each.
-  Slot = Struct.new(:number, :home, :scratch) do
+  # There is one directory and not two. A request's staged inputs and outputs are named inside `$HOME`
+  # rather than in a scratch directory of their own, because the two had the same lifetime and the same
+  # owner once the home stopped surviving. Staging used to create its directory on demand, which is what
+  # kept a descriptor-only operation from paying for one; `$HOME` has to exist for every request either
+  # way, so that laziness bought nothing and is gone with it.
+  #
+  # The filesystem behaviour belongs here rather than in the two processes that call it. The directory is
+  # removed from both — the worker before it answers, the supervisor at finish and at reap — so the guard
+  # and the swallowed SystemCallError are a rule that has to hold on both sides of a fork, and it had a
+  # copy on each.
+  Slot = Struct.new(:number, :home) do
     def self.build(workspace, number)
-      new number, File.join(workspace, number.to_s, "home"), File.join(workspace, number.to_s, "scratch")
+      new number, File.join(workspace, number.to_s, "home")
     end
 
-    def make_scratch
-      FileUtils.mkdir_p scratch, mode: 0o700
-      scratch
+    def make_home
+      FileUtils.mkdir_p home, mode: 0o700
+      home
     end
 
-    # A slot whose scratch is already gone, or which another process removed between the check and the
+    # A slot whose home is already gone, or which another process removed between the check and the
     # unlink, is the outcome this wants either way.
-    def remove_scratch
-      FileUtils.remove_entry scratch if Dir.exist?(scratch)
+    def remove_home
+      FileUtils.remove_entry home if Dir.exist?(home)
     rescue SystemCallError
       nil
     end
@@ -62,26 +66,25 @@ module HotCell
     # pre-create a colliding entry, fail the rename, and send the supervisor into the recursive delete the
     # rename exists to avoid. On any rename failure the tree is left where it is, for a later worker's own
     # cleanup to remove off the hot path. The supervisor never deletes a tree inline, whatever goes wrong.
-    def discard_scratch
-      return unless Dir.exist?(scratch)
+    def discard_home
+      return unless Dir.exist?(home)
 
-      File.rename scratch, "#{scratch}.discarded-#{Process.pid}-#{SecureRandom.hex(8)}"
+      File.rename home, "#{home}.discarded-#{Process.pid}-#{SecureRandom.hex(8)}"
     rescue SystemCallError
       nil
     end
 
-    # The home survives between requests on purpose, so it is created once; scratch must not, so anything
-    # a previous boot left behind goes now.
+    # Nothing here is created at boot, because nothing survives a request. This only clears what an earlier
+    # boot left behind.
     def prepare
-      FileUtils.mkdir_p home, mode: 0o700
-      remove_scratch
+      remove_home
       sweep
     end
 
-    # Unlinks whatever discard_scratch renamed out of the way. Partial progress is fine: a sweep killed
+    # Unlinks whatever discard_home renamed out of the way. Partial progress is fine: a sweep killed
     # part-way leaves fewer entries for the next one, so this converges rather than repeating.
     def sweep
-      Dir.glob("#{scratch}.discarded-*").each { |path| FileUtils.remove_entry path }
+      Dir.glob("#{home}.discarded-*").each { |path| FileUtils.remove_entry path }
     rescue SystemCallError
       nil
     end

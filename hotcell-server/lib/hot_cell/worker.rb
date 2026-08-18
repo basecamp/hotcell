@@ -75,6 +75,11 @@ module HotCell
         received = []
         response = nil
 
+        # Before the request rather than at boot, and one directory rather than two. A tool reads its
+        # configuration from $HOME and that configuration is executable, so a home that outlived the request
+        # let one compromised conversion reconfigure every later one on this slot. adr/0003.
+        slot.make_home
+
         begin
           line, received = connection.receive_message
           response = if line.nil?
@@ -102,7 +107,7 @@ module HotCell
       ensure
         received.each(&:close)
         connection.close
-        slot.remove_scratch
+        slot.remove_home
 
         # After the answer and before reporting idle, which is the only window where this costs nobody. How
         # long it takes is chosen by whatever filled the directory, so it must not run where somebody is
@@ -147,7 +152,7 @@ module HotCell
         # Before answering rather than after, so the window in which a sibling worker could read this
         # request's bytes off the shared tmpfs closes before the caller is told anything. Files are not
         # isolated between concurrent workers and cannot be, so the window's size is the whole control.
-        slot.remove_scratch
+        slot.remove_home
 
         response
       rescue *operation.unreadable => error
@@ -179,10 +184,11 @@ module HotCell
           received.last(request.outputs).map.with_index { |io, index| Output.new(io, scratch: scratch("output-#{index}")) } ]
       end
 
-      # A descriptor stages itself when the operation first asks for its path, so a request whose
-      # operation reads the descriptors directly never creates the directory at all.
+      # A name inside this request's own `$HOME`, which `serve` has already created. Deferred rather than
+      # computed up front because a descriptor only asks when the operation reaches for a path, and an
+      # operation that reads its descriptors directly never asks at all.
       def scratch(name)
-        -> { File.join(slot.make_scratch, name) }
+        -> { File.join(slot.home, name) }
       end
 
       # Tracks the last operation configured for rather than every one ever seen. Above `max_requests_per_worker: 1`

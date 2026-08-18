@@ -10,4 +10,5 @@ one gets its own record and marks the earlier one superseded.
 | # | Decision | Status |
 | --- | --- | --- |
 | [0001](0001-reuse-workers-across-requests.md) | A worker may serve more than one request, and serves one by default | Accepted |
-| [0002](0002-keep-the-warm-slot-home.md) | Keep the warm slot home, as an accepted trade-off | Accepted |
+| [0002](0002-keep-the-warm-slot-home.md) | Keep the warm slot home, as an accepted trade-off | Superseded by [0003](0003-remove-the-persistent-slot-home.md) |
+| [0003](0003-remove-the-persistent-slot-home.md) | Remove the persistent slot home; a request's `$HOME` is made and removed with it | Accepted |

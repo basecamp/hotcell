@@ -413,18 +413,18 @@ class CellTest < HotCellServerTest
   # The supervisor renames rather than deletes, because how long a recursive delete takes is chosen by
   # whatever filled the directory — and it would run inside the loop enforcing every other deadline. The
   # unlinking lands on the next worker for this slot, which has a deadline of its own.
-  def test_a_killed_workers_scratch_is_taken_out_of_the_way_rather_than_deleted_in_the_loop
+  def test_a_killed_workers_files_are_taken_out_of_the_way_rather_than_deleted_in_the_loop
     slot = HotCell::Slot.build(Dir.mktmpdir("hotcell-slot"), 0)
-    FileUtils.mkdir_p File.join(slot.make_scratch, "deep")
+    FileUtils.mkdir_p File.join(slot.make_home, "deep")
 
-    slot.discard_scratch
+    slot.discard_home
 
-    refute Dir.exist?(slot.scratch), "the scratch path is free for the next request"
-    assert_equal 1, Dir.glob("#{slot.scratch}.discarded-*").size, "the tree is still there, out of the way"
+    refute Dir.exist?(slot.home), "the home path is free for the next request"
+    assert_equal 1, Dir.glob("#{slot.home}.discarded-*").size, "the tree is still there, out of the way"
 
     slot.sweep
 
-    assert_empty Dir.glob("#{slot.scratch}.discarded-*"), "a worker sweeps it once nobody is waiting"
+    assert_empty Dir.glob("#{slot.home}.discarded-*"), "a worker sweeps it once nobody is waiting"
   end
 
   # The API takes several outputs and success was inferred from their total size, so writing the first and
@@ -444,12 +444,12 @@ class CellTest < HotCellServerTest
     end
   end
 
-  def test_scratch_is_gone_once_the_request_is_answered
+  def test_staged_files_are_gone_once_the_request_is_answered
     TestCell.boot do |cell|
       with_files do |source, destination|
         assert_ok cell.call("test.uppercase", inputs: [ source ], outputs: [ destination ])
 
-        refute_path_exists File.join(cell.workspace, "0", "scratch")
+        refute_path_exists File.join(cell.workspace, "0", "home")
       end
     end
   end
@@ -459,7 +459,29 @@ class CellTest < HotCellServerTest
       result = assert_ok(cell.call("test.whoami")).result
 
       assert_equal File.join(cell.workspace, "0", "home"), result[:home]
-      assert_path_exists result[:home]
+    end
+  end
+
+  # A tool reads its configuration from $HOME, and for the toolchains a cell carries that configuration is
+  # executable: ImageMagick runs the command lines in delegates.xml and applies the rights in policy.xml. A
+  # home that outlived its request let one compromised conversion reconfigure every later one on that slot,
+  # which is what adr/0003 removes. Reuse and one slot, so both requests land on the same worker: the
+  # strictest case, and the one the old warm home made impossible to hold.
+  def test_a_requests_home_does_not_outlive_it
+    TestCell.boot(max_requests_per_worker: 2, concurrency: 1) do |cell|
+      first = assert_ok(cell.call("test.home_marker")).result
+      second = assert_ok(cell.call("test.home_marker")).result
+
+      refute first[:found], "the first request found a file in a home that should have been fresh"
+      refute second[:found], "the second request read a file the first left in $HOME"
+    end
+  end
+
+  def test_a_home_is_gone_once_the_request_is_answered
+    TestCell.boot do |cell|
+      result = assert_ok(cell.call("test.whoami")).result
+
+      refute_path_exists result[:home], "the home outlived the request that owned it"
     end
   end
 

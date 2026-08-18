@@ -536,7 +536,7 @@ module HotCell
       def finish(child, code)
         counters.record outcome_code(code)
         child.finished
-        child.slot.discard_scratch
+        child.slot.discard_home
 
         retire child if configuration.retire?(child.served)
       end
@@ -669,7 +669,7 @@ module HotCell
           sweep_group child
           @children.delete child.slot.number
           answer_for child, status
-          child.slot.discard_scratch
+          child.slot.discard_home
           child.control.close
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,

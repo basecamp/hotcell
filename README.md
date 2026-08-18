@@ -88,10 +88,10 @@ A **worker** is a child the supervisor forks. Every untrusted byte is touched th
 else. It applies the cell's resource limits before touching the socket, serves
 `max_requests_per_worker` requests, and exits without running finalizers.
 
-A **slot** is the numbered workspace a worker borrows, which owns two directories. `home` becomes
-the worker's `$HOME` and survives between requests, because LibreOffice's profile is expensive and
-warm is better. `scratch` holds one request's staged files, and is removed before the caller hears
-the answer.
+A **slot** is the numbered workspace a worker borrows. It holds one directory per request, which is
+that request's `$HOME`, with the request's staged files under `scratch` inside it. The whole thing is
+created when the request starts and removed before the caller hears the answer, so nothing a tool
+writes reaches the next request on that slot.
 
 An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a
 routing name, its own `limits`, and a `perform(inputs, outputs, **payload)` that declares the

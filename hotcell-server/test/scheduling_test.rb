@@ -125,7 +125,9 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
-  def test_a_reused_worker_keeps_its_slot_and_therefore_its_home
+  # The slot is what a reused worker keeps, and the home is named after it — so the path is the same one
+  # twice while the directory behind it is not. What does not carry across is held in cell_test.rb.
+  def test_a_reused_worker_keeps_its_slot
     TestCell.boot(max_requests_per_worker: 2, concurrency: 1) do |cell|
       homes = 2.times.map { assert_ok(cell.call("test.whoami")).result[:home] }
 

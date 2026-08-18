@@ -1,6 +1,6 @@
 # 0002. Keep the warm slot home, as an accepted trade-off
 
-- Status: Accepted
+- Status: Superseded by [ADR 0003](0003-remove-the-persistent-slot-home.md)
 - Date: 2026-08-11
 - Deciders: Mike Dalessio
 
