@@ -13,6 +13,9 @@ module HotCell
     # its own verdict rather than a transport failure. `control_timeout` covers `describe` and `metrics`,
     # which the supervisor answers inline with no fork or queue — so it is short on purpose. Sharing one
     # number would give the call whose job is to say "this cell is down" the patience of a video transcode.
+    #
+    # Both bound the answer rather than the whole call: connecting is not covered. Transport::Socket says
+    # why that is left alone.
     def initialize(name, dir: nil, timeout: 30, control_timeout: 5,
                    permanent: PermanentFailure, transient: TransientFailure,
                    on_contract_skew: nil, transport: Transport::Socket.new)
