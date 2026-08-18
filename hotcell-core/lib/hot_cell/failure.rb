@@ -17,11 +17,16 @@ module HotCell
 
     attr_reader :code, :message, :error_class, :cause, :signal
 
+    # Every field is sanitized, not only the message. All five arrive from the wire on the client side, so
+    # all five carry whatever the peer put there — and they travel further than the message does, into
+    # `to_s`, into the `perform.hot_cell` event, and into whatever a subscriber writes down. `code` in
+    # particular is the field applications store. Scrubbing one and not the other four left the same
+    # poisoned row the scrub exists to prevent, reachable through a different key.
     def initialize(code:, permanent: nil, message: nil, error_class: nil, cause: nil, signal: nil)
-      @code = code.to_s
-      @cause = cause&.to_s
-      @signal = signal&.to_s
-      @error_class = error_class&.to_s
+      @code = self.class.sanitize(code).to_s
+      @cause = self.class.sanitize(cause)
+      @signal = self.class.sanitize(signal)
+      @error_class = self.class.sanitize(error_class)
       @message = self.class.sanitize(message)
       @permanent = permanent.nil? ? Codes.permanent?(@code, cause: @cause) : permanent
     end

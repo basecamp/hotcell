@@ -17,6 +17,31 @@ class HealthTest < HotCellServerTest
     end
   end
 
+  # A supervisor that accepts and then dies answers nothing, and end of stream reached the parser as nil.
+  # That raised TypeError from inside JSON, so a probe whose whole job is saying why reported a backtrace.
+  def test_a_cell_that_answers_nothing_says_so
+    Dir.mktmpdir do |directory|
+      server = UNIXServer.new File.join(directory, "control.sock")
+      # Read the request before closing, or the probe's own write is reset and it reports that instead.
+      closer = Thread.new do
+        loop do
+          socket = server.accept
+          socket.gets
+          socket.close
+        end
+      end
+
+      output, status = Open3.capture2e({ "HOTCELL_DIR" => directory }, RbConfig.ruby, EXE)
+
+      refute_predicate status, :success?
+      assert_match "closed the connection without answering", output
+      refute_match "TypeError", output
+    ensure
+      closer&.kill
+      server&.close
+    end
+  end
+
   def test_a_missing_cell_is_unhealthy
     Dir.mktmpdir do |empty|
       output, status = Open3.capture2e({ "HOTCELL_DIR" => empty }, RbConfig.ruby, EXE)

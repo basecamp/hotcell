@@ -96,6 +96,22 @@ class ResponseTest < HotCellTest
     assert_predicate HotCell::Response.parse(line).failure.message, :valid_encoding?
   end
 
+  # Not only the message. All five fields arrive from the wire, all five reach `to_s`, the instrumentation
+  # event and whatever a subscriber writes down, and `code` is the one applications store. Scrubbing one of
+  # them left the same poisoned row reachable through a different key.
+  def test_every_failure_field_is_scrubbed_and_not_only_the_message
+    line = %({"v":1,"ok":false,"error":{"code":"unre\xFFadable","cause":"mem\xFFory","signal":"K\xFFILL",) +
+           %("class":"Vips::E\xFFrror","message":"bad \xFF name"},"timing":{}})
+      .dup.force_encoding(Encoding::UTF_8)
+
+    failure = HotCell::Response.parse(line).failure
+
+    [ failure.code, failure.cause, failure.signal, failure.error_class, failure.message ].each do |field|
+      assert_predicate field, :valid_encoding?
+    end
+    assert_predicate failure.to_s, :valid_encoding?
+  end
+
   def test_a_response_that_is_not_an_object
     assert_raises(HotCell::MessageError) { HotCell::Response.parse("[]\n") }
   end

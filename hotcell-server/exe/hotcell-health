@@ -23,8 +23,13 @@ begin
   connection = HotCell::Connection.new(socket)
 
   connection.write_line HotCell::Request.new(op: HotCell::DESCRIBE).to_line
-  response = HotCell::Response.parse(connection.read_line(deadline: deadline))
 
+  # nil is end of stream, which is a supervisor that accepted and then died. Passing it to the parser
+  # raised TypeError from inside JSON, so the probe reported unhealthy with a backtrace instead of a reason.
+  line = connection.read_line(deadline: deadline)
+  unhealthy "the cell closed the connection without answering" if line.nil?
+
+  response = HotCell::Response.parse(line)
   unhealthy "the cell answered #{response.failure}" unless response.ok?
 rescue SystemCallError, IOError, HotCell::Error => error
   unhealthy "#{error.class}: #{error.message}"
