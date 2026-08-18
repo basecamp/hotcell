@@ -15,6 +15,11 @@ applied, and the results are returned or written to the output file.
 
 This is still pre-release software! It may break in interesting ways. Use with caution until there's a v1.0 release.
 
+The `activestorage-hotcell-client` gem needs Rails 8.2, which is unreleased: variant processing can only
+be swapped out from [rails/rails#58384](https://github.com/rails/rails/pull/58384)
+([`5ea765e5`](https://github.com/rails/rails/commit/5ea765e5b00085a22f5cbe863c0d2ac765428242)) onward. Track
+`rails/rails` `main` until it ships — see [README-active-storage.md](README-active-storage.md).
+
 ## "Why would I use this?"
 
 Your Rails application accepts uploads, so somewhere in it there's a line like this:
@@ -281,7 +286,7 @@ boots the supervisor on `HOTCELL_DIR`.
 ### Run it in development
 
 A cell can run in development either as a container or as a plain, uncontainerized process. The
-container route works only on Linu (on macOS the containers run in a VM, and descriptor passing
+container route works only on Linux (on macOS the containers run in a VM, and descriptor passing
 will not work). The resource limits and the deadline apply either way.
 
 We recommend the uncontainerized process in development, managed by foreman beside the Rails server,
@@ -290,8 +295,8 @@ repository, with its own `Gemfile` -- the same one the image build copies -- and
 to `Procfile.dev`:
 
 ```procfile
-web: HOTCELL_ROOT=tmp/hotcell-sockets bin/rails server
-cell: BUNDLE_GEMFILE=hotcell/Gemfile HOTCELL_CONFIG=hotcell/config.rb HOTCELL_OPERATIONS=hotcell/operations HOTCELL_DIR=tmp/hotcell-sockets/documents bundle exec hotcell
+web: HOTCELL_ROOT=$PWD/tmp/hotcell-sockets bin/rails server
+cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/documents bundle exec hotcell
 ```
 
 `bin/dev` boots both. The app finds the sockets under `tmp/hotcell-sockets`, and the cell keeps its own bundle

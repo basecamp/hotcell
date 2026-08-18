@@ -27,5 +27,10 @@ Gem::Specification.new do |spec|
   spec.files = Dir[ "lib/**/*", "MIT-LICENSE", "README.md" ]
 
   spec.add_dependency "hotcell-client", ">= 0.1.0"
-  spec.add_dependency "activestorage", ">= 8.1"
+
+  # 8.2 is where config.active_storage.variant_processor began accepting a class (rails/rails#58384), and
+  # without it a transformer class fails at the first variant rather than at boot. Spelled as the
+  # prerelease because that is what rails/rails main reports and 8.2 is unreleased: ">= 8.2" sorts after
+  # every 8.2 prerelease and would reject it.
+  spec.add_dependency "activestorage", ">= 8.2.0.alpha"
 end
