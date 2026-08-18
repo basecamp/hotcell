@@ -128,8 +128,22 @@ class PayloadTest < HotCellTest
   def test_parsing_past_the_nesting_limit_raises
     deep = (1..HotCell::MAX_NESTING + 1).inject('"leaf"') { |inner, _| "{\"down\":#{inner}}" }
 
-    assert_raises JSON::NestingError do
+    assert_raises HotCell::MessageError do
       HotCell::Payload.parse(deep)
+    end
+  end
+
+  # Every way the JSON layer can fail arrives as one named failure, because naming them at the call sites
+  # has been wrong twice. The supervisor reads worker reports through here inside the loop that enforces
+  # every request's deadline, and nothing above it rescues anything, so a miss is a denial of service
+  # against the whole cell rather than a bad line.
+  def test_every_parse_failure_is_a_message_error
+    lines = [ "{not json", '{"ratio":NaN}', %({"\xff\xfe":1}).b.force_encoding(Encoding::UTF_8) ]
+
+    lines.each do |line|
+      assert_raises HotCell::MessageError, "#{line.inspect} escaped as something else" do
+        HotCell::Payload.parse(line)
+      end
     end
   end
 
@@ -143,7 +157,7 @@ class PayloadTest < HotCellTest
   end
 
   def test_parsing_nan_raises_rather_than_producing_a_float_that_breaks_arithmetic
-    assert_raises JSON::ParserError do
+    assert_raises HotCell::MessageError do
       HotCell::Payload.parse('{"ratio":NaN}')
     end
   end

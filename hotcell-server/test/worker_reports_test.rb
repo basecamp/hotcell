@@ -43,6 +43,16 @@ class WorkerReportsTest < HotCellServerTest
     assert_equal 30, @child.deadline
   end
 
+  # JSON.parse raises EncodingError rather than JSON::ParserError for a key holding bytes that are not
+  # valid UTF-8, and the rescue here used to name the exceptions it expected. So one byte in one report
+  # unwound `run` and took every in-flight request with it — the same denial of service as the `[]` report
+  # above, from the same habit of enumerating what a parse can raise.
+  def test_a_report_whose_key_is_not_valid_utf8_is_dropped
+    apply %({"\xff\xfe":1,"idle":true}).b.force_encoding(Encoding::UTF_8)
+
+    assert_equal 30, @child.deadline
+  end
+
   # An idle report from a worker holding nothing used to clear `dispatched_at`, which is what `overdue?`
   # reads — so a worker could answer "I am done" and buy itself an unbounded deadline on a request it was
   # still working on.

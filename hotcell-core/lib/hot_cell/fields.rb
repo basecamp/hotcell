@@ -12,13 +12,20 @@ module HotCell
     private
       # Wraps the two errors every parse can produce: a line that is not JSON, and a line that is JSON but
       # not an object. The block builds the message from the parsed Hash.
+      #
+      # Payload.parse already answers with MessageError however the JSON layer failed, so this only adds
+      # the noun. It rescues around that call alone rather than around the block, because the block's own
+      # field checks raise MessageError too and re-wording those as "not valid JSON" would be a lie.
       def parse_message(line)
-        parsed = Payload.parse(line)
+        parsed = begin
+          Payload.parse(line)
+        rescue MessageError => error
+          raise MessageError, "#{noun} is not valid JSON: #{error.message}"
+        end
+
         raise MessageError, "#{noun} is not a JSON object" unless parsed.is_a?(Hash)
 
         yield parsed
-      rescue JSON::ParserError => error
-        raise MessageError, "#{noun} is not valid JSON: #{error.message}"
       end
 
       def object(parsed, key)

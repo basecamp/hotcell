@@ -188,7 +188,48 @@ class ClassificationTest < HotCellClientTest
     operation "test.anything"
   end
 
+  # The cell is the untrusted side, so its answer is untrusted bytes and every way of failing to read one
+  # has to land inside the taxonomy. JSON.parse raises EncodingError rather than JSON::ParserError for a
+  # key holding bytes that are not valid UTF-8, and Transport::Socket rescues neither by name — so a
+  # hostile cell could raise an exception in the application that no code, no verdict and no
+  # `perform.hot_cell` event described, past whatever the caller had arranged to rescue.
+  def test_an_answer_that_cannot_be_read_is_a_verdict_rather_than_an_escaping_exception
+    hostile = %({"v":1,"ok":true,"result":{"\xff\xfe":1},"timing":{}}\n).b
+
+    with_cell_answering(hostile) do
+      error = assert_raises TemporarilyUnavailable do
+        Anything.perform_in_hotcell [], [], {}
+      end
+
+      assert_match "could not be read", error.message
+    end
+  end
+
   private
+    # A cell whose supervisor answers one fixed line and closes, so the client reads exactly these bytes.
+    def with_cell_answering(line, name: "test")
+      Dir.mktmpdir "hotcell-hostile" do |root|
+        directory = File.join(root, name)
+        Dir.mkdir directory
+
+        work = UNIXServer.new File.join(directory, "work.sock")
+        answerer = Thread.new do
+          loop do
+            socket = work.accept
+            socket.write line
+            socket.close
+          end
+        end
+
+        HotCell.root = root
+        HotCell.register name, permanent: Unprocessable, transient: TemporarilyUnavailable
+        yield
+      ensure
+        answerer&.kill
+        work&.close
+      end
+    end
+
     def register_with(response, **options)
       FakeTransport.new(response).tap do |transport|
         HotCell.root = "/nowhere"

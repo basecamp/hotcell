@@ -505,8 +505,12 @@ module HotCell
       # The peer here is the one process in this design that runs untrusted code, so nothing it writes may be
       # taken on trust — including its shape. `Payload.parse` answers with whatever the JSON held, and a
       # worker writing `[]` used to reach `message[:deadline]` as `Array#[]`, raise TypeError, and take the
-      # cell down: the rescue below named MessageError and JSON::ParserError, and nothing above `run` catches
-      # anything. A compromised worker had a one-line denial of service against every other request.
+      # cell down, because nothing above `run` catches anything. A compromised worker had a one-line denial
+      # of service against every other request.
+      #
+      # The rescue below names only MessageError, and it can, because Payload.parse now answers with that
+      # however the JSON layer failed. Naming the exceptions here is what let the TypeError through, and
+      # then an EncodingError from a key holding bytes that are not valid UTF-8.
       #
       # `idle` is only believed from a worker that is actually serving something. A premature one used to
       # clear `dispatched_at`, which is what `overdue?` reads — so a worker could answer "I am done" and buy
@@ -524,7 +528,7 @@ module HotCell
 
           finish child, message[:code]
         end
-      rescue MessageError, JSON::ParserError => error
+      rescue MessageError => error
         unreadable_report child, Failure.sanitize(error.message)
       end
 

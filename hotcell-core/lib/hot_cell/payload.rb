@@ -29,9 +29,22 @@ module HotCell
       #
       # JSON.parse only. Never JSON.load, and never create_additions, both of which instantiate
       # arbitrary classes named by a json_class key in the document.
+      #
+      # Every way this can fail becomes one named failure, and the catch-all is the point rather than
+      # laziness. Callers used to name what JSON.parse raises, and naming it has now been wrong twice: a
+      # report that was not an object raised TypeError past a rescue for JSON::ParserError, and a key
+      # holding bytes that are not valid UTF-8 raises EncodingError past both. The supervisor reads worker
+      # reports through here inside the loop that enforces every request's deadline, and nothing above it
+      # rescues anything, so each miss is a one-line denial of service against every request in the cell.
+      #
+      # The body is a single JSON.parse call, so this is scoped to "the JSON layer failed" and cannot
+      # swallow a bug in our own code. NoMemoryError is deliberately not caught: it is not a StandardError,
+      # and a document large enough to raise it is the worker's own memory verdict rather than a bad line.
       def parse(json)
         JSON.parse json, symbolize_names: true, max_nesting: MAX_NESTING, allow_nan: false,
                          create_additions: false
+      rescue StandardError => error
+        raise MessageError, "#{error.class}: #{Failure.sanitize(error.message)}"
       end
 
       def validate!(object, name)
