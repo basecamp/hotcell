@@ -47,6 +47,17 @@ module ActiveStorage
         # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright. Both are the
         # input's fault rather than the operation's.
         unreadable MiniMagick::Error, MiniMagick::Invalid
+
+        # **Accepted risk.** A tool's output is not bounded on this path. `Operation#run_tool` caps what it
+        # reads at 64KB and drops the rest as it arrives, because an input that makes a tool print gigabytes
+        # of diagnostics costs this worker gigabytes of address space, takes RLIMIT_DATA with it, and arrives
+        # as a `memory` verdict — which is permanent, for a document whose only crime was being noisy.
+        # mini_magick reads both streams to EOF in a thread apiece and has no setting that bounds either;
+        # `graphicsmagick`, `cli_prefix`, `cli_env`, `restricted_env`, `timeout`, `logger`, `tmpdir`,
+        # `errors` and `warnings` are the whole list. The premise is that patching the library is worse than
+        # carrying this, and that the operations move off it: driving `magick` directly through `run_tool`
+        # bounds the output, returns the environment to us, and sheds the input staging, which is
+        # basecamp/hotcell#7.
       end
     end
   end
