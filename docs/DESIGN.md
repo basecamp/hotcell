@@ -149,6 +149,32 @@ have bytes inside a cell, a cell holds no credentials, and a cell carries one to
 is "the other conversions happening right now in this cell", which is why per-toolchain cells and a sober
 `concurrency` are containment decisions and not just scheduling ones.
 
+**A compromised worker can steal the cell's sockets.** It unlinks `work.sock` and binds its own, and every
+later request arrives at its listener with the caller's descriptors already attached. It may then read
+those inputs, write those outputs, and answer `ok`. This works because the socket directory has to be
+writable by the user the supervisor runs as, and workers run as that user.
+
+The worker that did it exits as designed and its listener does not. So the reach is every request the cell
+serves from then on, rather than only the ones in flight: the bound above covers one worker reading
+another's files, and it does not cover this.
+
+**Nothing stops this today.** Every prevention available needs something the deployment does not have. A
+tighter directory mode is undone by the owner, and the sticky bit grants the owner what it withholds from
+others. The immutable flag needs `CAP_LINUX_IMMUTABLE` and a uid per worker needs `CAP_SETUID`, and
+`cap-drop ALL` removes both. An abstract-namespace socket has no name to unlink and cannot be reached
+across `network: none`.
+
+Detection was tried and withdrawn. The supervisor can record each socket's inode and re-check it, and an
+attacker defeats that by hard-linking the original aside, serving from an impostor, and renaming the
+original back before the next check: the inode then matches and the theft leaves no trace. Measured. The
+check also cost more than it bought, because a supervisor that stops on a changed inode will unlink its
+successor's sockets during an overlapping restart.
+
+[Landlock](https://github.com/basecamp/hotcell/issues/13) is the one prevention that fits an unprivileged
+container: a worker gives up write access to the socket directory right after the fork, irreversibly and
+with no capability. Until then this is a known gap, and the containment is the same as for a compromise
+generally — a cell holds no credentials, carries one toolchain, and is replaced rather than repaired.
+
 This corrects an overclaim worth being explicit about, because it is easy to make: fork-per-request buys
 **memory** isolation, not file isolation. The argument for descriptors below is about the boundary between
 the application and the cell, and it does not extend to workers inside one cell.
