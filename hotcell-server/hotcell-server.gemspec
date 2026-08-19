@@ -11,13 +11,9 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "Run a HotCell: the supervisor, the worker, and the operation API."
   spec.description = <<~TEXT
-    The cell side of HotCell. A supervisor listens on two Unix sockets, forks a worker per request,
-    holds each worker to a wall-clock deadline and a set of resource limits, and answers for one that
-    dies without reporting.
-
-    An operation subclasses HotCell::Operation, declares its limits, and implements perform. This gem
-    depends on no application framework and does not load ActiveSupport, because a sandbox should carry
-    only what the work needs.
+    Runs a HotCell container. A supervisor listens on two Unix sockets, forks a worker for each request,
+    and enforces a wall clock deadline and resource limits on it. Write the work as a subclass of
+    HotCell::Operation.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"

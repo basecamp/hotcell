@@ -11,13 +11,9 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "Point Active Storage's transformer, analyzer, and previewers at a HotCell."
   spec.description = <<~TEXT
-    The transformer, analyzer, and previewer classes an application configures Rails with, so that
-    variants, image analysis, and previews happen in an unprivileged container instead of in the
-    application process.
-
-    It also closes what Rails leaves open on that path: the built-in analyzers go silent when
-    variant_processor is a class, the built-in previewers answer accept? by shelling out to look for a
-    binary that is no longer there, and none of the jobs retries anything a cell can transiently answer.
+    Drop-in replacements for Active Storage's variant processor, analyzers, and previewers. Configure
+    Rails with these classes and variants, image and media analysis, and previews run in a HotCell
+    container instead of in the application process.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"

@@ -11,12 +11,9 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "The wire protocol shared by both sides of a HotCell."
   spec.description = <<~TEXT
-    HotCell runs untrusted work in an unprivileged sibling container with no network, reached over a
-    Unix socket that carries file descriptors rather than paths or bytes.
-
-    This gem holds what both sides must agree on: the request and response format, the socket that
-    carries them, SCM_RIGHTS marshalling, descriptor access-mode verification, payload validation, and
-    the error taxonomy. It has no dependencies, opens no file, and runs no tool.
+    The wire protocol between an application and a HotCell container: the request and response format,
+    file descriptor passing over SCM_RIGHTS, payload validation, and the error taxonomy. Both
+    hotcell-client and hotcell-server depend on it. Install one of those rather than this.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"

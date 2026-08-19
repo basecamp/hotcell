@@ -11,13 +11,9 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "Call a HotCell from an application."
   spec.description = <<~TEXT
-    The application side of HotCell. Register the cells a deployment runs, subclass HotCell::Client to
-    name one, and call it with descriptors and a payload.
-
-    The client owns everything a caller needs to respond correctly to a cell that is saturated,
-    restarting, or absent: the classification of every error into permanent and transient, the
-    exception classes an application injects for each, and instrumentation through
-    ActiveSupport::Notifications.
+    Call operations that run in a HotCell container. Register a cell, subclass HotCell::Client to name
+    an operation, and call it with open file descriptors and a payload. Failures arrive classified as
+    permanent or transient, as exception classes your application supplies.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"
