@@ -422,11 +422,6 @@ means bombs, `deadline` means wedged tools.
 Working on the gems themselves is documented in [CONTRIBUTING.md](CONTRIBUTING.md): how the suites are split,
 how a cell is exercised natively and in a container, and the rules that are not obvious from the code.
 
-```
-bundle install
-rake
-```
-
 ## Design
 
 [docs/DESIGN.md](docs/DESIGN.md) holds what the code cannot tell you: the threat model, the invariants the

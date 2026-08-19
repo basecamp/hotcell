@@ -170,11 +170,12 @@ with its memory clamp unenforced and says so once, on `$stderr`. Tests that asse
 where it cannot be set; a new one that asserts memory behaviour has to do the same. Every other limit is
 strict on both platforms.
 
-**Testing a control.** Security controls here fail silently, so a test that would still pass with the control
-removed is worse than no test: it reads as assurance. Every control is covered by a test that observes the
-behaviour the control produces, rather than by an assertion that the control is written down —
-`unsetenv_others: true` is proved by setting a variable, running a tool, and finding that the tool never saw
-it. Where a control has no reachable trigger and so cannot be tested, it says so where it lives.
+**Testing a control.** Security controls here fail silently, so a test that would still pass with
+the control removed is worse than no test: it reads as assurance. Every control is covered by a test
+that observes the behavior the control produces, rather than by an assertion that the control is
+written down — `unsetenv_others: true` is proved by setting a variable, running a tool, and finding
+that the tool never saw it. Where a control has no reachable trigger and so cannot be tested, it
+says so where it lives.
 
 **A verdict that cannot be taken back needs a reason.** `permanent` means an application may write a failure
 down against a blob and serve it from a cache forever, so anything unclassified is transient by default.
