@@ -1,0 +1,27 @@
+# The root Gemfile pulls in all five gemspecs, so the one Gemfile.lock is where every third-party gem
+# resolves — one bundler entry covers them all. examples/Gemfile holds only path gems from this
+# repository and carries no lock, so there is nothing there to update.
+version: 2
+updates:
+  - package-ecosystem: bundler
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      development-dependencies:
+        dependency-type: "development"
+    cooldown:
+      semver-major-days: 7
+      semver-minor-days: 3
+      semver-patch-days: 2
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
