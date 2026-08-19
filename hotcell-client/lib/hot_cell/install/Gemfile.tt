@@ -5,11 +5,9 @@
 
 source "https://rubygems.org"
 
-# TODO: pin to released gems once hotcell is published
-git "https://github.com/basecamp/hotcell.git", branch: "master" do
-  gem "hotcell-core",   glob: "hotcell-core/*.gemspec"
-  gem "hotcell-server", glob: "hotcell-server/*.gemspec"
-end
+# Pinned to the client that installed it: the two are halves of one wire contract, and a skew between
+# them answers `protocol` on every request.
+gem "hotcell-server", "<%= HotCell::Client::VERSION %>"
 
 # Gems your operations need go here. For example:
 #

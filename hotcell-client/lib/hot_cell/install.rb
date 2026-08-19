@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+require "erb"
 require "fileutils"
+
+require "hot_cell/client/version"
 
 module HotCell
   # Writes the hotcell/ directory into an application: a complete Dockerfile to customize, the cell's
@@ -29,9 +32,15 @@ module HotCell
             out.puts "   skip  #{label} (already exists)"
           else
             FileUtils.mkdir_p File.dirname(destination)
-            FileUtils.cp template, destination
+            File.write destination, render(template)
             out.puts " create  #{label}"
           end
+        end
+
+        # A .tt is ERB, so a template can name something only the installing gem knows. The Gemfile uses it
+        # to pin the cell to this client's version, which is the one number the two sides must agree on.
+        def render(template)
+          ERB.new(File.read(template), trim_mode: "-").result(binding)
         end
     end
   end

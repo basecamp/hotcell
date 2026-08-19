@@ -27,6 +27,19 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # The Gemfile template is ERB rather than a copy, because the cell's server and this client are halves of
+  # one wire contract: a skew between them answers `protocol` on every request.
+  def test_install_pins_the_cell_to_the_installing_clients_version
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+
+      gemfile = File.read(File.join(root, "hotcell", "Gemfile"))
+
+      assert_match %(gem "hotcell-server", "#{HotCell::Client::VERSION}"), gemfile
+      refute_match "<%", gemfile
+    end
+  end
+
   def test_install_leaves_an_existing_file_exactly_as_it_is
     Dir.mktmpdir do |root|
       customized = File.join(root, "hotcell", "Dockerfile")
