@@ -412,7 +412,7 @@ Per registered cell. They set how the application responds to what a cell answer
 
 ```ruby
 HotCell.root = ENV["HOTCELL_ROOT"]              # unset turns every cell off
-HotCell.group = ENV["HOTCELL_GROUP"]&.to_i      # the cell's gid; unset where both sides are one user
+HotCell.group = ENV["HOTCELL_GROUP"]            # the cell's gid; unset where both sides are one user
 
 HotCell.register "images",
   timeout: 30,

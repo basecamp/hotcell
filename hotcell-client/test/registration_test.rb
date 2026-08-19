@@ -82,4 +82,24 @@ class RegistrationTest < HotCellClientTest
                  cell.exception_for(HotCell::Failure.new(code: "killed", cause: "deadline"))
     assert_equal Unprocessable, cell.exception_for(HotCell::Failure.new(code: "killed", cause: "memory"))
   end
+
+  def test_group_takes_the_string_an_environment_variable_holds
+    HotCell.group = "10001"
+
+    assert_equal 10001, HotCell.group
+  end
+
+  def test_an_unset_group_stays_nil
+    HotCell.group = nil
+
+    assert_nil HotCell.group
+  end
+
+  def test_a_group_that_does_not_name_a_gid_raises
+    assert_raises(HotCell::ConfigurationError) { HotCell.group = "" }
+
+    error = assert_raises(HotCell::ConfigurationError) { HotCell.group = "NOTAGROUP" }
+
+    assert_match %(HotCell.group is "NOTAGROUP" and must be a numeric gid), error.message
+  end
 end

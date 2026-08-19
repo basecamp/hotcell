@@ -15,7 +15,16 @@ module HotCell
     # group; the client then narrows each descriptor's mode on the way out. See Client#wrap.
     #
     # Leave it unset where both sides already run as one user, which is how development runs.
-    attr_accessor :group
+    attr_reader :group
+
+    # Takes the String an environment variable holds, so the initializer is one assignment with no
+    # coercion. `to_i` would read garbage as gid 0 — root's group — so a value that is not a number
+    # raises instead.
+    def group=(value)
+      @group = value.nil? ? nil : Integer(value)
+    rescue ArgumentError, TypeError
+      raise ConfigurationError, "HotCell.group is #{value.inspect} and must be a numeric gid"
+    end
 
     attr_writer :logger
 
