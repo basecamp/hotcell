@@ -385,8 +385,7 @@ handles the type: Rails' own previewers and analyzers look for their tool in `ac
 removed too early turns that processing off without an error.
 
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers all of this in detail: every container flag, how to
-size the numbers, the shared group, bringing your own container, and mounting scratch from the host
-instead of a tmpfs.
+size the numbers, the shared group, bringing your own container, and where scratch lives.
 
 ### Using custom operations
 

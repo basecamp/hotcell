@@ -152,9 +152,9 @@ from the README's accessory, not recommendations.
 | Flag | Example | Tune it from |
 | --- | --- | --- |
 | `cpus` | `2` | The share of the host this cell may use. Start the cell's `concurrency` at twice this number. |
-| `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. With scratch mounted from the host there is no tmpfs term — see "Scratch from the host". |
+| `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. On a disk-backed scratch there is no tmpfs term — see "Where scratch lives". |
 | `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
-| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. Mounting scratch from the host instead decouples it from `memory` — see "Scratch from the host". |
+| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. Moving scratch onto disk decouples it from `memory` — see "Where scratch lives". |
 | `ulimit: stack` | leave it unset | A container inherits the Docker daemon's value, normally 8MB, and that is where to leave it. Lowering it buys a worker about 24MB more room at 2MB, and nothing at all for an operation that shells out. It costs far more than it buys: a thread that overflows the smaller stack dies on `SIGSEGV`, which the cell reports as `killed`/`memory` — a permanent verdict written against the caller's file, and identical to a genuine memory breach, so it sends you to the wrong setting. Raise the cell's `memory` instead. It belongs here rather than in `config.rb` because glibc reads it at exec, before `Process.setrlimit` could run. |
 
 ### Security
@@ -166,7 +166,7 @@ serves requests exactly as before.
 | --- | --- | --- |
 | `network` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. Set it as an accessory key, not under `options:`. |
 | `read-only` | `true` | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
-| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` stops a dropped binary running from `/tmp`, which is where a request's files live. It does not cover the socket volume, and it does not stop `ruby payload.rb`. With scratch bind-mounted from the host these must come from the host mount instead. |
+| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` stops a dropped binary running from `/tmp`, which is where a request's files live. It does not cover the socket volume, and it does not stop `ruby payload.rb`. On a disk-backed scratch Docker sets none of them — see "Where scratch lives". |
 | `cap-drop` | `ALL` | Removes every Linux capability. |
 | `security-opt` | `no-new-privileges:true` | Prevents a setuid binary from regaining what `cap-drop` removed. |
 | `user` | `10001:10001` | Runs the cell with no home directory and no shell. Without user namespace remapping this is a host uid, and it is inside the ordinary range, so pick one your hosts do not give to a person. |
@@ -423,62 +423,75 @@ Nothing checks these three for you.
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
 
-## Scratch from the host
+## Where scratch lives
 
 The configuration documented above uses RAM-backed tmpfs for scratch space. This couples three
 configuration params: an operation's `FSIZE` (max file size write), and the `tmpfs` and `memory`
 container configs. Increasing `FSIZE` require increasing the other two, which may end up putting
 memory pressure on the host node.
 
-Scratch is `/tmp`: staged inputs, staged outputs, and every intermediate a tool writes.  Those pages
+Scratch is `/tmp`: staged inputs, staged outputs, and every intermediate a tool writes. Those pages
 are charged to the container's cgroup and, with `memory-swap` equal to `memory`, they cannot be
 reclaimed or swapped — so the tmpfs `size=` and the container's `memory` grow together, byte for
 byte. Every time `file_size` goes up to admit a larger conversion, `memory` pays for it.
 
-The alternative is a bind mount from the host's disk. Files written there pass through the page cache,
-and the kernel writes those pages back and drops them under pressure, so a large file on scratch can no
-longer OOM the cell and scratch can be sized in gigabytes without touching `memory` at all.
+Moving scratch onto disk breaks that coupling. Files written there pass through the page cache, and the
+kernel writes those pages back and drops them under pressure, so a large file on scratch can no longer
+OOM the cell and `memory` sizes from `concurrency × peak RSS` alone, kept above the cell's own `memory`
+rlimit.
 
-**Keep the tmpfs when scratch is small and stays small.** It is RAM-fast, it vanishes when the container
-stops, and one flag carries the size cap and all three security flags.
+Three layouts, trading the same three things:
 
-**Mount from the host when scratch has to hold big intermediates.** A 48MP photo decompresses to about
-150MB before the variant is written, and a tool's temp files are not bounded by the size of its output.
-Scratch and memory then decouple, and `memory` sizes from `concurrency × peak RSS` alone, kept above the
-cell's own `memory` rlimit. Three things you give up:
+| Layout | Backed by | Size cap | `nosuid,nodev,noexec` | Provisioning |
+| --- | --- | --- | --- | --- |
+| tmpfs | RAM, charged to the cgroup | the `size=` option | yes | none |
+| named volume | disk, under `/var/lib/docker/volumes` | none | none | none |
+| host mount | disk | the filesystem's size | from the host mount | per host |
 
-- **Speed.** Disk, not RAM. On NVMe, for spool-and-process pipelines, rarely the bottleneck — the
-  descriptor design already keeps the biggest bytes off scratch entirely.
-- **Cleanup by the mount's lifetime.** A bind mount survives the container. `Slot#prepare` clears stale
-  homes and discarded trees at boot, so this is covered — but by the cell's code rather than by the
-  mount's lifetime, which is the weaker guarantee.
-- **The flags and the cap, unless you put them back.** Docker can neither set `nosuid,nodev,noexec` on a
-  bind mount nor cap one. Both have to come from the host mount, which is the second decision.
+Both disk layouts give up speed, and that is rarely the bottleneck: on NVMe, for spool-and-process
+pipelines, the descriptor design already keeps the biggest bytes off scratch entirely. Both also outlive
+the container, so cleanup stops being the mount's job and becomes `Slot#prepare`'s — it clears stale homes
+and discarded trees at boot, which is a weaker guarantee than a mount that cannot survive.
 
-### A plain directory, or a dedicated filesystem?
+### Keeping the tmpfs
 
-**A plain host directory** costs nothing to provision and enforces nothing. There is no size cap, so a
-runaway operation fills whatever filesystem holds the directory — usually the root filesystem, and ext4's
-common `errors=remount-ro` can flip the whole root read-only on the way down. There are no flags either,
-though two of the three lose almost nothing: `nosuid` is redundant with `no-new-privileges:true`, and
-`nodev` with `cap-drop: ALL` plus the non-root uid. `noexec` is the real loss, and it is modest — it
-stops a dropped ELF binary, and it never stopped `ruby payload.rb`.
+Right when scratch is small and stays small. It is RAM-fast, it vanishes when the container stops, and one
+flag carries the size cap and all three security flags. It is the only layout where Docker sets those
+flags for you.
 
-**A dedicated filesystem** — a partition, an LV, or a loopback image file — restores both. Its size is
-the cap, so a fill stays inside scratch and reaches the caller as `Errno::ENOSPC`, which the cell
-classifies `failed`: transient, retried, never recorded against a blob. The flags ride the host mount
-options, and a bind mount carries its source's flags into the container, so the conformance
-`scratch_noexec` check passes unchanged. The cost is a few commands and one fstab line per host.
+### A named volume
 
-### Configuring it
+The way onto disk that needs nothing of the host. Replace the `tmpfs:` option with a named volume on the
+same path:
 
-Three edits to the accessory in the README.
+```yaml
+# config/deploy.yml — the cell, changed from the README's accessory
+accessories:
+  active_storage:
+    volumes:
+      - hotcell-sockets:/run/hotcell/cell       # unchanged
+      - hotcell-scratch:/tmp                    # scratch, on disk
 
-1. Delete the `tmpfs:` option. The bind mount replaces it — both target `/tmp`.
-2. Add the host path under `volumes:`. An absolute host path in a Kamal `volumes:` entry is a bind mount,
-   passed to `docker run -v` verbatim.
-3. Resize `memory` and `memory-swap`. The tmpfs term is gone, so size from `concurrency × peak RSS`, kept
-   above the cell's `memory` rlimit.
+    options:
+      memory: 2g                                # no tmpfs term: concurrency × peak RSS
+      memory-swap: 2g                           # equal to memory
+      # tmpfs: gone. /tmp is the named volume above.
+```
+
+Docker creates the volume on first boot and initializes it from the image's own `/tmp` — the content and
+the permissions both, which is `1777` on the Debian base — so the cell's uid can write to it with no host
+work at all. No `mkdir`, no `chown`, no fstab line. That is the same rule the socket volume already
+depends on, and the installed `Dockerfile` records it.
+
+What you give up is the cap and the flags, and Docker can set neither on a named volume. A runaway write
+is then bounded only by the `file_size` rlimit per file and by deadline × disk throughput, and a fill
+lands on whatever filesystem holds `/var/lib/docker` — usually the root filesystem. The `isolation`
+operation reports `scratch_noexec: false` against a cell configured this way, which is the truth.
+
+### A host-mounted filesystem
+
+The way onto disk that keeps the cap and the flags. Give the accessory an absolute host path, which Kamal
+passes to `docker run -v` verbatim as a bind mount:
 
 ```yaml
 # config/deploy.yml — the cell, changed from the README's accessory
@@ -495,23 +508,18 @@ accessories:
       #        must come from the host mount.
 ```
 
-Everything else in the accessory is unchanged, and so is the application's half.
+**Give it a dedicated filesystem** — a partition, an LV, or a loopback image file. Its size is then the
+cap, so a fill stays inside scratch and reaches the caller as `Errno::ENOSPC`, which the cell classifies
+`failed`: transient, retried, never recorded against a blob. The flags ride the host mount options, and a
+bind mount carries its source's flags into the container, so `scratch_noexec` still reports true.
 
-### Preparing the host
+A plain host directory is not worth the trouble. It gives up the cap and the flags exactly as a named
+volume does, and adds the `chown` work that a named volume avoids.
 
-**Chown the source, in every variant.** A bind mount keeps the host directory's ownership, and the cell
-runs as `10001:10001`. Docker creates a missing source owned by root, and the cell then fails every
-request with `EACCES`. Create and chown it before the first boot.
-
-A plain directory:
-
-```
-mkdir -p /var/lib/hotcell-scratch
-chown 10001:10001 /var/lib/hotcell-scratch
-```
-
-A dedicated filesystem, as a loopback image — no repartitioning, and sized from `file_size × concurrency`
-plus headroom:
+**Chown the source.** A bind mount keeps the host directory's ownership rather than taking the image's,
+and the cell runs as `10001:10001`. Docker creates a missing source owned by root, and the cell then fails
+every request with `EACCES`. Create and chown it before the first boot. As a loopback image — no
+repartitioning, and sized from `file_size × concurrency` plus headroom:
 
 ```
 fallocate -l 8G /var/lib/hotcell-scratch.img
@@ -533,20 +541,19 @@ findmnt -T /var/lib/hotcell-scratch -o TARGET,SOURCE,FSTYPE,OPTIONS
 `FSTYPE` must be a disk filesystem, and `OPTIONS` shows which of the three flags the cell will actually
 get.
 
-### What it changes in the numbers
+### What changes in the numbers
 
-The `file_size × concurrency` arithmetic under "Making the numbers agree" does not disappear. It moves
-from the tmpfs `size=` to the host filesystem's size, and `memory` loses its tmpfs term.
+The `file_size × concurrency` arithmetic under "Making the numbers agree" does not disappear. On either
+disk layout `memory` loses its tmpfs term, and the number that has to fit becomes the host filesystem's
+size — or, on a named volume, nothing, because there is no cap to fit inside.
 
-Mind one interaction. If you also raise or remove `file_size` so that large conversions succeed, the
-filesystem's size becomes the only bound on what a runaway write consumes; without it the bound is
-deadline × disk throughput. An uncapped directory with an uncapped `file_size` is the one combination
-with no bound at all, and a capped filesystem is what makes a generous `file_size` safe to run.
+Mind one interaction. If you also raise or remove `file_size` so that large conversions succeed, a cap is
+the only bound left on what a runaway write consumes; without one the bound is deadline × disk throughput.
+An uncapped layout with an uncapped `file_size` is the one combination with no bound at all, and a capped
+filesystem is what makes a generous `file_size` safe to run.
 
-Three things do not change:
+Two things do not change on any layout:
 
-- `HOTCELL_WORKSPACE` keeps its default. It lives under `Dir.tmpdir`, which is now the bind mount, and
-  the server treats scratch as a plain directory without ever checking the filesystem type.
+- `HOTCELL_WORKSPACE` keeps its default. It lives under `Dir.tmpdir`, and the server treats scratch as a
+  plain directory without ever checking the filesystem type.
 - A full scratch still reaches the caller as `failed`, which is transient, exactly as a full tmpfs did.
-- Boot cleanup. `Slot#prepare` clears what an earlier boot left behind, which a persistent mount now
-  relies on.
