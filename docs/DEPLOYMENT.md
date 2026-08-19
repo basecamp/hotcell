@@ -11,6 +11,35 @@ any orchestrator that can set the same `docker run` flags will do.
 [docs/TUNING.md](TUNING.md) is a companion document. It covers measuring your way to values for your
 own workload, where this one covers what the values mean.
 
+<!-- regenerate with `rake toc` -->
+
+<!-- toc -->
+
+- [Building an image](#building-an-image)
+  * [Using the installed Dockerfile](#using-the-installed-dockerfile)
+  * [Bringing your own container](#bringing-your-own-container)
+- [Container settings](#container-settings)
+  * [Performance](#performance)
+  * [Security](#security)
+  * [General](#general)
+  * [Sizing the numbers](#sizing-the-numbers)
+- [Cell settings](#cell-settings)
+  * [Performance](#performance-1)
+  * [Security](#security-1)
+  * [Changing a shipped operation's limits](#changing-a-shipped-operations-limits)
+  * [Settings that trade one for the other](#settings-that-trade-one-for-the-other)
+- [Application settings](#application-settings)
+  * [The socket's file mode](#the-sockets-file-mode)
+  * [The group both sides share](#the-group-both-sides-share)
+- [Making the numbers agree](#making-the-numbers-agree)
+- [Where scratch lives](#where-scratch-lives)
+  * [Keeping the tmpfs](#keeping-the-tmpfs)
+  * [A named volume](#a-named-volume)
+  * [A host-mounted filesystem](#a-host-mounted-filesystem)
+  * [What changes in the numbers](#what-changes-in-the-numbers)
+
+<!-- tocstop -->
+
 ## Building an image
 
 ### Using the installed Dockerfile

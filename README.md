@@ -11,6 +11,30 @@ remote procedure call ("RPC"): your application calls an ordinary Ruby method, t
 forwarded to the container where the work runs in a forked worker process with strict limits
 applied, and the results are returned or written to the output file.
 
+<!-- regenerate with `rake toc` -->
+
+<!-- toc -->
+
+- [Status](#status)
+- ["Why would I use this?"](#why-would-i-use-this)
+- [Extensibility](#extensibility)
+- [The gems](#the-gems)
+- [The moving parts](#the-moving-parts)
+- [How a request works](#how-a-request-works)
+- [Usage](#usage)
+  * [Using the Active Storage operations](#using-the-active-storage-operations)
+  * [Using custom operations](#using-custom-operations)
+- [Observability](#observability)
+  * [Logs](#logs)
+  * [Metrics collection](#metrics-collection)
+  * [Per-call telemetry](#per-call-telemetry)
+  * [Container healthcheck](#container-healthcheck)
+  * [Rails healthcheck](#rails-healthcheck)
+- [Development](#development)
+- [Design](#design)
+
+<!-- tocstop -->
+
 ## Status
 
 This is still pre-release software! It may break in interesting ways. Use with caution until there's a v1.0 release.
@@ -102,20 +126,20 @@ writes reaches the next request on that slot.
 
 An **operation** is the unit of work a cell offers: a subclass of `HotCell::Operation` with a
 routing name, its own `limits`, and a `perform(inputs, outputs, **payload)` that declares the
-payload keys it wants as keyword arguments. The examples above name themselves explicitly. Left
-unnamed, both sides derive the same name from the class path, and the cell-side `Operation` suffix
-is stripped. So `ExtractTextOperation` in the cell and `ExtractText` in the application both
-answer to `extract_text`. The set of operations a cell carries is its **inventory** -- logged at
-boot, advertised on the control socket.
+payload keys it wants as keyword arguments. By default, both sides derive the same name from the
+class path, and the cell-side `Operation` suffix is stripped. So `ExtractTextOperation` in the cell
+and `ExtractText` in the application both answer to `extract_text`. The set of operations a cell
+carries is its **inventory** -- logged at boot, advertised on the control socket.
 
 A **client** is the application-side mirror of an operation: a subclass of `HotCell::Client` that
 names the cell with `hotcell` and the operation with `operation`, and exposes
 `perform_in_hotcell`. That is a blocking call -- it sends the request and waits for the cell's
 answer, up to the `timeout` the cell was registered with.
 
-A **tool** is a program an operation runs in a subprocess -- `soffice`, `mutool`, `ffmpeg` -- via
-`run_tool`, with a fully written environment and bounded capture of its output. The worker waits for
-it, and the tool sees only the environment its operation wrote for it.
+A **tool** is a program an operation runs in a subprocess (e.g., `mutool`, `ffmpeg`) via `run_tool`,
+with a fully written environment and bounded capture of its output. The worker waits for it, and the
+tool sees only the environment its operation wrote for it. Not every operation uses a tool, for
+example the Vips operations call `libvips` directly from the Ruby worker process.
 
 The **payload** is a `Hash` of options, riding the request as its one JSON object and arriving in
 `perform` as keyword arguments; the **result** is the `Hash` an operation returns, riding the
@@ -125,8 +149,7 @@ response the same way. Neither carries file contents.
 outputs write-only. They are the only way file contents enter or leave a cell. Asking one for its
 `path` materializes a temporary file on the worker's scratch that a tool can take. An input's bytes
 are copied there on the first ask, and an output's file is sent back through the descriptor when
-`perform` returns.  An operation that reads or writes the descriptor directly never touches the
-disk.
+`perform` returns.  An operation may read and write directly to the descriptors for efficiency.
 
 A failure carries a **code** -- `unreadable`, `invalid`, `unsupported`, `failed`, `capacity`,
 `unavailable`, `timeout`, `protocol`, or `killed` with a cause -- and each code is **permanent** or
@@ -192,13 +215,15 @@ gem "activestorage-hotcell-client"
 The Active Storage gems are what need the unreleased Rails 8.2 (see [Status](#status)); the
 `hotcell-*` gems themselves do not require Rails.
 
-Then run `bin/rails hotcell:install`. Everything about the cell lives in a `hotcell/` directory in
-the application root, separate from the client configuration and the application code:
+Then run `bin/rails hotcell:install` which creates:
 
-- a `Gemfile` for what the operations need,
-- a `Dockerfile` that builds the cell's image,
-- a `config.rb` for the cell's own settings, and
-- an `operations/` directory of Ruby files the cell loads at boot.
+- `hotcell/Gemfile` for what the operations need,
+- `hotcell/Dockerfile` that builds the cell's image,
+- `hotcell/config.rb` for the cell's own settings, and
+- `hotcell/operations/` directory of Ruby files the cell loads at boot.
+
+Everything about the cell lives in this `hotcell/` directory in the application root, separate from the
+client configuration and the application code.
 
 Add the server gem to the cell's `Gemfile`, and load the operations that match the classes the
 application will name -- requiring an operation's file is what serves it:
@@ -501,6 +526,11 @@ its class, clamped to the cell's exactly as the shipped ones are.
 Some strategies that are working for us to monitor HotCell, which we recommend you add to your
 application. (Some of these things may show up more-fully-formed in a future release.)
 
+### Logs
+
+The cell writes one JSON object per event to stdout, so whatever ships your container logs ships
+these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause.
+
 ### Metrics collection
 
 Poll `cell.metrics` on a schedule, for example with a [Yabeda](https://github.com/yabeda-rb/yabeda)
@@ -523,41 +553,13 @@ remember to use this.
 
 ### Rails healthcheck
 
-The cell responds to requests for status and metrics on a separate UNIX socket that won't block on
-worker requests. We recommend using this in a Rails controller endpoint like `/up/hotcell` to return
-a 200/OK if the cell is responsive.
+Poll `describe` and `metrics` from an unauthenticated endpoint like `/up/hotcell`. The supervisor
+answers both on the control socket without forking, so polling costs nothing.
 
-### Work socket probes
-
-`describe` and `metrics` answer on the control socket, which a descriptor never crosses. They report a
-healthy cell whose work socket your application cannot use at all.
-
-So carry two trivial operations that cross the work socket, and call them from whatever page or probe
-reports the cell's health. `examples/operations/echo.rb` and `examples/operations/reopen.rb` in this
-repository are written for this -- copy both into your own `operations/`. Neither loads a library nor
-runs a tool, so together they cost the blast radius nothing.
-
-**They prove different things, and you need both.** `echo` reads both descriptors directly, so one round
-trip proves descriptor passing end to end. `reopen` opens both **by name**, which is what every operation
-that hands a tool a filename does. A cell with the shared group missing answers `echo` perfectly and
-fails `reopen` with `EACCES` -- the whole difference between a cell that works and one that fails on
-every real conversion.
-
-**`reopen` covers both directions on purpose.** An input is readable by the group and an output is
-writable by it, and a cell can hold one of those permissions without the other. The ffmpeg video
-previewer re-opens its destination, so a probe that read the input alone would go green on a cell where
-every video preview fails on the write.
-
-Four checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
-supervisor, one `echo` for the socket that real files travel over, and one `reopen` for the group they
-travel in. When you move an existing application onto a cell, deploying the accessory and confirming
-those four first separates a deployment problem from a conversion problem.
-
-### Logs
-
-The cell writes one JSON object per event to stdout, so whatever ships your container logs ships
-these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause. `memory`
-means bombs, `deadline` means wedged tools.
+A descriptor never crosses that socket, so both stay green on a cell whose work socket your application
+cannot use. Only a round trip sees that: copy `examples/operations/echo.rb` and `reopen.rb` into the
+cell, call both from a second authenticated endpoint, and check the bytes come back. A cell missing the
+shared group answers `echo` perfectly and fails `reopen` with `EACCES`.
 
 ## Development
 

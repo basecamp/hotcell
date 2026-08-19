@@ -81,8 +81,8 @@ readable and pure Ruby with no external toolchain — which is also what lets th
 converters and Docker are absent.
 
 `echo` is also meant to be copied into a real cell and kept there. It is the only cheap way to prove the
-work socket answers, because `describe` and `metrics` cross the control socket instead. See "Work socket
-probes" in the [README](README.md#work-socket-probes).
+work socket answers, because `describe` and `metrics` cross the control socket instead. See "Rails
+healthcheck" in the [README](README.md#rails-healthcheck).
 
 | op | behavior | what it proves |
 | --- | --- | --- |
