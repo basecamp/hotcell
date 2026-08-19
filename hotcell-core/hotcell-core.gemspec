@@ -11,12 +11,12 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "The wire protocol shared by both sides of a HotCell."
   spec.description = <<~TEXT
-    HotCell runs untrusted media conversion in an unprivileged sibling container with no network,
-    reached over a Unix socket that carries file descriptors rather than paths or bytes.
+    HotCell runs untrusted work in an unprivileged sibling container with no network, reached over a
+    Unix socket that carries file descriptors rather than paths or bytes.
 
-    This gem holds what both sides must agree on: the request and response format, SCM_RIGHTS
-    marshalling, descriptor access-mode verification, payload validation, and the error taxonomy.
-    It performs no I/O of its own and loads no media library.
+    This gem holds what both sides must agree on: the request and response format, the socket that
+    carries them, SCM_RIGHTS marshalling, descriptor access-mode verification, payload validation, and
+    the error taxonomy. It has no dependencies, opens no file, and runs no tool.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"

@@ -16,8 +16,8 @@ Gem::Specification.new do |spec|
     dies without reporting.
 
     An operation subclasses HotCell::Operation, declares its limits, and implements perform. This gem
-    deliberately depends on no application framework: nothing about it loads ActiveSupport, because a
-    sandbox should carry only what the conversion needs.
+    depends on no application framework and does not load ActiveSupport, because a sandbox should carry
+    only what the work needs.
   TEXT
 
   spec.required_ruby_version = ">= 3.3"
