@@ -19,6 +19,7 @@ your own application — start with [README.md](README.md) instead.
 - [Writing it down](#writing-it-down)
   * [Accepted risk](#accepted-risk)
 - [CI](#ci)
+- [Making a release](#making-a-release)
 
 <!-- tocstop -->
 
@@ -260,3 +261,23 @@ as a new finding costs a maintainer the same argument every time.
 
 Actions are pinned to SHAs and the workflow has no default permissions. `zizmor` will tell you if a change
 breaks either.
+
+## Making a release
+
+The five gems release together on one version, and `VERSION` at the repository root is what sets it.
+
+- Prechecks
+  - [ ] make sure CI is green
+  - [ ] `bundle exec rake` — the full suite and rubocop
+  - [ ] update `CHANGELOG.md`: retitle `next / unreleased` with the version and the date
+  - [ ] `bundle exec rake version:bump[1.2.3]` — writes `VERSION` and the five gems' version constants
+  - [ ] commit, and tag as `v1.2.3`
+- Release
+  - [ ] `bundle exec rake gems` — builds the five gems into `pkg/`, which it empties first
+  - [ ] `git push && git push --tags` — **before** the gems: every gemspec's `changelog_uri` and
+        `source_code_uri` name the tag, and they 404 until it is on GitHub
+  - [ ] `for f in pkg/*.gem ; do gem push $f ; done`
+  - [ ] create a release at https://github.com/basecamp/hotcell/releases
+- Post-release
+  - [ ] `bundle exec rake version:bump[1.3.0.alpha]`, and open a new `next / unreleased` section in
+        `CHANGELOG.md`, so that `master` never reports a version that was released

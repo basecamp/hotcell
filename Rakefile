@@ -79,6 +79,9 @@ task :gems do
   require "fileutils"
 
   version = File.read("VERSION").strip
+
+  # Emptied rather than added to, so that `gem push pkg/*.gem` cannot reach a previous release's files.
+  FileUtils.rm_rf "pkg"
   FileUtils.mkdir_p "pkg"
 
   GEMS.each do |name|
