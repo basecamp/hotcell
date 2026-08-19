@@ -277,7 +277,12 @@ In `config.rb`, which loads at boot before any operation, declare the cell's own
 require "active_support"
 require "active_support/core_ext/numeric"
 
+# configure the cell's limits
 HotCell.limits concurrency: 4, queue_size: 8, deadline: 60.seconds, memory: 1536.megabytes
+
+# configure individual operation limits
+require "active_storage/hot_cell/server/transformers/image/vips"
+ActiveStorage::HotCell::Server::Transformers::Image::Vips.limits file_size: 256 * 1024**2
 ```
 
 The image's entrypoint is `hotcell`, which loads `config.rb`, then the operations in sorted order, and
