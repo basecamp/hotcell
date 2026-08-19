@@ -154,7 +154,8 @@ later request arrives at its listener with the caller's descriptors already atta
 those inputs, write those outputs, and answer `ok`. This works because the socket directory has to be
 writable by the user the supervisor runs as, and workers run as that user.
 
-The worker that did it exits as designed and its listener does not. So the reach is every request the cell
+The worker that did it exits as designed and its listener does not, because a child it forked calls
+`setsid` and leaves the process group the reap sweep kills. So the reach is every request the cell
 serves from then on, rather than only the ones in flight: the bound above covers one worker reading
 another's files, and it does not cover this.
 

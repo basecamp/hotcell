@@ -442,9 +442,16 @@ module HotCell
         # **Accepted risk.** A process group is voluntary, so it holds for a tool that behaves and not for
         # one that does not. Code running in a worker's child can call `setsid` and leave, which needs no
         # capability and so survives `cap-drop ALL`, and neither the deadline kill nor the reap sweep reaches
-        # it afterwards. It then runs untimed until `pids-limit` or the cgroup ends it. The premise is that
-        # this is containment of a *compromise*, which is denial of service against a cell and out of scope
-        # per docs/DESIGN.md, and that the bounds which do not depend on cooperation are the container's.
+        # it afterwards. It then runs untimed until `pids-limit` or the cgroup ends it.
+        #
+        # It reaches further than that, so this is not the denial of service docs/DESIGN.md puts out of
+        # scope. A stolen listener needs a live process to hold it, and this escape is the only way one
+        # outlives the reap — so it is what turns the socket theft under "Worker isolation" from a dead
+        # socket path into a cell that intercepts every later request.
+        #
+        # The premise is that nothing in this process prevents it. A process group is the only bound the
+        # supervisor can impose, and every stronger one needs a capability `cap-drop ALL` removes, for the
+        # reasons that section records. Landlock is the candidate that fits, tracked at basecamp/hotcell#13.
         Process.setpgid 0, 0
 
         supervisor_side.close
