@@ -320,14 +320,14 @@ application, on the same host, sharing one volume that holds the sockets. With K
 accessory per cell:
 
 ```yaml
+# config/deploy.yml -- the cell
 accessories:
-  active_storage:
+  active_storage:                               # the cell's name; the app registers it under this
     image: your.registry.com/your-image:latest
     roles: [ web, jobs ]                        # a cell always lives on its caller's host
     network: none                               # an accessory key, never an option
     volumes:
-      # directory containing the IPC sockets, <HOTCELL_ROOT>/<registered cell name>
-      - hotcell-sockets:/run/hotcell/cell
+      - hotcell-sockets:/run/hotcell/cell       # directory containing the IPC sockets
     options:
       # Performance. Docker applies no limit if unspecified.
       cpus: 2
@@ -340,21 +340,53 @@ accessories:
       security-opt: no-new-privileges:true
       user: 10001:10001
       pids-limit: 512
+
+      # Both: size=512m is performance, the three flags before it are security.
       tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
+    env:
+      clear:
+        HOTCELL_DIR: /run/hotcell/cell          # where this cell writes its two sockets
 ```
 
-The application's side of that volume: mount it at `/run/hotcell/active_storage`, set
-`HOTCELL_ROOT=/run/hotcell` and `HOTCELL_GROUP=10001`, and add `group-add: 10001` under each of the
-app's roles -- the cell runs as its own user, and the shared gid is what admits the app to the
-sockets.
+And the application's half, mounting the same volume:
+
+```yaml
+# config/deploy.yml -- the app
+servers:
+  web:
+    hosts: [ ... ]
+    options:
+      group-add: 10001                          # the cell's gid, and what admits the app to its sockets
+  jobs:
+    hosts: [ ... ]
+    options:
+      group-add: 10001
+
+volumes:
+  - hotcell-sockets:/run/hotcell/active_storage # $HOTCELL_ROOT/<registered cell name>
+
+env:
+  clear:
+    HOTCELL_ROOT: /run/hotcell
+    HOTCELL_GROUP: 10001                        # must match group-add above
+```
+
+The two mount paths differ, and only the volume name has to match: a cell always writes its sockets
+to `HOTCELL_DIR`, and the app resolves a cell's name under `HOTCELL_ROOT`. Give each cell its own
+volume -- two accessories sharing one would write `work.sock` over each other.
+
+Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the
+security flags above on the cell, and `--volume hotcell-sockets:/run/hotcell/active_storage`,
+`--group-add 10001` and `HOTCELL_ROOT=/run/hotcell` on the app.
 
 Once a file type's processing has moved into the cell, remove its packages (for example `libvips`)
 from the application image -- that removal is the security win. Remove them only after the cell
 handles the type: Rails' own previewers and analyzers look for their tool in `accept?`, so a package
 removed too early turns that processing off without an error.
 
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers all of this in detail: every container flag, the
-volume, the shared group, and how to verify a deployed cell.
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers all of this in detail: every container flag, how to
+size the numbers, the shared group, bringing your own container, and mounting scratch from the host
+instead of a tmpfs.
 
 ### Using custom operations
 
@@ -495,6 +527,32 @@ remember to use this.
 The cell responds to requests for status and metrics on a separate UNIX socket that won't block on
 worker requests. We recommend using this in a Rails controller endpoint like `/up/hotcell` to return
 a 200/OK if the cell is responsive.
+
+### Work socket probes
+
+`describe` and `metrics` answer on the control socket, which a descriptor never crosses. They report a
+healthy cell whose work socket your application cannot use at all.
+
+So carry two trivial operations that cross the work socket, and call them from whatever page or probe
+reports the cell's health. `examples/operations/echo.rb` and `examples/operations/reopen.rb` in this
+repository are written for this -- copy both into your own `operations/`. Neither loads a library nor
+runs a tool, so together they cost the blast radius nothing.
+
+**They prove different things, and you need both.** `echo` reads both descriptors directly, so one round
+trip proves descriptor passing end to end. `reopen` opens both **by name**, which is what every operation
+that hands a tool a filename does. A cell with the shared group missing answers `echo` perfectly and
+fails `reopen` with `EACCES` -- the whole difference between a cell that works and one that fails on
+every real conversion.
+
+**`reopen` covers both directions on purpose.** An input is readable by the group and an output is
+writable by it, and a cell can hold one of those permissions without the other. The ffmpeg video
+previewer re-opens its destination, so a probe that read the input alone would go green on a cell where
+every video preview fails on the write.
+
+Four checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
+supervisor, one `echo` for the socket that real files travel over, and one `reopen` for the group they
+travel in. When you move an existing application onto a cell, deploying the accessory and confirming
+those four first separates a deployment problem from a conversion problem.
 
 ### Logs
 

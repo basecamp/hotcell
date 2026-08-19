@@ -148,8 +148,19 @@ safe to decide per caller.
 `queue_size` and `queue_wait` produce `capacity` where you expect, and it finds the knee for a known
 service time.
 
-It cannot give you your own numbers. It drives the example operations rather than yours, and it fixes the
-container flags. Treat it as a check on the scheduling, not as a capacity plan.
+```
+bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]
+```
+
+It runs a cell in a container and drives it from a second one. It reports throughput, the verdict
+breakdown, and latency split into time queued against time performing. That split is what separates
+saturation from slowness: queued time that grows while perform time stays flat means the cell needs more
+workers.
+
+It cannot give you your own numbers. It drives the example operations rather than yours, and it fixes
+`cpus`, `memory`, the tmpfs size and `pids-limit` — only the cell settings vary, through
+`EXAMPLE_CONCURRENCY`, `EXAMPLE_QUEUE_SIZE`, `EXAMPLE_QUEUE_WAIT`, `EXAMPLE_DEADLINE`, `EXAMPLE_MEMORY_MB`
+and `EXAMPLE_FILE_SIZE_MB`. Treat it as a check on the scheduling, not as a capacity plan.
 
 ## A starting point
 

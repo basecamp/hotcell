@@ -1,117 +1,127 @@
 # Deploying a cell
 
-A cell is a second container beside the application. Four things have to be true, whatever you deploy
-with:
+A cell is a second container beside the application, on the same host, sharing one volume that holds its
+UNIX sockets. The README carries the complete Kamal configuration for both halves, under
+[Configure and deploy the HotCell container](../README.md#configure-and-deploy-the-hotcell-container).
 
-1. **The same host as the caller.** `SCM_RIGHTS` works only over `AF_UNIX`, so a descriptor cannot cross
-   machines.
-2. **One volume shared by both containers**, holding the cell's sockets. The cell writes them at
-   `HOTCELL_DIR`, and the app finds them at `$HOTCELL_ROOT/<cell name>`.
-3. **The container flags under "Container settings"**, which are what makes a cell a cell.
-4. **`kernel.yama.ptrace_scope >= 1` on the host.** A cell refuses to boot below this, and no container
-   flag can supply it — it is what stops one worker reading another request's memory through
-   `/proc/<pid>/mem`.
+This document explains that configuration: how the image is built, what every flag and setting does,
+how the numbers constrain each other, and one alternative worth knowing about. The examples use Kamal;
+any orchestrator that can set the same `docker run` flags will do.
 
-This document is in the order you do it: build the image, set the container flags, agree the three things
-both sides share, then the settings, then verify. The examples use Kamal; any orchestrator that can set
-the same `docker run` flags will do.
+[docs/TUNING.md](TUNING.md) is a companion document. It covers measuring your way to values for your
+own workload, where this one covers what the values mean.
 
 ## Building an image
 
-There is no published base image to derive from. `bin/rails hotcell:install` writes a `hotcell/` directory
-into the application holding a complete `Dockerfile`, the cell's `Gemfile`, its `config.rb`, and an
-`operations/` directory. That Dockerfile is the whole recipe, and it is yours to change. Build it from its
-own directory:
+### Using the installed Dockerfile
+
+There is no published base image to derive from. `bin/rails hotcell:install` writes a `hotcell/`
+directory into the application holding a complete `Dockerfile`, the cell's `Gemfile`, its
+`config.rb`, and an `operations/` directory. That Dockerfile is the whole recipe, and it is yours to
+customize. Build it from its own directory:
 
 ```
 docker build -t your-image:latest hotcell/
 ```
 
-Three places to change, and nothing else is required.
+The README's [Configure and deploy the HotCell
+container](../README.md#configure-and-deploy-the-hotcell-container) walks through the mechanical
+edits, but here are some additional tips:
 
-**The `Dockerfile`'s apt line.** Install the tools your operations run, and nothing else. The toolchain a
-cell carries is what decides its blast radius.
+**Every gem is inside the blast radius.** Keep the cell's `Gemfile` short. A larger supervisor heap also
+costs every request — see "Sizing the numbers".
 
-```dockerfile
-# hotcell/Dockerfile
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libvips42 imagemagick && \
-    rm -rf /var/lib/apt/lists/*
-```
+**Load only the operations your image has tools for.** A cell advertises what it loaded, on `describe`,
+and a client checks that inventory at boot to catch a cell that does not carry the operation it wants. An
+operation whose tool is missing makes that check pass and fails at the first request instead. So requiring
+an operation you did not install a tool for is worse than not requiring it.
 
-**The `Gemfile`.** Add the gems your operations need. Keep it short: every gem is inside the blast radius,
-and a larger supervisor heap costs every request — see "Sizing the numbers".
-
-**`config.rb`.** The cell settings. It loads before the operations, which then load in sorted order.
-
-```ruby
-# hotcell/config.rb
-HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
-               memory: 1536 * 1024**2, file_size: 48 * 1024**2
-```
-
-Read "Sizing the numbers" before copying those. They are arithmetic against one set of container flags,
-and they are below what some shipped operations declare.
-
-Running the installer again leaves every file that already exists untouched, so customizing is safe.
-
-**Load only the operations your image has tools for.** A cell advertises what it loaded, on `describe`, and
-a client checks that inventory at boot to catch a cell that does not carry the operation it wants. An
-operation whose tool is missing makes that check pass and fails at the first request instead. A gem that
-ships several toolchains loads them all through its entry point, so require the files you want:
-
-```ruby
-# hotcell/operations/active_storage.rb
-require "active_storage/hot_cell/server/transformers/image/vips"
-require "active_storage/hot_cell/server/analyzers/image/vips"
-require "active_storage/hot_cell/server/previewers/pdf/mutool"
-```
+**The cell's image must create its own socket mount point**, owned by the cell's user — `/run/hotcell/cell`
+and not only `/run/hotcell`. Docker creates a missing last level as root, and the cell then cannot create a
+socket in it. The installed Dockerfile does this. The application's image needs nothing at its own mount
+point.
 
 **Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately. A skew between the
 client the app loads and the server the cell runs answers `protocol` on every request. While either tracks
 a branch rather than a released version, assert in a test that both lockfiles name the same revision.
 
-### Sizing the numbers
 
-These numbers are arithmetic against the container flags under "Container settings". Against the
-`cpus: 2`, `memory: 2g`, `size=512m` accessory there: `concurrency: 4` because a request spends much of
-its life off the CPU, so twice `cpus` is where to start; `file_size: 48MB` because that bounds what one
-worker writes; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
+### Bringing your own container
 
-**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
-so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
-set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
-`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
-nothing else, which is a hard failure to place.
+If you prefer to use your own base image to run HotCell, that's fine!
 
-Three more results change how you read those numbers.
+#### Conformance checks
 
-**`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
-of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
-`RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount an input may consume.
-The cgroup limit is what bounds real memory across the cell.
-
-**An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
-place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
-`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
-charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
-write, and count a staged input as one of them.
-
-**A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and it
-is proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's own
-operations need is paid on every request for the life of the deployment.
-
-## If you deploy with Kamal
-
-Use one accessory per cell, not an app role. Kamal hard-codes `--network kamal` for app roles, and only an
-accessory can set `network: none`. An accessory can still target `roles: [web, jobs]`, which it must, to
-land on the caller's hosts.
-
-A deploy does not update an accessory. Reboot one explicitly:
+`bin/conformance IMAGE` checks whether an image supports hotcell. It boots the image with the flags
+under "Container settings", mounts the example operations over `/hotcell/operations`, and drives a
+battery of checks from a second container over a shared volume: descriptor round-trips, each kill
+verdict, refusal at capacity, and the isolation flags. It exits non-zero on the first failed check.
 
 ```
-bin/kamal accessory reboot images -d production
+docker build -t my-cell:test hotcell/
+bin/conformance my-cell:test
 ```
+
+The mount shadows the operations your image carries. What the checks cover is the image's runtime — its
+Ruby, its gems, and its socket behaviour — not the work your operations do.
+
+`bin/example-image` builds an image to try it against. CI runs both on every push.
+
+#### Additional requirements
+
+Three things conformance cannot prove for you.
+
+**`kernel.yama.ptrace_scope >= 1` on the host.** No container flag can supply it, and it is what stops one
+worker reading another request's memory through `/proc/<pid>/mem`. A cell refuses to boot below it:
+
+```
+kernel.yama.ptrace_scope is 0 on this host, so one worker can read another request's memory
+through /proc/<pid>/mem. No container flag can set it. Set it to 1 or higher and boot again.
+```
+
+A host that does not expose the file at all logs `cell.ptrace_scope_unknown` and boots anyway.
+
+**The security flags it cannot observe.** It reads three from inside the cell: `network: none` (the only
+interface is `lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does
+not observe `cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or
+`pids-limit`. Those are yours to get right, and "Verifying your accessory" is how.
+
+**Your application's group membership.** Conformance does check the shared group, because it runs the cell
+as `10001` against files a different user owns: `example.reopen` proves a cell can open an input by name,
+and `example.tamper` proves it can do nothing else with either file. What it cannot reach is the
+application's own side — its driver owns the files as root, which needs no membership to set a group. That
+one fails as `EPERM` in the application rather than in the cell.
+
+#### Verifying your accessory
+
+`bin/conformance` supplies its own docker flags, so it proves the image works when the flags are right.
+It doesn't read your Kamal configuration, and it passes against an image you are about to deploy with
+`cap-drop` missing.
+
+To check your accessory before you deploy it, print the command Kamal will run. `kamal config` does not
+answer this. It prints merged configuration, not the command, so a `--network` emitted twice does not
+appear there at all.
+
+```
+bundle exec ruby -rkamal -e '
+  config = Kamal::Configuration.create_from(
+    config_file: Pathname.new("config/deploy.yml"), destination: "production", version: "check")
+  puts Kamal::Commands::Accessory.new(config, name: :images).run.flatten.join(" ")
+'
+```
+
+Read `--network` off that line. It must appear once, as `--network none`. Two of them is the `options:`
+mistake described under "Container settings", and Docker rejects the container at boot with exit
+status 125.
+
+To check a deployed cell, read the flags on the running container:
+
+```
+docker inspect <container> --format '{{json .HostConfig}}' | jq '{
+  NetworkMode, ReadonlyRootfs, CapDrop, SecurityOpt, PidsLimit, Memory, MemorySwap, Tmpfs, Binds
+}'
+```
+
 
 ## Container settings
 
@@ -127,67 +137,9 @@ refuses the container:
 docker: conflicting options: cannot attach both user-defined and non-user-defined network-modes
 ```
 
-An illustrative Kamal configuration, the cell's half:
-
-```yaml
-# config/deploy.yml — the cell
-accessories:
-  images:                                       # the cell's name; the app registers it under this
-    image: your.registry.com/your-image:latest
-    roles: [ web, jobs ]                        # a cell runs on its caller's host
-    network: none                               # an accessory key, never an option — see above
-    volumes:
-      - hotcell-sockets:/run/hotcell/cell       # the sockets the app talks to this cell through
-    options:
-      # Performance. No defaults — tune each one. See "Performance" below.
-      cpus: 2
-      memory: 2g
-      memory-swap: 2g                           # equal to memory
-
-      # Security. Use these values. See "Security" below.
-      read-only: true
-      cap-drop: ALL
-      security-opt: no-new-privileges:true
-      user: 10001:10001
-      pids-limit: 512
-
-      # Both: size=512m is performance, the three flags before it are security.
-      tmpfs: /tmp:rw,nosuid,nodev,noexec,size=512m
-    env:
-      clear:
-        HOTCELL_DIR: /run/hotcell/cell          # see "General" below
-```
-
-And the app's half, mounting the same volume:
-
-```yaml
-# config/deploy.yml — the app
-servers:
-  web:
-    hosts: [ ... ]
-    options:
-      group-add: 10001                          # the cell's gid; see "The group both sides share"
-  jobs:
-    hosts: [ ... ]
-    options:
-      group-add: 10001
-
-volumes:
-  - hotcell-sockets:/run/hotcell/images         # $HOTCELL_ROOT/<cell name>
-
-env:
-  clear:
-    HOTCELL_ROOT: /run/hotcell
-    HOTCELL_GROUP: 10001                        # must match group-add above
-```
-
-Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the flags
-under "Security" on the cell, and `--volume hotcell-sockets:/run/hotcell/images`, `--group-add 10001` and
-`HOTCELL_ROOT=/run/hotcell` on the app.
-
-The two mount paths differ, and only the volume name has to match. A cell always writes its sockets to
-`HOTCELL_DIR`. The app resolves a cell's name under `HotCell.root`, so a cell named `images` is found at
-`/run/hotcell/images`.
+The complete accessory, both halves, is in the README under
+[Configure and deploy the HotCell container](../README.md#configure-and-deploy-the-hotcell-container).
+Copy it from there. The tables below say what each flag does and how to size it.
 
 Give each cell its own volume. Two accessories sharing one would write `work.sock` over each other.
 
@@ -195,14 +147,14 @@ Give each cell its own volume. Two accessories sharing one would write `work.soc
 
 **These have no defaults.** Docker applies no limit to a flag you omit, so a cell without them can take
 the whole host. Tune each one to your workload and your hardware. The values below are the worked example
-from this document, not recommendations.
+from the README's accessory, not recommendations.
 
 | Flag | Example | Tune it from |
 | --- | --- | --- |
 | `cpus` | `2` | The share of the host this cell may use. Start the cell's `concurrency` at twice this number. |
-| `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. |
+| `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. With scratch mounted from the host there is no tmpfs term — see "Scratch from the host". |
 | `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
-| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. |
+| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. Mounting scratch from the host instead decouples it from `memory` — see "Scratch from the host". |
 | `ulimit: stack` | leave it unset | A container inherits the Docker daemon's value, normally 8MB, and that is where to leave it. Lowering it buys a worker about 24MB more room at 2MB, and nothing at all for an operation that shells out. It costs far more than it buys: a thread that overflows the smaller stack dies on `SIGSEGV`, which the cell reports as `killed`/`memory` — a permanent verdict written against the caller's file, and identical to a genuine memory breach, so it sends you to the wrong setting. Raise the cell's `memory` instead. It belongs here rather than in `config.rb` because glibc reads it at exec, before `Process.setrlimit` could run. |
 
 ### Security
@@ -214,7 +166,7 @@ serves requests exactly as before.
 | --- | --- | --- |
 | `network` | `none` | Removes every network interface. A tool that is persuaded to fetch a URL cannot reach anything. Set it as an accessory key, not under `options:`. |
 | `read-only` | `true` | Makes the root filesystem read-only. A cell writes only to `/tmp` and to the socket volume. |
-| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` stops a dropped binary running from `/tmp`, which is where a request's files live. It does not cover the socket volume, and it does not stop `ruby payload.rb`. |
+| `tmpfs` flags | `nosuid,nodev,noexec` | `noexec` stops a dropped binary running from `/tmp`, which is where a request's files live. It does not cover the socket volume, and it does not stop `ruby payload.rb`. With scratch bind-mounted from the host these must come from the host mount instead. |
 | `cap-drop` | `ALL` | Removes every Linux capability. |
 | `security-opt` | `no-new-privileges:true` | Prevents a setuid binary from regaining what `cap-drop` removed. |
 | `user` | `10001:10001` | Runs the cell with no home directory and no shell. Without user namespace remapping this is a host uid, and it is inside the ordinary range, so pick one your hosts do not give to a person. |
@@ -229,98 +181,39 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOTCELL_DIR` | `/run/hotcell/cell` | Where the cell creates `work.sock` and `control.sock`. The app must use the same directory. |
 | `HOTCELL_OPERATIONS` | `/hotcell/operations` | The directory the cell loads at boot, in sorted order. |
 | `HOTCELL_CONFIG` | `/hotcell/config.rb` | Loaded before the operations, if the file exists. |
-| `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the accessory this is the tmpfs. |
+| `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. |
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 
-## The volume
+### Sizing the numbers
 
-Nobody creates it. Docker creates a named volume when the first container that references it starts, so
-either the cell or the app makes it, whichever starts first.
+These numbers are arithmetic against the container flags under "Container settings". Against the
+`cpus: 2`, `memory: 2g`, `size=512m` accessory there: `concurrency: 4` because a request spends much of
+its life off the CPU, so twice `cpus` is where to start; `file_size: 48MB` because that bounds what one
+worker writes; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
 
-**Boot order does not matter.** An empty named volume takes its ownership from the image of whichever
-container mounts it, even when an earlier container already mounted it, as long as it is still empty. An
-app that starts first gives the volume its own ownership; the cell then mounts it while it is still empty
-and takes it back. Once the cell creates its sockets the volume is no longer empty, and ownership stops
-changing.
+**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
+so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
+set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
+`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
+nothing else, which is a hard failure to place.
 
-Two mistakes both fail the same way, as `EACCES` when the cell creates its socket at boot.
+Some guidelines for reading those numbers:
 
-**The mount point must exist in the cell's image, owned by the cell's user.** The image the installer
-writes creates `/run/hotcell/cell` and chowns it, not only `/run/hotcell`. If an image creates only the
-parent, Docker creates the last level as root, and the cell cannot create a socket in it. The app's image
-needs nothing at its own mount point.
+**`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
+of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
+`RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount an input may consume.
+The cgroup limit is what bounds real memory across the cell.
 
-**A bind mount inherits nothing.** It keeps the host directory's ownership. A bind mount in development
-needs the host directory chowned to `10001`, or the container run as the host user. Use named volumes in
-production.
+**An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
+place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
+`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
+charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
+write, and count a staged input as one of them.
 
-## The socket's file mode
-
-The cell creates both sockets `0660`, owned by its own user and group. A Unix socket needs write
-permission to connect, so the shared group in the next section is what lets your application reach a cell
-at all. It is not optional.
-
-Without it every call fails with `EACCES` from `connect`, and `HotCell.describe_cells` says so at boot,
-before any traffic depends on it.
-
-## The group both sides share
-
-Set `HotCell.group` to the cell's gid, and put the application in that group:
-
-```yaml
-# config/deploy.yml — the app
-servers:
-  web:
-    options:
-      group-add: 10001
-```
-
-**Why it is needed.** Two reasons.
-
-The sockets are `0660` and owned by the cell's user and group, so without the group your application
-cannot connect to a cell at all.
-
-And an operation that hands a tool a filename does not copy the input. It re-opens the descriptor as
-`/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user rather than the
-caller's. The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
-Active Storage tempfile is exactly that.
-
-Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
-because they stage first.
-
-**What the client does with it.** It puts each descriptor in the group and sets the mode on the way out:
-`0640` for an input, `0620` for an output. It does this through the open file rather than a path, so it
-names nothing.
-
-**It sets those and does not put them back.** The file you hand over keeps the cell's group and the new
-mode after the call returns, so a `0600` file of your own comes back readable by that group. Active
-Storage hands over tempfiles and unlinks them, so this is invisible there. If you write your own client,
-hand over files you are willing to share with the cell's group, and do not pass one whose permissions
-something else depends on.
-
-**What that buys, and what it does not.** A cell may read an input and write an output. It may not write
-an input or read an output, and it cannot widen either, because it does not own these files and
-`cap-drop ALL` leaves it no capability that overrides a mode. The application must own them and be in the
-group, which is what lets it set the group at all.
-
-**Do not share a uid instead.** It is the obvious shortcut and it costs two things. The cell would own the
-files, so it could set any mode it liked and the one-way rule would stop holding. And a cell that escaped
-its container would land on the application's own user on the host, where it can read the environment of
-the application's processes. Keep the uids apart and share only the group.
-
-**How it fails.** Immediately, on every call, with `EACCES` from `connect`. There is no partly working
-state to misread as healthy.
-
-**What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
-like every other boot check here.
-
-- **Whether this process holds `HotCell.group`.** A missing `group-add` is then visible before any traffic
-  depends on it. This check is local and needs no cell, so it reports even when every cell is down.
-- **Whether the cell runs in that group.** `describe` reports the groups a cell holds, and the client
-  compares them. The number lives in your deploy file and the cell's gid is baked into an image built
-  somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
-  them says nothing.
+**A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and it
+is proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's own
+operations need is paid on every request for the life of the deployment.
 
 ## Cell settings
 
@@ -406,6 +299,22 @@ The 48MB is arithmetic from the example accessory — four workers, two staged f
 tmpfs — and not a property of any operation. An operation that reads its input through the descriptor
 stages only its output, so it needs half of what that arithmetic assumed.
 
+### Settings that trade one for the other
+
+**`max_requests_per_worker` above `1`** lets one request reach another. A worker holds each of its
+requests in the same address space, so an input that runs code can read and change every later request
+that worker serves. [ADR 0001](../adr/0001-reuse-workers-across-requests.md) records the measurements and
+the trade.
+
+At `:unlimited` it also gives up the deadline. A worker reports itself idle when it finishes, and the
+supervisor cannot tell a true report from a false one, so a worker that lies stops being timed. At every
+finite setting it is still retired and killed on a grace period; at `:unlimited` it is retired by nothing,
+and the cell cannot end it. Prefer a finite number, however large.
+
+**`concurrency`** sets how many requests hold bytes in the cell at once. Files are not isolated between
+concurrent workers, so this value is also the width of that exposure.
+[docs/DESIGN.md](DESIGN.md) gives the measurements.
+
 ## Application settings
 
 Per registered cell. They set how the application responds to what a cell answers.
@@ -431,20 +340,72 @@ HotCell.register "images",
 | `permanent:`, `transient:` | the gem's classes | The exception classes the application raises for each side of the split. `transient` must not descend from `permanent`, and the client refuses to start if it does. |
 | `on_contract_skew:` | — | Called when a cell answers `protocol`, so a version mismatch is visible to an application that rescues broadly. |
 
-## Settings that trade one for the other
+### The socket's file mode
 
-**`max_requests_per_worker` above `1`** lets one request reach another. A worker holds each of its
-requests in the same address space, so an input that runs code can read and change every later request
-that worker serves. [ADR 0001](../adr/0001-reuse-workers-across-requests.md) records the measurements and
-the trade.
+The cell creates both sockets `0660`, owned by its own user and group. A Unix socket needs write
+permission to connect, so the shared group in the next section is what lets your application reach a cell
+at all. It is not optional.
 
-At `:unlimited` it also gives up the deadline. A worker reports itself idle when it finishes, and the
-supervisor cannot tell a true report from a false one, so a worker that lies stops being timed. At every
-finite setting it is still retired and killed on a grace period; at `:unlimited` it is retired by nothing,
-and the cell cannot end it. Prefer a finite number, however large.
+Without it every call fails with `EACCES` from `connect`, and `HotCell.describe_cells` says so at boot,
+before any traffic depends on it.
 
-**`concurrency`** sets how many requests hold bytes in the cell at once. Files are not isolated between
-concurrent workers, so this value is also the width of that exposure. See "What is not isolated".
+### The group both sides share
+
+Set `HotCell.group` to the cell's gid, and put the application in that group:
+
+```yaml
+# config/deploy.yml — the app
+servers:
+  web:
+    options:
+      group-add: 10001
+```
+
+**Why it is needed.** Two reasons.
+
+The sockets are `0660` and owned by the cell's user and group, so without the group your application
+cannot connect to a cell at all.
+
+And an operation that hands a tool a filename does not copy the input. It re-opens the descriptor as
+`/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user rather than the
+caller's. The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
+Active Storage tempfile is exactly that.
+
+Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
+because they stage first.
+
+**What the client does with it.** It puts each descriptor in the group and sets the mode on the way out:
+`0640` for an input, `0620` for an output. It does this through the open file rather than a path, so it
+names nothing.
+
+**It sets those and does not put them back.** The file you hand over keeps the cell's group and the new
+mode after the call returns, so a `0600` file of your own comes back readable by that group. Active
+Storage hands over tempfiles and unlinks them, so this is invisible there. If you write your own client,
+hand over files you are willing to share with the cell's group, and do not pass one whose permissions
+something else depends on.
+
+**What that buys, and what it does not.** A cell may read an input and write an output. It may not write
+an input or read an output, and it cannot widen either, because it does not own these files and
+`cap-drop ALL` leaves it no capability that overrides a mode. The application must own them and be in the
+group, which is what lets it set the group at all.
+
+**Do not share a uid instead.** It is the obvious shortcut and it costs two things. The cell would own the
+files, so it could set any mode it liked and the one-way rule would stop holding. And a cell that escaped
+its container would land on the application's own user on the host, where it can read the environment of
+the application's processes. Keep the uids apart and share only the group.
+
+**How it fails.** Immediately, on every call, with `EACCES` from `connect`. There is no partly working
+state to misread as healthy.
+
+**What warns first.** `HotCell.describe_cells` checks two things at boot, and warns rather than raising,
+like every other boot check here.
+
+- **Whether this process holds `HotCell.group`.** A missing `group-add` is then visible before any traffic
+  depends on it. This check is local and needs no cell, so it reports even when every cell is down.
+- **Whether the cell runs in that group.** `describe` reports the groups a cell holds, and the client
+  compares them. The number lives in your deploy file and the cell's gid is baked into an image built
+  somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
+  them says nothing.
 
 ## Making the numbers agree
 
@@ -455,132 +416,137 @@ Nothing checks these three for you.
   instead of as `capacity` or `killed`. The client warns at boot, and `describe` reports the number.
 - The cell's `memory` must stay below the container's `memory`. At equal values the cgroup fires first,
   and a cgroup kill is a `SIGKILL` with no diagnostic.
-- `file_size × concurrency` must fit the tmpfs. Above it, concurrent workers fill scratch and requests
-  fail with `ENOSPC` instead of with a limit verdict.
+- `file_size × concurrency` must fit scratch. Above it, concurrent workers fill it and requests fail
+  with `ENOSPC` instead of with a limit verdict. On the default accessory scratch is the tmpfs, and its
+  `size=` is the number to fit.
 
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
 
-## What is not isolated
+## Scratch from the host
 
-Both of these are bounded by values you set here. [docs/DESIGN.md](DESIGN.md) gives the measurements.
+The configuration documented above uses RAM-backed tmpfs for scratch space. This couples three
+configuration params: an operation's `FSIZE` (max file size write), and the `tmpfs` and `memory`
+container configs. Increasing `FSIZE` require increasing the other two, which may end up putting
+memory pressure on the host node.
 
-**Files are not isolated between concurrent workers.** Every worker runs as the same uid in one mount
-namespace. A worker can list another worker's scratch directory, or reach it through
-`/proc/<sibling>/fd/N`, and read that request's bytes. A fix needs `CAP_SETUID` or `CAP_SYS_ADMIN`, and
-`cap-drop ALL` removes both. Only requests in flight hold bytes in a cell, so `concurrency` and one
-toolchain per cell are what bound the exposure.
+Scratch is `/tmp`: staged inputs, staged outputs, and every intermediate a tool writes.  Those pages
+are charged to the container's cgroup and, with `memory-swap` equal to `memory`, they cannot be
+reclaimed or swapped — so the tmpfs `size=` and the container's `memory` grow together, byte for
+byte. Every time `file_size` goes up to admit a larger conversion, `memory` pays for it.
 
-**A sibling's environment is readable.** `/proc/<pid>/environ` needs only `PTRACE_MODE_READ`, which Yama
-does not restrict. A forked worker's environ is fixed at exec time, so `ENV.delete` changes nothing. Keep
-credentials out of a cell's environment, and spawn tools with `unsetenv_others`, which
-`HotCell::Operation#run_tool` does.
+The alternative is a bind mount from the host's disk. Files written there pass through the page cache,
+and the kernel writes those pages back and drops them under pressure, so a large file on scratch can no
+longer OOM the cell and scratch can be sized in gigabytes without touching `memory` at all.
 
-## Verifying an image
+**Keep the tmpfs when scratch is small and stays small.** It is RAM-fast, it vanishes when the container
+stops, and one flag carries the size cap and all three security flags.
 
-`bin/conformance IMAGE` checks whether an image supports hotcell. It boots the image with the flags above,
-mounts the example operations over `/hotcell/operations`, and drives a battery of checks from a second
-container over a shared volume: descriptor round-trips, each kill verdict, refusal at capacity, and the
-isolation flags. It exits non-zero on the first failed check.
+**Mount from the host when scratch has to hold big intermediates.** A 48MP photo decompresses to about
+150MB before the variant is written, and a tool's temp files are not bounded by the size of its output.
+Scratch and memory then decouple, and `memory` sizes from `concurrency × peak RSS` alone, kept above the
+cell's own `memory` rlimit. Three things you give up:
+
+- **Speed.** Disk, not RAM. On NVMe, for spool-and-process pipelines, rarely the bottleneck — the
+  descriptor design already keeps the biggest bytes off scratch entirely.
+- **Cleanup by the mount's lifetime.** A bind mount survives the container. `Slot#prepare` clears stale
+  homes and discarded trees at boot, so this is covered — but by the cell's code rather than by the
+  mount's lifetime, which is the weaker guarantee.
+- **The flags and the cap, unless you put them back.** Docker can neither set `nosuid,nodev,noexec` on a
+  bind mount nor cap one. Both have to come from the host mount, which is the second decision.
+
+### A plain directory, or a dedicated filesystem?
+
+**A plain host directory** costs nothing to provision and enforces nothing. There is no size cap, so a
+runaway operation fills whatever filesystem holds the directory — usually the root filesystem, and ext4's
+common `errors=remount-ro` can flip the whole root read-only on the way down. There are no flags either,
+though two of the three lose almost nothing: `nosuid` is redundant with `no-new-privileges:true`, and
+`nodev` with `cap-drop: ALL` plus the non-root uid. `noexec` is the real loss, and it is modest — it
+stops a dropped ELF binary, and it never stopped `ruby payload.rb`.
+
+**A dedicated filesystem** — a partition, an LV, or a loopback image file — restores both. Its size is
+the cap, so a fill stays inside scratch and reaches the caller as `Errno::ENOSPC`, which the cell
+classifies `failed`: transient, retried, never recorded against a blob. The flags ride the host mount
+options, and a bind mount carries its source's flags into the container, so the conformance
+`scratch_noexec` check passes unchanged. The cost is a few commands and one fstab line per host.
+
+### Configuring it
+
+Three edits to the accessory in the README.
+
+1. Delete the `tmpfs:` option. The bind mount replaces it — both target `/tmp`.
+2. Add the host path under `volumes:`. An absolute host path in a Kamal `volumes:` entry is a bind mount,
+   passed to `docker run -v` verbatim.
+3. Resize `memory` and `memory-swap`. The tmpfs term is gone, so size from `concurrency × peak RSS`, kept
+   above the cell's `memory` rlimit.
+
+```yaml
+# config/deploy.yml — the cell, changed from the README's accessory
+accessories:
+  active_storage:
+    volumes:
+      - hotcell-sockets:/run/hotcell/cell       # unchanged
+      - /var/lib/hotcell-scratch:/tmp           # scratch, from the host
+
+    options:
+      memory: 2g                                # no tmpfs term: concurrency × peak RSS
+      memory-swap: 2g                           # equal to memory
+      # tmpfs: gone. /tmp is the bind mount above, and its nosuid,nodev,noexec
+      #        must come from the host mount.
+```
+
+Everything else in the accessory is unchanged, and so is the application's half.
+
+### Preparing the host
+
+**Chown the source, in every variant.** A bind mount keeps the host directory's ownership, and the cell
+runs as `10001:10001`. Docker creates a missing source owned by root, and the cell then fails every
+request with `EACCES`. Create and chown it before the first boot.
+
+A plain directory:
 
 ```
-docker build -t my-cell:test hotcell/
-bin/conformance my-cell:test
+mkdir -p /var/lib/hotcell-scratch
+chown 10001:10001 /var/lib/hotcell-scratch
 ```
 
-The mount shadows the operations your image carries. What the checks cover is the image's runtime — its
-Ruby, its gems, and its socket behaviour — not the work your operations do.
-
-`bin/example-image` builds an image to try it against. CI runs both on every push.
-
-### What it does not verify
-
-**It does not check your accessory.** `bin/conformance` supplies its own flags, so it proves the image
-works when the flags are right. It never reads your Kamal configuration, and it passes against an image
-you are about to deploy with `cap-drop` missing.
-
-Of the security flags, it observes three from inside the cell: `network: none` (the only interface is
-`lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does not observe
-`cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or `pids-limit`.
-
-It does check the shared group, because it runs the cell as `10001` against files a different user owns.
-`example.reopen` proves a cell can open an input by name, and `example.tamper` proves it can do nothing
-else with either file. What it cannot check is your application's group membership: its own driver owns
-the files as root, which needs no membership to set a group. That one fails as `EPERM` in the application
-rather than in the cell.
-
-To check your accessory before you deploy it, print the command Kamal will run. `kamal config` does not
-answer this. It prints merged configuration, not the command, so a `--network` emitted twice does not
-appear there at all.
+A dedicated filesystem, as a loopback image — no repartitioning, and sized from `file_size × concurrency`
+plus headroom:
 
 ```
-bundle exec ruby -rkamal -e '
-  config = Kamal::Configuration.create_from(
-    config_file: Pathname.new("config/deploy.yml"), destination: "production", version: "check")
-  puts Kamal::Commands::Accessory.new(config, name: :images).run.flatten.join(" ")
-'
+fallocate -l 8G /var/lib/hotcell-scratch.img
+mkfs.ext4 /var/lib/hotcell-scratch.img
+mkdir -p /var/lib/hotcell-scratch
+echo '/var/lib/hotcell-scratch.img /var/lib/hotcell-scratch ext4 loop,nosuid,nodev,noexec 0 0' >> /etc/fstab
+mount /var/lib/hotcell-scratch
+chown 10001:10001 /var/lib/hotcell-scratch
 ```
 
-Read `--network` off that line. It must appear once, as `--network none`. Two of them is the `options:`
-mistake above, and Docker rejects the container at boot with exit status 125.
-
-To check a deployed cell, read the flags on the running container:
+**Do not use the host's `/tmp` as the source.** On most systemd distributions it is itself a tmpfs, which
+puts scratch back in RAM — still charged to the cell's cgroup, because the writer pays — and
+`systemd-tmpfiles` reaps old files out from under long requests. Check the source before you use it:
 
 ```
-docker inspect <container> --format '{{json .HostConfig}}' | jq '{
-  NetworkMode, ReadonlyRootfs, CapDrop, SecurityOpt, PidsLimit, Memory, MemorySwap, Tmpfs
-}'
+findmnt -T /var/lib/hotcell-scratch -o TARGET,SOURCE,FSTYPE,OPTIONS
 ```
 
-## Checking a deployed cell
+`FSTYPE` must be a disk filesystem, and `OPTIONS` shows which of the three flags the cell will actually
+get.
 
-`describe` and `metrics` answer on the control socket, which a descriptor never crosses. They report a
-healthy cell whose work socket the application cannot use at all — the two volume-ownership mistakes above
-fail as `EACCES` on the first real request, and nothing on the control socket says so.
+### What it changes in the numbers
 
-So carry two trivial operations that cross the work socket, permanently, and call them from whatever page
-or probe reports the cell's health. `examples/operations/echo.rb` and `examples/operations/reopen.rb` in
-the hotcell repository are written for this. Copy both into your own `operations/`. Neither loads a
-library or runs a tool, so together they cost the blast radius nothing.
+The `file_size × concurrency` arithmetic under "Making the numbers agree" does not disappear. It moves
+from the tmpfs `size=` to the host filesystem's size, and `memory` loses its tmpfs term.
 
-**They prove different things, and you need both.** `echo` reads both descriptors directly, so one round
-trip proves descriptor passing end to end. `reopen` opens both **by name**, which is what every operation
-that hands a tool a filename does. A cell with the shared group missing answers `echo` perfectly and fails
-`reopen` with `EACCES`. That is the whole difference between a cell that works and one that fails on every
-real conversion, and only `reopen` sees it.
+Mind one interaction. If you also raise or remove `file_size` so that large conversions succeed, the
+filesystem's size becomes the only bound on what a runaway write consumes; without it the bound is
+deadline × disk throughput. An uncapped directory with an uncapped `file_size` is the one combination
+with no bound at all, and a capped filesystem is what makes a generous `file_size` safe to run.
 
-**`reopen` covers both directions on purpose.** An input is readable by the group and an output is
-writable by it, and those are separate permissions a cell can hold one of. Most shipped operations
-re-open only their source, but the ffmpeg video previewer re-opens its destination too. A probe that read
-the input alone would go green on a cell where every video preview fails on the write.
+Three things do not change:
 
-Four checks together say whether a cell is usable: `describe` for the inventory, `metrics` for the
-supervisor, one `echo` for the socket that real files travel over, and one `reopen` for the group they
-travel in, in both directions.
-
-When you move an existing application onto a cell, consider doing it in phases. A first phase that deploys
-the accessory and confirms those four answers correctly separates a deployment problem from a conversion
-problem, before any traffic depends on it.
-
-## Load testing a configuration
-
-[docs/TUNING.md](TUNING.md) covers arriving at these numbers for your own workload — what to instrument
-first, which settings to start generous on and why, and what to watch.
-
-`concurrency`, `queue_size` and `queue_wait` are the values that depend on how the work behaves under
-contention. Measure them rather than derive them.
-
-`bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]` runs a cell with the flags above and drives it from a
-second container. It reports throughput, the verdict breakdown, and latency split into time queued against
-time performing. That split is what separates saturation from slowness: queued time that grows while
-perform time stays flat means the cell needs more workers.
-
-Two limits of the script:
-
-- It fixes `cpus`, `memory`, the tmpfs size and `pids-limit` at the values above. Only the cell settings
-  vary, through `EXAMPLE_CONCURRENCY`, `EXAMPLE_QUEUE_SIZE`, `EXAMPLE_QUEUE_WAIT`, `EXAMPLE_DEADLINE`,
-  `EXAMPLE_MEMORY_MB` and `EXAMPLE_FILE_SIZE_MB`.
-- It drives the example operations, not yours. It measures the cell's scheduling, not your toolchain.
-
-A number you rely on must come from hardware like production's. [ADR 0001](../adr/0001-reuse-workers-across-requests.md)
-records that a development machine and the deployed image disagree.
+- `HOTCELL_WORKSPACE` keeps its default. It lives under `Dir.tmpdir`, which is now the bind mount, and
+  the server treats scratch as a plain directory without ever checking the filesystem type.
+- A full scratch still reaches the caller as `failed`, which is transient, exactly as a full tmpfs did.
+- Boot cleanup. `Slot#prepare` clears what an earlier boot left behind, which a persistent mount now
+  relies on.
