@@ -3,6 +3,25 @@
 This is a guide to working on the gems themselves. If you are building *on* HotCell — writing operations for
 your own application — start with [README.md](README.md) instead.
 
+<!-- regenerate with `rake toc` -->
+
+<!-- toc -->
+
+- [Setting up](#setting-up)
+- [Running the tests](#running-the-tests)
+- [The layout](#the-layout)
+- [How a cell gets exercised](#how-a-cell-gets-exercised)
+  * [`rake test:devcell` — does the development configuration work?](#rake-testdevcell--does-the-development-configuration-work)
+  * [`bin/conformance IMAGE` — does this image support hotcell?](#binconformance-image--does-this-image-support-hotcell)
+  * [`bin/load IMAGE` — how does it behave under pressure?](#binload-image--how-does-it-behave-under-pressure)
+- [Rules that are not obvious](#rules-that-are-not-obvious)
+- [Style](#style)
+- [Writing it down](#writing-it-down)
+  * [Accepted risk](#accepted-risk)
+- [CI](#ci)
+
+<!-- tocstop -->
+
 ## Setting up
 
 ```
