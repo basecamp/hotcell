@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative "lib/hot_cell/core/version"
+version = File.read(File.expand_path("../VERSION", __dir__)).strip
 
 Gem::Specification.new do |spec|
   spec.name        = "hotcell-core"
-  spec.version     = HotCell::CORE_VERSION
+  spec.version     = version
   spec.authors     = [ "Mike Dalessio" ]
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
@@ -22,7 +22,10 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.3"
 
   spec.metadata["homepage_uri"]    = spec.homepage
-  spec.metadata["source_code_uri"] = spec.homepage
+  spec.metadata["source_code_uri"] = "#{spec.homepage}/tree/v#{version}/#{spec.name}"
+  spec.metadata["changelog_uri"]   = "#{spec.homepage}/blob/v#{version}/CHANGELOG.md"
+  spec.metadata["bug_tracker_uri"]  = "#{spec.homepage}/issues"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir[ "lib/**/*", "MIT-LICENSE", "README.md" ]
 end

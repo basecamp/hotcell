@@ -9,6 +9,17 @@ HOTCELL = %w[ hotcell-core hotcell-client hotcell-server ].freeze
 ACTIVE_STORAGE = %w[ activestorage-hotcell-server activestorage-hotcell-client ].freeze
 GEMS = (HOTCELL + ACTIVE_STORAGE).freeze
 
+# The VERSION file is what every gemspec builds against. These constants are what each gem reports once
+# it is installed, and the file does not travel inside any gem, so they are written from it rather than
+# read from it. Each gem's version_test.rb fails on one left behind.
+VERSION_FILES = %w[
+  hotcell-core/lib/hot_cell/core/version.rb
+  hotcell-client/lib/hot_cell/client/version.rb
+  hotcell-server/lib/hot_cell/server/version.rb
+  activestorage-hotcell-client/lib/active_storage/hot_cell/client/version.rb
+  activestorage-hotcell-server/lib/active_storage/hot_cell/server/version.rb
+].freeze
+
 def suites(*names)
   names.flatten.map { |name| "test:gem:#{name}" }
 end
@@ -39,6 +50,44 @@ end
 
 desc "Run every test suite"
 task test: [ "test:hotcell", "test:activestorage" ]
+
+namespace "version" do
+  # With an argument it writes the VERSION file first, so a release is one command:
+  # `rake version:bump[0.2.0]`. Without one it propagates whatever the file already says, for a VERSION
+  # edited by hand.
+  desc "Write VERSION and rewrite each gem's version constant from it"
+  task :bump, [ :version ] do |_task, args|
+    File.write "VERSION", "#{args[:version]}\n" if args[:version]
+    version = File.read("VERSION").strip
+
+    VERSION_FILES.each do |file|
+      ruby = File.read(file)
+      pattern = /^(\s*)VERSION = .*$/
+      raise "#{file} declares no VERSION" unless ruby.match?(pattern)
+
+      File.write file, ruby.sub(pattern, "\\1VERSION = #{version.inspect}")
+    end
+
+    puts "hotcell #{version}"
+  end
+end
+
+# Releasing is a manual local process: build here, check the five gems, and push them by hand. Each
+# gem's suite has the test that catches a constant left behind by a version bump.
+desc "Build all five gems into pkg/"
+task :gems do
+  require "fileutils"
+
+  version = File.read("VERSION").strip
+  FileUtils.mkdir_p "pkg"
+
+  GEMS.each do |name|
+    Dir.chdir(name) { sh "gem", "build", "#{name}.gemspec", "--output", "../pkg/#{name}-#{version}.gem" }
+  end
+
+  puts "\n## Built hotcell #{version}"
+  Dir["pkg/*-#{version}.gem"].sort.each { |path| puts "  #{File.expand_path(path)}" }
+end
 
 # One configuration and one run for all five gems, because the style is one style.
 desc "Check style"

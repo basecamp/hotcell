@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative "lib/active_storage/hot_cell/client/version"
+version = File.read(File.expand_path("../VERSION", __dir__)).strip
 
 Gem::Specification.new do |spec|
   spec.name        = "activestorage-hotcell-client"
-  spec.version     = ActiveStorage::HotCell::CLIENT_VERSION
+  spec.version     = version
   spec.authors     = [ "Mike Dalessio" ]
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
@@ -22,11 +22,14 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.3"
 
   spec.metadata["homepage_uri"]    = spec.homepage
-  spec.metadata["source_code_uri"] = spec.homepage
+  spec.metadata["source_code_uri"] = "#{spec.homepage}/tree/v#{version}/#{spec.name}"
+  spec.metadata["changelog_uri"]   = "#{spec.homepage}/blob/v#{version}/CHANGELOG.md"
+  spec.metadata["bug_tracker_uri"]  = "#{spec.homepage}/issues"
+  spec.metadata["rubygems_mfa_required"] = "true"
 
   spec.files = Dir[ "lib/**/*", "MIT-LICENSE", "README.md" ]
 
-  spec.add_dependency "hotcell-client", ">= 0.1.0"
+  spec.add_dependency "hotcell-client", version
 
   # 8.2 is where config.active_storage.variant_processor began accepting a class (rails/rails#58384), and
   # without it a transformer class fails at the first variant rather than at boot. Spelled as the

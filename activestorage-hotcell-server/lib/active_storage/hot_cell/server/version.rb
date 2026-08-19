@@ -2,6 +2,8 @@
 
 module ActiveStorage
   module HotCell
-    SERVER_VERSION = "0.1.0"
+    module Server
+      VERSION = "0.1.0"
+    end
   end
 end
