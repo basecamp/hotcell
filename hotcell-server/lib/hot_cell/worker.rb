@@ -40,7 +40,6 @@ module HotCell
     # It swallows nothing: `exit! 1` runs whatever was caught.
     def run
       configuration.limits.apply
-      ENV["HOME"] = slot.home
 
       while (dispatch = await_dispatch)
         serve(*dispatch)
@@ -75,12 +74,17 @@ module HotCell
         received = []
         response = nil
 
-        # Before the request rather than at boot, and one directory rather than two. A tool reads its
-        # configuration from $HOME and that configuration is executable, so a home that outlived the request
-        # let one compromised conversion reconfigure every later one on this slot. adr/0003.
-        slot.make_home
-
         begin
+          # Before the request rather than at boot, and one directory rather than two. A tool reads its
+          # configuration from $HOME and that configuration is executable, so a home that outlived the
+          # request let one compromised conversion reconfigure every later one on this slot. adr/0003.
+          #
+          # Inside the begin, because a home that cannot be created is a broken deployment and answers
+          # `failed`, which is transient. Outside it the raise skipped every response path and reached
+          # `run`, which exits the worker — after this ensure had already reported idle `"ok"`, counting a
+          # success for a request that never ran.
+          ENV["HOME"] = slot.make_home
+
           line, received = connection.receive_message
           response = if line.nil?
             # The caller closed before sending a request. Transient, so it is never written against a blob,
@@ -107,6 +111,7 @@ module HotCell
       ensure
         received.each(&:close)
         connection.close
+        home = slot.home
         swept = slot.remove_home
 
         # After the answer and before reporting idle, which is the only window where this costs nobody. How
@@ -115,8 +120,8 @@ module HotCell
         # staging, where it would spend the next request's deadline on the previous request's mess. Here the
         # caller already has its response, and `report_idle` is what makes this worker available — so the
         # supervisor will not dispatch into a worker that is still sweeping.
-        slot.sweep
-        report_uncleaned unless swept
+        report_uncleaned home unless swept
+        report_unswept unless slot.sweep
         report_idle response&.failure&.code
       end
 
@@ -124,8 +129,15 @@ module HotCell
       # after the caller has been told the request is over, and a sibling worker can cause it by writing into
       # the tree while remove_entry walks it. It cannot raise from an ensure, so it says so instead. One line
       # per request, from the ensure, because that is the attempt that knows the final state.
-      def report_uncleaned
-        log.write "slot.uncleaned", pid: Process.pid, slot: slot.number, home: slot.home
+      def report_uncleaned(home)
+        log.write "slot.uncleaned", pid: Process.pid, slot: slot.number, home: home
+      end
+
+      # The other half of the same fact. A sweep removes what the supervisor renamed out of the way after a
+      # killed request, and its failure was the one cleanup outcome nobody said anything about — so a slot
+      # accumulating one tree per request looked exactly like a slot that was clean.
+      def report_unswept
+        log.write "slot.unswept", pid: Process.pid, slot: slot.number, home: slot.directory
       end
 
       def handle(line, received, timing)

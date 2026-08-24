@@ -40,7 +40,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `hotcell.cause` | string | Why a worker was killed (`"deadline"`, `"memory"`, `"fsize"`, ...). |
 | `hotcell.signal` | string | Signal name (`"SIGKILL"`, `"SIGSEGV"`, ...). ECS has no field for signals. |
 | `hotcell.served` | integer | Requests a worker served before it was reaped. |
-| `hotcell.home` | string | A slot's scratch directory. |
+| `hotcell.home` | string | The scratch directory a cleanup could not clear: a request's `$HOME` from a worker, the slot directory from the supervisor. |
 | `hotcell.directory` | string | The cell's working directory, on `cell.boot`. |
 | `hotcell.operations` | array | Registered operation names, on `cell.boot`. |
 | `hotcell.configuration` | object | The full configuration inventory (same shape as `hotcell.describe`), on `cell.boot`. |
@@ -72,6 +72,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `control.unanswerable` | WARN | `error.type`, `error.message` |
 | `slot.uncleaned` | WARN | `hotcell.slot`, `hotcell.home`, `message` (boot sweep only) |
 | `slot.undiscarded` | WARN | `hotcell.slot`, `hotcell.home` |
+| `slot.unswept` | WARN | `hotcell.slot`, `hotcell.home` |
 
 ## Examples
 

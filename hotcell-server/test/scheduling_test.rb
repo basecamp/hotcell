@@ -125,14 +125,15 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
-  # The slot is what a reused worker keeps, and the home is named after it — so the path is the same one
-  # twice while the directory behind it is not. What does not carry across is held in cell_test.rb.
-  def test_a_reused_worker_keeps_its_slot
+  # A reused worker keeps its slot and does not keep its home: the two requests run in the same numbered
+  # directory under two names, because a name an earlier request held is one it could have prepared. What
+  # does not carry across is held in cell_test.rb.
+  def test_a_reused_worker_keeps_its_slot_and_not_its_home
     TestCell.boot(max_requests_per_worker: 2, concurrency: 1) do |cell|
       homes = 2.times.map { assert_ok(cell.call("test.whoami")).result[:home] }
 
-      assert_equal 1, homes.uniq.size
-      assert_equal File.join(cell.workspace, "0", "home"), homes.first
+      assert_equal 2, homes.uniq.size, "the second request was handed the first request's directory"
+      assert_equal [ File.join(cell.workspace, "0") ], homes.map { |home| File.dirname(home) }.uniq
     end
   end
 

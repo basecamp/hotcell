@@ -34,7 +34,10 @@ class EnvironmentTest < HotCellServerTest
       TestCell.boot do |cell|
         seen = assert_ok(cell.call("test.environment", payload: { canary: CANARY })).result[:seen]
 
-        assert_includes seen, "HOME=#{File.join(cell.workspace, "0", "home")}"
+        home = seen.grep(/\AHOME=/).first.delete_prefix("HOME=")
+
+        assert_equal File.join(cell.workspace, "0"), File.dirname(home)
+        assert_match(/\Ahome-[0-9a-f]{16}\z/, File.basename(home))
       end
     end
   end
