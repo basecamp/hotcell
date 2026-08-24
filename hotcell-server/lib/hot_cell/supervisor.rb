@@ -727,8 +727,12 @@ module HotCell
       # input, which Active Storage then kept. `Codes` already stated the rule this broke.
       #
       # The verdicts themselves are not gone, they moved to where they can be earned: the worker answers
-      # `memory` when it catches NoMemoryError and `fsize` when a write of its own returns EFBIG, both over
-      # its own control socket, which no sibling can write to. See Worker#disarm_file_size_signal.
+      # `memory` when it catches NoMemoryError and `fsize` when a write of its own returns EFBIG, on the
+      # connection it is holding. See Worker#disarm_file_size_signal.
+      #
+      # What that buys is bounded, and it is worth being exact. The supervisor is no longer an instrument
+      # for one worker to condemn another's input. A cell compromised outright still answers whatever it
+      # likes on a connection it holds, which is the socket-theft residual under "Worker isolation".
       def answer_for(child, status)
         return child.connection&.close unless child.busy?
 

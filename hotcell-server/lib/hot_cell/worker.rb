@@ -65,10 +65,15 @@ module HotCell
       # SI_USER are not reachable from here.
       #
       # Catching it makes the kernel fail the offending write with EFBIG rather than killing the process,
-      # and that error return is the provenance: it is raised by a write this process made, and no signal
-      # any sibling sends produces one. So the verdict below keys on Errno::EFBIG and this handler does
-      # nothing at all. A handler that set so much as a flag the verdict consulted would hand the forgery
-      # straight back.
+      # and that error return is what a signal is not: it is raised by a write this process made, and no
+      # signal any sibling sends produces one. So the verdict below keys on Errno::EFBIG and this handler
+      # does nothing at all. A handler that set so much as a flag the verdict consulted would hand the
+      # forgery straight back.
+      #
+      # EFBIG is evidence of this request's own write and not proof of which limit stopped it. A filesystem
+      # maximum, or the caller's own file, answers the same errno — so this says the bytes did not go, by
+      # something this request did, rather than naming RLIMIT_FSIZE. Narrowing it further means checking the
+      # written file against the effective limit at each write site, which is not what this changes.
       #
       # A block rather than "IGNORE", because an ignored disposition survives execve and a handled one does
       # not. A tool must keep dying on its own RLIMIT_FSIZE rather than writing past it, and a tool that
@@ -263,10 +268,15 @@ module HotCell
         tell deadline: effective(operation).deadline
       end
 
-      # The cause travels with the code, because this is the only path that can vouch for one. The supervisor
-      # counts a kill by cause, and it used to read that cause off a wait status — which is what a sibling
-      # could forge. It arrives here instead, over the socket only this worker holds, and only when there is
-      # one to send, so an ordinary idle report is the two keys it always was.
+      # The cause travels with the code so the supervisor can still count a kill by cause. It used to read
+      # that off a wait status; it reads the worker's own report now, and only when there is a cause to send,
+      # so an ordinary idle report is the two keys it always was.
+      #
+      # **This is a metric and not a verdict.** The verdict went to the caller on the work connection before
+      # this line runs. A compromised worker can report a cause its request never had, or withhold one it
+      # did, so `killed_by` is what workers said rather than what happened — which is why the supervisor
+      # checks the value against the known causes before interning it, and why nothing downstream may treat
+      # it as evidence about a blob.
       def report_idle(failure)
         return tell(idle: true, code: "ok") if failure.nil?
         return tell(idle: true, code: failure.code) if failure.cause.nil?
