@@ -27,6 +27,20 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # **`install_test` above runs from the checkout, where every template is present whether or not it was
+  # packaged.** That is what let the published 0.1.0 advertise a scaffold it could not build: the gemspec
+  # selects `Dir["lib/**/*"]`, which does not match a dotfile, so `install/operations/.keep.tt` was in the
+  # working tree and not in the gem, and the generated Dockerfile's `COPY operations/` had nothing to copy.
+  # This is the difference between the two lists.
+  def test_every_installer_template_is_packaged
+    root = File.expand_path("..", __dir__)
+    spec = Gem::Specification.load(File.join(root, "hotcell-client.gemspec"))
+    templates = Dir.glob("#{HotCell::Install::TEMPLATES}/**/*.tt", File::FNM_DOTMATCH)
+      .map { |path| path.delete_prefix("#{root}/") }
+
+    assert_empty templates - spec.files, "an installer template the published gem would not carry"
+  end
+
   # The Gemfile template is ERB rather than a copy, because the cell's server and this client are halves of
   # one wire contract: a skew between them answers `protocol` on every request.
   def test_install_pins_the_cell_to_the_installing_clients_version

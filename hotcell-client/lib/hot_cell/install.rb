@@ -18,8 +18,12 @@ module HotCell
       def call(root, out: $stdout)
         templates.each do |template|
           relative = template.delete_prefix("#{TEMPLATES}/").delete_suffix(".tt")
-          install template, File.join(root, "hotcell", relative), "hotcell/#{relative}", out
+          write File.join(root, "hotcell", relative), "hotcell/#{relative}", out do
+            render template
+          end
         end
+
+        keep_operations root, out
       end
 
       private
@@ -27,12 +31,27 @@ module HotCell
           Dir.glob("#{TEMPLATES}/**/*.tt", File::FNM_DOTMATCH).sort
         end
 
-        def install(template, destination, label, out)
+        # **The directory the generated Dockerfile copies, made here rather than shipped.**
+        #
+        # It used to be a template, `install/operations/.keep.tt`, and a dotfile is exactly what the
+        # gemspec's `Dir["lib/**/*"]` does not match — so the published 0.1.0 carried the directory's only
+        # file nowhere, `COPY operations/` had nothing to copy, and the advertised scaffold could not build.
+        # The checkout's own install test could not see it, because in a checkout the file is simply there.
+        #
+        # An empty file rather than an empty directory, because the application's git is what has to keep
+        # this after a fresh clone, and git tracks no empty directories.
+        def keep_operations(root, out)
+          write File.join(root, "hotcell", "operations", ".keep"), "hotcell/operations/.keep", out do
+            ""
+          end
+        end
+
+        def write(destination, label, out)
           if File.exist?(destination)
             out.puts "   skip  #{label} (already exists)"
           else
             FileUtils.mkdir_p File.dirname(destination)
-            File.write destination, render(template)
+            File.write destination, yield
             out.puts " create  #{label}"
           end
         end
