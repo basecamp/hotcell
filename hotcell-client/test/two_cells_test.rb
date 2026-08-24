@@ -13,8 +13,10 @@ require "test_helper"
 class TwoCellsTest < HotCellClientTest
   def test_a_client_reaches_the_cell_it_named
     with_two_cells do |images, documents|
-      assert_equal File.join(images.workspace, "0", "home"), Thumbnail.perform_in_hotcell([], [], {})[:home]
-      assert_equal File.join(documents.workspace, "0", "home"), Preview.perform_in_hotcell([], [], {})[:home]
+      assert_equal File.join(images.workspace, "0"),
+                   File.dirname(Thumbnail.perform_in_hotcell([], [], {})[:home])
+      assert_equal File.join(documents.workspace, "0"),
+                   File.dirname(Preview.perform_in_hotcell([], [], {})[:home])
     end
   end
 

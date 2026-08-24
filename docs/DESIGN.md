@@ -136,6 +136,15 @@ input that achieved code execution could reconfigure every later request on that
 the bound `max_requests_per_worker: 1` exists to hold. [ADR 0003](../adr/0003-remove-the-persistent-slot-home.md)
 records the reversal.
 
+The directory carries a fresh unpredictable name for every request, and that is what makes the removal a
+guarantee rather than an intention. A tool that reaches code execution runs as the user that owns the tree,
+so it can `chmod 0500` its own configuration directory and the slot directory around it, and both the
+worker's delete and the supervisor's rename then fail. Under a stable name the next request was handed the
+tree that had just refused to go. A name nothing has held before cannot be prepared, so a cleanup that fails
+costs disk until the container ends rather than the isolation the cell is for. The slot directory's mode is
+reasserted before each request for the same reason: it is the one predictable name, so it is the one an
+earlier request can lock, and the owner can always chmod its own directory.
+
 **Files are not isolated between concurrent workers, and cannot be.** Every worker runs as the same uid in
 one mount namespace, so a worker that reads another worker's scratch directory — by listing it, or through
 `/proc/<sibling>/fd/N` — gets that request's input and output bytes. Unlinking the scratch file does not

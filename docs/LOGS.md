@@ -40,7 +40,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `hotcell.cause` | string | Why a worker was killed (`"deadline"`, `"memory"`, `"fsize"`, ...). |
 | `hotcell.signal` | string | Signal name (`"SIGKILL"`, `"SIGSEGV"`, ...). ECS has no field for signals. |
 | `hotcell.served` | integer | Requests a worker served before it was reaped. |
-| `hotcell.home` | string | A slot's scratch directory. |
+| `hotcell.home` | string | A request's scratch directory, inside its slot. |
 | `hotcell.directory` | string | The cell's working directory, on `cell.boot`. |
 | `hotcell.operations` | array | Registered operation names, on `cell.boot`. |
 | `hotcell.configuration` | object | The full configuration inventory (same shape as `hotcell.describe`), on `cell.boot`. |

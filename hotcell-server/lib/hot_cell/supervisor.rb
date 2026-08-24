@@ -569,9 +569,10 @@ module HotCell
       # the random suffix exists because a tool running as this user can pre-create a colliding name, so a
       # rename that fails is the shape of that attempt as well as of an ordinary error.
       def discard(child)
+        home = child.slot.home
         return if child.slot.discard_home
 
-        log.write "slot.undiscarded", pid: child.pid, slot: child.slot.number, home: child.slot.home
+        log.write "slot.undiscarded", pid: child.pid, slot: child.slot.number, home: home
       end
 
       def unreadable_report(child, message)
@@ -860,7 +861,7 @@ module HotCell
           slot = Slot.build(workspace, number)
           next if slot.prepare
 
-          log.write "slot.uncleaned", slot: number, home: slot.home,
+          log.write "slot.uncleaned", slot: number, home: slot.directory,
                                       message: "an earlier boot's files are still here"
         end
       end

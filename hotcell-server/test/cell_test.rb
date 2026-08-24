@@ -415,16 +415,19 @@ class CellTest < HotCellServerTest
   # unlinking lands on the next worker for this slot, which has a deadline of its own.
   def test_a_killed_workers_files_are_taken_out_of_the_way_rather_than_deleted_in_the_loop
     slot = HotCell::Slot.build(Dir.mktmpdir("hotcell-slot"), 0)
-    FileUtils.mkdir_p File.join(slot.make_home, "deep")
+    home = slot.make_home
+    FileUtils.mkdir_p File.join(home, "deep")
 
     slot.discard_home
 
-    refute Dir.exist?(slot.home), "the home path is free for the next request"
-    assert_equal 1, Dir.glob("#{slot.home}.discarded-*").size, "the tree is still there, out of the way"
+    refute Dir.exist?(home), "the directory should have been renamed away"
+    discarded = File.join(slot.directory, "discarded-*")
+
+    assert_equal 1, Dir.glob(discarded).size, "the tree is still there, out of the way"
 
     slot.sweep
 
-    assert_empty Dir.glob("#{slot.home}.discarded-*"), "a worker sweeps it once nobody is waiting"
+    assert_empty Dir.glob(discarded), "a worker sweeps it once nobody is waiting"
   end
 
   # The API takes several outputs and success was inferred from their total size, so writing the first and
@@ -449,7 +452,8 @@ class CellTest < HotCellServerTest
       with_files do |source, destination|
         assert_ok cell.call("test.uppercase", inputs: [ source ], outputs: [ destination ])
 
-        refute_path_exists File.join(cell.workspace, "0", "home")
+        assert_empty Dir.glob(File.join(cell.workspace, "0", "home-*")),
+                     "the request's home is still on the tmpfs after the answer"
       end
     end
   end
@@ -458,7 +462,9 @@ class CellTest < HotCellServerTest
     TestCell.boot do |cell|
       result = assert_ok(cell.call("test.whoami")).result
 
-      assert_equal File.join(cell.workspace, "0", "home"), result[:home]
+      assert_equal File.join(cell.workspace, "0"), File.dirname(result[:home])
+      assert_match(/\Ahome-[0-9a-f]{16}\z/, File.basename(result[:home]),
+                   "a request's home should carry a name no earlier request could have prepared")
     end
   end
 

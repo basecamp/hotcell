@@ -14,7 +14,29 @@ class SlotTest < HotCellServerTest
   end
 
   def teardown
+    restore_modes
     FileUtils.remove_entry @workspace if Dir.exist?(@workspace)
+  end
+
+  # adr/0003 says no file outlives its request, and `max_requests_per_worker: 1` is priced on that. A tool
+  # that reaches code execution runs as the user that owns the tree, so it can make its own configuration
+  # undeletable and lock the directory the next home would be created in. If the next request lands on the
+  # same path it reads that configuration, and ImageMagick's `delegates.xml` is a command line.
+  def test_a_home_a_tool_locked_open_is_never_handed_to_a_later_request
+    first = @slot.make_home
+    delegates = File.join(first, ".config", "ImageMagick", "delegates.xml")
+    FileUtils.mkdir_p File.dirname(delegates)
+    File.write delegates, "<delegatemap/>"
+    File.chmod 0o500, File.dirname(delegates)
+    File.chmod 0o500, File.dirname(first)
+
+    refute @slot.remove_home, "the locked tree should have refused to go"
+
+    second = @slot.make_home
+
+    refute_equal first, second, "the next request was handed the path the last one poisoned"
+    refute File.exist?(File.join(second, ".config", "ImageMagick", "delegates.xml")),
+           "the next request read configuration the last one wrote"
   end
 
   def test_a_rename_failure_leaves_the_tree_rather_than_deleting_it_inline
@@ -30,12 +52,12 @@ class SlotTest < HotCellServerTest
   end
 
   def test_a_discard_renames_the_tree_aside_for_a_later_sweep
-    @slot.make_home
-    File.write File.join(@slot.home, "leftover"), "x"
+    home = @slot.make_home
+    File.write File.join(home, "leftover"), "x"
 
     @slot.discard_home
 
-    refute Dir.exist?(@slot.home), "the directory should have been renamed away"
+    refute Dir.exist?(home), "the directory should have been renamed away"
     assert_equal 1, discarded_names.size, "the tree should be waiting under a discarded name"
 
     @slot.sweep
@@ -48,7 +70,7 @@ class SlotTest < HotCellServerTest
 
     name = discarded_names.first
 
-    assert_match(/\.discarded-#{Process.pid}-[0-9a-f]{16}\z/, name,
+    assert_match(/\Adiscarded-#{Process.pid}-[0-9a-f]{16}\z/, name,
                  "the discarded name should end in a random suffix a tool cannot pre-create")
   end
 
@@ -79,8 +101,16 @@ class SlotTest < HotCellServerTest
   end
 
   private
+    def restore_modes
+      Dir.glob(File.join(@workspace, "**/"), File::FNM_DOTMATCH).each do |path|
+        File.chmod 0o700, path
+      rescue SystemCallError
+        nil
+      end
+    end
+
     def discarded_names
-      Dir.glob("#{@slot.home}.discarded-*").map { |path| File.basename(path) }
+      Dir.glob(File.join(@slot.directory, "discarded-*")).map { |path| File.basename(path) }
     end
 
     def stub_remove_entry_to_fail
