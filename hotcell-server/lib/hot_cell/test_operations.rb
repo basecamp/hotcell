@@ -164,6 +164,46 @@ module HotCell
       end
     end
 
+    class SignalsSibling < HotCell::Operation
+      operation "test.signals_sibling"
+
+      # Workers share a uid and a pid namespace, so one finds another by looking for a process the
+      # supervisor also fathered. This is the reproducer for the forged verdict: nothing here touches the
+      # victim's input, and the victim is holding an unrelated one.
+      def perform(_inputs, _outputs, signal:)
+        sibling = siblings.first
+        Process.kill signal, sibling if sibling
+
+        { signalled: sibling }
+      end
+
+      private
+        # Two ways to ask the same question, because the suite runs on macOS as well and only one of them
+        # has /proc. An attacker inside a cell has whichever the image gives it; the point of the reproducer
+        # is that the answer is obtainable at all.
+        def siblings
+          pids = Dir.exist?("/proc") ? procfs_children : ps_children
+
+          pids.reject { |pid| pid == Process.pid }
+        end
+
+        def procfs_children
+          Dir.glob("/proc/[0-9]*").filter_map do |path|
+            status = File.read(File.join(path, "status"))
+            File.basename(path).to_i if status[/^PPid:\s+(\d+)/, 1].to_i == Process.ppid
+          rescue SystemCallError
+            nil
+          end
+        end
+
+        def ps_children
+          `ps -A -o pid=,ppid=`.lines.filter_map do |line|
+            pid, ppid = line.split.map(&:to_i)
+            pid if ppid == Process.ppid
+          end
+        end
+    end
+
     # Spawns a process and does not wait for it, the way a worker that crashed mid-request would leave a
     # tool behind. The spawned process inherits the worker's process group, so the supervisor's group sweep
     # at reap is what must kill it — nothing else is watching it, and it has no deadline. Returns the pid so

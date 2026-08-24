@@ -90,31 +90,6 @@ module HotCell
     # bytes than Linux, and control.sock is the longer of the two names, so it overflows first.
     SUN_PATH_MAX = RUBY_PLATFORM.include?("darwin") ? 104 : 108
 
-    # The signals this cell can attribute to the request the worker was holding. XFSZ is that worker passing
-    # RLIMIT_FSIZE, and SEGV, ABRT and TRAP are how libvips and GLib die on their own allocation failures —
-    # libvips dereferences null after printing the correct diagnostic, and g_malloc aborts.
-    #
-    # These three are the worker hitting its own per-worker RLIMIT_DATA, which is a property of the input
-    # this worker held, so the same bytes do it again and the verdict is permanent. `Codes` says a signal
-    # tells how a process died and never why, so a signal is transient by default — and that is not in
-    # conflict with a permanent verdict here, because aggregate pressure the worker did not cause arrives as
-    # SIGKILL, not as these. The two are different signals, and SIGKILL is excluded below.
-    #
-    # SIGKILL is deliberately absent, and its absence is the point. The supervisor's own deadline kill is
-    # already named by `killed_for`, so a SIGKILL reaching this table came from somewhere this process
-    # cannot see: a cgroup OOM chosen on aggregate pressure, or a sibling worker, which shares a uid and is
-    # not prevented from signalling. Reading it as this request's memory condemned an input for someone
-    # else's pressure.
-    #
-    # Anything not here is `crashed`, which is also where a worker that exited without a signal lands. They
-    # were two names, `signal` and `crashed`, for one amount of knowledge: the worker died and nothing says
-    # why. One name is honest about that.
-    SIGNAL_CAUSES = {
-      "XFSZ" => Codes::FSIZE,
-      "SEGV" => Codes::MEMORY,
-      "ABRT" => Codes::MEMORY,
-      "TRAP" => Codes::MEMORY,
-    }.freeze
 
     SOCKETS = [ "work.sock", "control.sock" ].freeze
 
@@ -557,7 +532,7 @@ module HotCell
         elsif message[:idle]
           return unreadable_report child, "idle report from a worker with no request" unless child.busy?
 
-          finish child, message[:code]
+          finish child, message[:code], message[:cause]
         end
       rescue MessageError => error
         unreadable_report child, Failure.sanitize(error.message)
@@ -582,8 +557,9 @@ module HotCell
         nil
       end
 
-      def finish(child, code)
+      def finish(child, code, cause = nil)
         counters.record outcome_code(code)
+        counters.record_kill cause if reported_cause?(code, cause)
         child.finished
         discard child
 
@@ -595,6 +571,14 @@ module HotCell
       # NoMethodError on `to_sym` past `apply_report`'s rescue and took the cell down, and a stream of unique
       # strings grew the counters without bound. An unknown code is recorded, so a misreporting worker is
       # visible rather than silent, but under one fixed bucket.
+      # A worker reports its own kill cause now, so this is a value from a process that may be compromised.
+      # It is checked against the known causes rather than passed through, because `record_kill` interns it
+      # as a symbol and an unchecked one is an unbounded symbol table keyed by whatever a tool decides.
+      def reported_cause?(code, cause)
+        outcome_code(code) == Codes::KILLED && cause.is_a?(String) &&
+          Codes::PERMANENT_BY_CAUSE.key?(cause)
+      end
+
       def outcome_code(reported)
         return reported if reported.is_a?(String) && (reported == "ok" || Codes.known?(reported))
 
@@ -728,18 +712,31 @@ module HotCell
         nil
       end
 
-      # A killed worker cannot report its own death, because RLIMIT_FSIZE and the deadline KILL are
-      # enforced by a signal. So the supervisor holds its copy of every dispatched connection and writes
-      # the verdict itself. Without this the cold side sees a bare end of stream and cannot tell a limit
+      # A killed worker cannot report its own death, because the deadline KILL is enforced by a signal. So
+      # the supervisor holds its copy of every dispatched connection and writes the verdict itself. Without
+      # this the cold side sees a bare end of stream and cannot tell a limit
       # breach from a crash.
       # A worker still holding a connection at reap time never answered: it reports itself idle after writing,
       # and that report is drained above. So this is the only thing that can answer, and whether it says the
       # input did this or the cell did turns on how the worker died.
+      # **The only cause this can authenticate is its own.** `killed_for` is the deadline kill this
+      # supervisor sent, and it is the one thing here that knows why a worker died. Everything else is a
+      # wait status, which says how — and workers share a uid, so any signal in one may have come from a
+      # sibling rather than from the kernel. Reading XFSZ, SEGV, ABRT or TRAP as this request's file size or
+      # memory let one compromised worker write a permanent verdict against another request's unrelated
+      # input, which Active Storage then kept. `Codes` already stated the rule this broke.
+      #
+      # The verdicts themselves are not gone, they moved to where they can be earned: the worker answers
+      # `memory` when it catches NoMemoryError and `fsize` when a write of its own returns EFBIG, on the
+      # connection it is holding. See Worker#disarm_file_size_signal.
+      #
+      # What that buys is bounded, and it is worth being exact. The supervisor is no longer an instrument
+      # for one worker to condemn another's input. A cell compromised outright still answers whatever it
+      # likes on a connection it holds, which is the socket-theft residual under "Worker isolation".
       def answer_for(child, status)
         return child.connection&.close unless child.busy?
 
-        cause = child.killed_for ||
-                SIGNAL_CAUSES.fetch(signal_name(status), Codes::CRASHED)
+        cause = child.killed_for || Codes::CRASHED
         counters.record Codes::KILLED
         counters.record_kill cause
 

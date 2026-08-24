@@ -40,6 +40,7 @@ module HotCell
     # It swallows nothing: `exit! 1` runs whatever was caught.
     def run
       configuration.limits.apply
+      disarm_file_size_signal
 
       while (dispatch = await_dispatch)
         serve(*dispatch)
@@ -54,6 +55,33 @@ module HotCell
 
     private
       attr_reader :slot, :configuration, :control, :log
+
+      # **The handler carries nothing, and that is the whole point.**
+      #
+      # RLIMIT_FSIZE is enforced by SIGXFSZ, and the supervisor used to read that signal off a wait status
+      # and answer `fsize`, permanently, against whatever input the worker was holding. Workers share a uid,
+      # so a sibling sends SIGXFSZ as easily as the kernel does and a wait status cannot tell them apart —
+      # nor can a handler, because Ruby hands one only the signal number and no siginfo, so SI_KERNEL and
+      # SI_USER are not reachable from here.
+      #
+      # Catching it makes the kernel fail the offending write with EFBIG rather than killing the process,
+      # and that error return is what a signal is not: it is raised by a write this process made, and no
+      # signal any sibling sends produces one. So the verdict below keys on Errno::EFBIG and this handler
+      # does nothing at all. A handler that set so much as a flag the verdict consulted would hand the
+      # forgery straight back.
+      #
+      # EFBIG is evidence of this request's own write and not proof of which limit stopped it. A filesystem
+      # maximum, or the caller's own file, answers the same errno — so this says the bytes did not go, by
+      # something this request did, rather than naming RLIMIT_FSIZE. Narrowing it further means checking the
+      # written file against the effective limit at each write site, which is not what this changes.
+      #
+      # A block rather than "IGNORE", because an ignored disposition survives execve and a handled one does
+      # not. A tool must keep dying on its own RLIMIT_FSIZE rather than writing past it, and a tool that
+      # died by signal is `crashed` and transient — its wait status is no more trustworthy than a worker's,
+      # since a sibling can signal a tool too.
+      def disarm_file_size_signal
+        Signal.trap("XFSZ") { nil }
+      end
 
       # Returns [connection, queued_ms], or nil once the supervisor has retired this worker by closing the
       # control socket. The connection arrives as a descriptor: the supervisor accepted it and never
@@ -102,6 +130,10 @@ module HotCell
         # transient. Adding it back would condemn a blob for the cell's own bad moment.
         rescue NoMemoryError, MemoryExhausted => error
           response = refuse(Codes::KILLED, error, timing, cause: Codes::MEMORY)
+        # The one place a file-size verdict can be earned. EFBIG comes back from a write this worker made
+        # past its own RLIMIT_FSIZE, so unlike the signal it cannot arrive from anywhere else.
+        rescue Errno::EFBIG => error
+          response = refuse(Codes::KILLED, error, timing, cause: Codes::FSIZE)
         rescue StandardError => error
           response = refuse("failed", error, timing)
         end
@@ -122,7 +154,7 @@ module HotCell
         # supervisor will not dispatch into a worker that is still sweeping.
         report_uncleaned home unless swept
         report_unswept unless slot.sweep
-        report_idle response&.failure&.code
+        report_idle response&.failure
       end
 
       # A removal that failed is the one thing here nobody else can see. The bytes stay on the shared tmpfs
@@ -236,8 +268,20 @@ module HotCell
         tell deadline: effective(operation).deadline
       end
 
-      def report_idle(code)
-        tell idle: true, code: code || "ok"
+      # The cause travels with the code so the supervisor can still count a kill by cause. It used to read
+      # that off a wait status; it reads the worker's own report now, and only when there is a cause to send,
+      # so an ordinary idle report is the two keys it always was.
+      #
+      # **This is a metric and not a verdict.** The verdict went to the caller on the work connection before
+      # this line runs. A compromised worker can report a cause its request never had, or withhold one it
+      # did, so `killed_by` is what workers said rather than what happened — which is why the supervisor
+      # checks the value against the known causes before interning it, and why nothing downstream may treat
+      # it as evidence about a blob.
+      def report_idle(failure)
+        return tell(idle: true, code: "ok") if failure.nil?
+        return tell(idle: true, code: failure.code) if failure.cause.nil?
+
+        tell idle: true, code: failure.code, cause: failure.cause
       end
 
       def tell(**message)

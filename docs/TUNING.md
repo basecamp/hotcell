@@ -24,6 +24,13 @@ saturated, and it is host-local, so the poller has to be a process on the cell's
 `running`, `queued`, `queue_high_water`, `cancelled`, the request counts by code, and `killed_by` broken
 down by cause.
 
+`killed_by` is what workers reported, not what the supervisor observed. A worker decides its own `memory`
+and `fsize` — the supervisor cannot tell either from a wait status without believing a signal a sibling
+could have sent — and reports the cause when it reports itself idle. So the count arrives just after the
+caller has its answer rather than before, it is lost if the worker dies in the window between the two, and
+a compromised worker can report a cause its request never had. Size limits by it; do not read it as
+evidence about any particular document.
+
 ## Which number comes from which measurement
 
 | Setting | Where the number comes from |
