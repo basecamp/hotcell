@@ -67,11 +67,15 @@ GEMS.each do |gem|
   end
 end
 
-substitute File.join(CONTEXT, "Gemfile"), /^git .*?^end\n/m,
+# The gemspecs read the repository's VERSION file, so it travels into the context alongside them.
+FileUtils.cp File.join(REPO, "VERSION"), File.join(CONTEXT, "VERSION")
+
+substitute File.join(CONTEXT, "Gemfile"), /^gem "hotcell-server".*\n/,
            GEMS.map { |gem| %(gem "#{gem}", path: "#{gem}"\n) }.join
 
 substitute File.join(CONTEXT, "Dockerfile"), /^COPY .*Gemfile\* \.\/$/,
            [ "COPY --chown=hotcell:hotcell Gemfile* ./",
+             "COPY --chown=hotcell:hotcell VERSION VERSION",
              *GEMS.map { |gem| "COPY --chown=hotcell:hotcell #{gem} #{gem}" } ].join("\n")
 
 puts "building #{TAG}"
