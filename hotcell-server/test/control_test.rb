@@ -47,7 +47,10 @@ class ControlTest < HotCellServerTest
                       cause: "fsize"
       end
 
-      result = assert_ok(cell.control("hotcell.metrics")).result
+      # Polled: the worker answers this verdict itself now, so the caller has its response before the
+      # supervisor has read the idle report the count comes from. Every non-killed outcome was already
+      # counted on that report; this moves `fsize` into the same place rather than into a new one.
+      result = wait_for_metrics(cell) { |metrics| metrics[:killed_by][:fsize] == 1 }
 
       assert_equal 1, result[:killed_by][:fsize]
       assert_equal 0, result[:killed_by].fetch(:deadline, 0)
@@ -225,4 +228,17 @@ class ControlTest < HotCellServerTest
       assert_ok cell.call("test.echo")
     end
   end
+
+  private
+    def wait_for_metrics(cell, timeout: 5)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+
+      loop do
+        metrics = assert_ok(cell.control("hotcell.metrics")).result
+        return metrics if yield(metrics)
+        return metrics if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+        sleep 0.05
+      end
+    end
 end

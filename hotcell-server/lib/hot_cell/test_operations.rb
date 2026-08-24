@@ -164,6 +164,33 @@ module HotCell
       end
     end
 
+    class SignalsSibling < HotCell::Operation
+      operation "test.signals_sibling"
+
+      # Workers share a uid and a pid namespace, so one finds another by looking for a process the
+      # supervisor also fathered. This is the reproducer for the forged verdict: nothing here touches the
+      # victim's input, and the victim is holding an unrelated one.
+      def perform(_inputs, _outputs, signal:)
+        sibling = siblings.first
+        Process.kill signal, sibling if sibling
+
+        { signalled: sibling }
+      end
+
+      private
+        def siblings
+          Dir.glob("/proc/[0-9]*").filter_map do |path|
+            pid = File.basename(path).to_i
+            next if pid == Process.pid
+
+            status = File.read(File.join(path, "status"))
+            pid if status[/^PPid:\s+(\d+)/, 1].to_i == Process.ppid
+          rescue SystemCallError
+            nil
+          end
+        end
+    end
+
     # Spawns a process and does not wait for it, the way a worker that crashed mid-request would leave a
     # tool behind. The spawned process inherits the worker's process group, so the supervisor's group sweep
     # at reap is what must kill it — nothing else is watching it, and it has no deadline. Returns the pid so

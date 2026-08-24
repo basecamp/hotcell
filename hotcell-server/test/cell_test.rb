@@ -430,6 +430,40 @@ class CellTest < HotCellServerTest
     assert_empty Dir.glob(discarded), "a worker sweeps it once nobody is waiting"
   end
 
+  # **`codes.rb` already states the rule this breaks.** A signal says how a worker died and never why, and
+  # workers share a uid, so one can signal another — which the supervisor then read as the victim's own
+  # memory exhaustion and wrote against the victim's unrelated input, permanently. Nothing the attacker does
+  # here touches that input.
+  def test_a_sibling_signal_is_not_a_verdict_on_the_victims_input
+    TestCell.boot(concurrency: 2, queue_size: 4) do |cell|
+      victim = Thread.new { cell.call("test.blocking", payload: { seconds: 3 }, timeout: 30) }
+      sleep 0.3
+
+      assert_ok cell.call("test.signals_sibling", payload: { signal: "ABRT" })
+
+      failure = assert_failed "killed", victim.value
+
+      refute_predicate failure, :permanent?, "a sibling's signal condemned the victim's input"
+      assert_equal "crashed", failure.cause, "an unexplained signal was read as a cause"
+    end
+  end
+
+  # The same forgery with the one signal that has a real meaning. `XFSZ` is what the kernel raises when a
+  # write passes RLIMIT_FSIZE, and that verdict is permanent — but a sibling sends it just as easily and a
+  # wait status cannot tell the two apart. Catching it in the worker answers both halves at once: the
+  # kernel's XFSZ comes back as EFBIG from the write that caused it, and a sibling's does not reach the
+  # victim's request at all, because nothing is listening for it.
+  def test_a_sibling_can_not_forge_a_file_size_verdict
+    TestCell.boot(concurrency: 2, queue_size: 4) do |cell|
+      victim = Thread.new { cell.call("test.blocking", payload: { seconds: 3 }, timeout: 30) }
+      sleep 0.3
+
+      assert_ok cell.call("test.signals_sibling", payload: { signal: "XFSZ" })
+
+      assert_ok victim.value
+    end
+  end
+
   # The API takes several outputs and success was inferred from their total size, so writing the first and
   # skipping the second was a positive total and read as `ok`. Transient rather than a verdict: the
   # commonest way to write nothing is a full tmpfs.

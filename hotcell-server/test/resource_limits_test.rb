@@ -99,9 +99,11 @@ class ResourceLimitsTest < HotCellServerTest
     boot { |cell| assert_equal [ 0, 0 ], assert_ok(cell.call("test.rlimits")).result[:core] }
   end
 
-  # RLIMIT_FSIZE is enforced by a signal, so the worker cannot report its own death and the supervisor
-  # answers for it. Without that the cold side would see a bare end of stream and could not tell a limit
-  # breach from a crash.
+  # RLIMIT_FSIZE is enforced by a signal, and the supervisor used to read that signal off a wait status —
+  # which a sibling can forge, because workers share a uid. The worker catches SIGXFSZ instead, which makes
+  # the kernel fail the offending write with EFBIG rather than killing the process, and answers for itself
+  # over its own control socket. So the verdict survives and carries no signal: the write that caused it is
+  # the evidence, not the death.
   def test_writing_past_file_size_is_killed_rather_than_truncated
     boot do |cell|
       with_files do |source, destination|
@@ -110,7 +112,8 @@ class ResourceLimitsTest < HotCellServerTest
 
         failure = assert_failed "killed", response, cause: "fsize"
         assert_predicate failure, :permanent?
-        assert_equal "XFSZ", failure.signal
+        assert_nil failure.signal, "the verdict was inferred from a signal rather than earned"
+        assert_equal "Errno::EFBIG", failure.error_class
       end
     end
   end

@@ -79,6 +79,11 @@ module HotCell
     # from somewhere it cannot see: a cgroup OOM kill chosen on aggregate pressure across concurrent workers,
     # or one worker signalling another — they share a uid, and nothing stops that. Attributing either to the
     # input this worker happened to be holding condemns a file for something it did not do.
+    #
+    # So the two permanent causes are never inferred from a signal. They arrive only from the worker, over
+    # the control socket only it holds: `memory` when it catches NoMemoryError itself, and `fsize` when a
+    # write of its own returns EFBIG. See Worker#disarm_file_size_signal for why the file-size verdict has
+    # to be earned that way rather than read off a wait status.
     PERMANENT_BY_CAUSE = {
       FSIZE    => true,
       MEMORY   => true,
