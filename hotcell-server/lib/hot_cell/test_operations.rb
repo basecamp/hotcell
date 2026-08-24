@@ -178,15 +178,28 @@ module HotCell
       end
 
       private
+        # Two ways to ask the same question, because the suite runs on macOS as well and only one of them
+        # has /proc. An attacker inside a cell has whichever the image gives it; the point of the reproducer
+        # is that the answer is obtainable at all.
         def siblings
-          Dir.glob("/proc/[0-9]*").filter_map do |path|
-            pid = File.basename(path).to_i
-            next if pid == Process.pid
+          pids = Dir.exist?("/proc") ? procfs_children : ps_children
 
+          pids.reject { |pid| pid == Process.pid }
+        end
+
+        def procfs_children
+          Dir.glob("/proc/[0-9]*").filter_map do |path|
             status = File.read(File.join(path, "status"))
-            pid if status[/^PPid:\s+(\d+)/, 1].to_i == Process.ppid
+            File.basename(path).to_i if status[/^PPid:\s+(\d+)/, 1].to_i == Process.ppid
           rescue SystemCallError
             nil
+          end
+        end
+
+        def ps_children
+          `ps -A -o pid=,ppid=`.lines.filter_map do |line|
+            pid, ppid = line.split.map(&:to_i)
+            pid if ppid == Process.ppid
           end
         end
     end
