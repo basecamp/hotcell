@@ -207,6 +207,10 @@ class ClassificationTest < HotCellClientTest
 
   private
     # A cell whose supervisor answers one fixed line and closes, so the client reads exactly these bytes.
+    #
+    # It reads the request before answering, the way a real supervisor does. Answering without reading
+    # raced the client: a close that landed before the client's `sendmsg` gave it EPIPE on the write leg,
+    # so it produced a verdict for a broken pipe and never reached the read this test is about.
     def with_cell_answering(line, name: "test")
       Dir.mktmpdir "hotcell-hostile" do |root|
         directory = File.join(root, name)
@@ -215,9 +219,12 @@ class ClassificationTest < HotCellClientTest
         work = UNIXServer.new File.join(directory, "work.sock")
         answerer = Thread.new do
           loop do
-            socket = work.accept
-            socket.write line
-            socket.close
+            connection = HotCell::Connection.new(work.accept)
+            _, descriptors = connection.receive_message
+            descriptors.each(&:close)
+
+            connection.write_line line
+            connection.close
           end
         end
 
