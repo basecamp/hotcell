@@ -140,10 +140,16 @@ The directory carries a fresh unpredictable name for every request, and that is 
 guarantee rather than an intention. A tool that reaches code execution runs as the user that owns the tree,
 so it can `chmod 0500` its own configuration directory and the slot directory around it, and both the
 worker's delete and the supervisor's rename then fail. Under a stable name the next request was handed the
-tree that had just refused to go. A name nothing has held before cannot be prepared, so a cleanup that fails
-costs disk until the container ends rather than the isolation the cell is for. The slot directory's mode is
-reasserted before each request for the same reason: it is the one predictable name, so it is the one an
-earlier request can lock, and the owner can always chmod its own directory.
+tree that had just refused to go. A name no earlier request has held is not a name an earlier request could
+have prepared. A mode is also not a permission the process lost, so a cleanup that fails on one is retried
+after putting the mode back, and what a cleanup that still fails costs is disk rather than isolation.
+
+**That bounds what a finished request left behind, and not what a live process is doing.** Every worker runs
+as the same uid, and `0700` is that uid's own mode, so a concurrent sibling can write into a home as soon as
+it exists — and so can a `setsid` descendant of a request that has already answered, which process groups do
+not contain. The slot directory itself is a name a worker can rename aside and replace, and a pathname
+`chmod` follows what it finds. Those are the residuals below, and a fresh name does not close them: it
+closes the offline route, where nothing of the attacker's is still running.
 
 **Files are not isolated between concurrent workers, and cannot be.** Every worker runs as the same uid in
 one mount namespace, so a worker that reads another worker's scratch directory — by listing it, or through

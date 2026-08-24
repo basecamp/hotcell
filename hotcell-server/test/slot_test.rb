@@ -28,15 +28,68 @@ class SlotTest < HotCellServerTest
     FileUtils.mkdir_p File.dirname(delegates)
     File.write delegates, "<delegatemap/>"
     File.chmod 0o500, File.dirname(delegates)
-    File.chmod 0o500, File.dirname(first)
+    File.chmod 0o500, @slot.directory
 
-    refute @slot.remove_home, "the locked tree should have refused to go"
-
+    @slot.remove_home
     second = @slot.make_home
 
     refute_equal first, second, "the next request was handed the path the last one poisoned"
     refute File.exist?(File.join(second, ".config", "ImageMagick", "delegates.xml")),
            "the next request read configuration the last one wrote"
+  end
+
+  # The name is the guarantee and the removal is what keeps the disk. A mode is the only thing a tool needs
+  # to make its own tree unremovable, and a mode on a tree this uid owns is ours to put back — so a failed
+  # removal is retried after repairing what the tool changed, rather than left to accumulate one tree per
+  # request until the tmpfs is full.
+  def test_a_tree_a_tool_made_unremovable_is_repaired_and_removed
+    home = @slot.make_home
+    locked = File.join(home, ".config")
+    FileUtils.mkdir_p locked
+    File.write File.join(locked, "delegates.xml"), "<delegatemap/>"
+    File.chmod 0o500, locked
+
+    assert @slot.remove_home, "the removal gave up on a mode it could have repaired"
+    refute Dir.exist?(home), "the tree is still on the tmpfs"
+  end
+
+  def test_a_discarded_tree_a_tool_made_unremovable_is_repaired_and_swept
+    home = @slot.make_home
+    locked = File.join(home, ".config")
+    FileUtils.mkdir_p locked
+    File.write File.join(locked, "delegates.xml"), "<delegatemap/>"
+    File.chmod 0o500, locked
+
+    assert @slot.discard_home
+    assert @slot.sweep, "the sweep gave up on a mode it could have repaired"
+    assert_empty discarded_names, "the discarded tree is still on the tmpfs"
+  end
+
+  # A home whose cleanup genuinely could not run is still never reused, because the name of the next one is
+  # not a name any earlier request has held.
+  def test_a_home_whose_cleanup_failed_is_never_handed_to_a_later_request
+    first = @slot.make_home
+    File.write File.join(first, "delegates.xml"), "<delegatemap/>"
+
+    stub_remove_entry_to_fail do
+      refute @slot.remove_home, "a removal that failed reported success"
+    end
+
+    second = @slot.make_home
+
+    refute_equal first, second
+    refute File.exist?(File.join(second, "delegates.xml"))
+  end
+
+  # `Dir.exist?` follows symlinks and answers false for a dangling one, so an entry a tool left in the slot's
+  # place survived the boot sweep and every later `make_home` raised on it.
+  def test_a_slot_directory_that_is_not_a_directory_is_cleared_at_boot
+    File.symlink File.join(@workspace, "nowhere"), @slot.directory
+
+    assert @slot.prepare, "the boot sweep reported success without clearing the entry"
+    refute File.symlink?(@slot.directory), "the entry a tool left in the slot's place is still there"
+
+    @slot.make_home
   end
 
   def test_a_rename_failure_leaves_the_tree_rather_than_deleting_it_inline

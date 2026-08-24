@@ -568,11 +568,13 @@ module HotCell
       # off the hot path, because the supervisor must never delete one inline. It is not tolerated silently:
       # the random suffix exists because a tool running as this user can pre-create a colliding name, so a
       # rename that fails is the shape of that attempt as well as of an ordinary error.
+      # The slot directory rather than the request's home, because the supervisor does not know the home. It
+      # is named in the worker after the fork, so this copy of the slot holds nil for the whole life of the
+      # child — and logging it said `null` on every failure, which is worse than saying nothing.
       def discard(child)
-        home = child.slot.home
         return if child.slot.discard_home
 
-        log.write "slot.undiscarded", pid: child.pid, slot: child.slot.number, home: home
+        log.write "slot.undiscarded", pid: child.pid, slot: child.slot.number, home: child.slot.directory
       end
 
       def unreadable_report(child, message)

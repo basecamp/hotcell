@@ -484,14 +484,17 @@ class CellTest < HotCellServerTest
   end
 
   # The removal is what closes the window where a sibling worker reads this request's staged bytes, and it
-  # runs from an ensure where it cannot raise. It used to swallow the failure, so the bytes stayed on the
-  # shared tmpfs after the caller had been told the request was over, and nothing anywhere said so.
-  def test_a_home_that_cannot_be_removed_is_reported
+  # runs from an ensure where it cannot raise. A tool needs nothing but a mode to block it, and a mode on a
+  # tree this uid owns is one the worker puts back rather than gives up on — so the bytes go, and there is
+  # nothing to report. `slot.uncleaned` is for a removal that repair could not rescue.
+  def test_a_home_a_tool_tried_to_lock_open_is_removed_anyway
     cell = TestCell.boot
-    assert_ok cell.call("test.unremovable_home")
+    blocked = assert_ok(cell.call("test.unremovable_home")).result[:blocked]
 
-    # Polled, because the worker writes this from its ensure, after the caller already has the answer.
-    assert_equal 1, wait_for_event(cell, "slot.uncleaned").size, "the failed removal was silent: #{cell.log}"
+    cell.stop
+
+    refute Dir.exist?(File.dirname(blocked)), "the tree a mode blocked is still on the tmpfs"
+    assert_empty cell.log_events("slot.uncleaned"), "a removal that succeeded was reported as a failure"
   ensure
     # Stop the cell first: it is still sweeping, so a directory found by the glob can be gone by the chmod.
     # Then hand write permission back wherever the blocked directory landed, because the supervisor renames
