@@ -72,19 +72,28 @@ module HotCell
     # Boot must not fail when a cell does not answer. A cell that is down at app boot is a degraded
     # deployment rather than a broken one, and an application that refuses to start because its thumbnail
     # cell is restarting is worse than one that serves placeholders. So this warns and carries on.
+    #
+    # Nor when a cell answers something this client cannot read. The three warnings below reach into the
+    # description without checking types, so a cell that sends the wrong ones raises here — and the README
+    # calls `describe_cells` from `after_initialize`, where that is not a failed check but an application
+    # that does not boot. The process that wrote the description is the one that runs untrusted content.
+    # So rescue: returning nil is what an unreachable cell already returns, and every caller handles it.
     def describe
       return nil unless enabled?
 
       response = control(DESCRIBE)
-      unless response.ok?
-        HotCell.logger.warn "hotcell #{name}: #{unreachable_because response.failure}"
-        return nil
-      end
+      return warn_unreachable(response.failure) unless response.ok?
 
-      warn_about_timeout response.result
-      warn_about_missing_operations response.result
-      warn_about_group_skew response.result
-      response.result
+      response.result.tap do |described|
+        warn_about_timeout described
+        warn_about_missing_operations described
+        warn_about_group_skew described
+      end
+    rescue StandardError => error
+      HotCell.logger.warn "hotcell #{name}: this cell's description could not be read and is being " \
+                          "ignored (#{error.class}: #{Failure.one_line error.message}). Boot continues; " \
+                          "nothing it carries is assumed."
+      nil
     end
 
     def metrics
@@ -96,13 +105,18 @@ module HotCell
       # that admits a caller. EACCES therefore means one thing, and it is worth saying rather than leaving an
       # operator to read "could not describe the cell" as "the cell is down". Every other failure reads that
       # way correctly, because a restarting accessory is the common one.
+      def warn_unreachable(failure)
+        HotCell.logger.warn "hotcell #{name}: #{unreachable_because failure}"
+        nil
+      end
+
       def unreachable_because(failure)
         if failure.error_class == "Errno::EACCES"
           "this process may not open the cell's socket. Both sides share a group, and this one is in " \
           "#{Process.groups.sort.inspect}. Add the cell's gid to this container (Kamal: `group-add` under " \
           "the role's `options:`)."
         else
-          "could not describe the cell (#{failure})"
+          "could not describe the cell (#{Failure.one_line failure})"
         end
       end
 
@@ -125,10 +139,9 @@ module HotCell
         return if needed.nil? || timeout.nil? || timeout >= needed
 
         HotCell.logger.warn "hotcell #{name}: this client waits #{seconds timeout} and the cell says it may " \
-                            "take #{seconds needed} to answer (queue_wait #{seconds described[:queue_wait]} + " \
-                            "deadline #{seconds described[:deadline]} + the time to kill and reply), so a " \
-                            "saturated cell will arrive here as a transport failure rather than as its own " \
-                            "verdict. Deliberate on a synchronous path; a mistake for a background job."
+                            "take #{seconds needed} to answer, so a saturated cell will arrive here as a " \
+                            "transport failure rather than as its own verdict. Deliberate on a synchronous " \
+                            "path; a mistake for a background job."
       end
 
       # The cell reports seconds as floats, and "41.0s" is a worse sentence than "41s".
