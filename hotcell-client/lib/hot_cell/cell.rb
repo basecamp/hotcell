@@ -28,6 +28,7 @@ module HotCell
       @on_contract_skew = on_contract_skew
       @transport = transport
 
+      verify_bounds!
       verify_classification!
     end
 
@@ -158,6 +159,29 @@ module HotCell
           HotCell.logger.warn "hotcell #{name}: #{client} wants #{client.operation.inspect} and this cell " \
                               "carries #{carried.inspect}"
         end
+      end
+
+      # A `nil` timeout reaches `Transport::Socket#receive` as `deadline: nil`, and reading with no deadline
+      # blocks: a cell that accepts the connection and then never answers holds this caller for good. At
+      # boot that is an application that never finishes starting, with no exception and nothing to rescue.
+      #
+      # Refused at registration rather than defaulted, so that a `timeout:` read from an unset environment
+      # variable says so instead of quietly becoming 30 seconds. Same reason as `verify_classification!`.
+      def verify_bounds!
+        @timeout = bounded!(:timeout, timeout)
+        @control_timeout = bounded!(:control_timeout, control_timeout)
+      end
+
+      # Stored as a Float, because the only thing done with the number is `Clock.now + timeout`. That is
+      # also why `finite?` is part of the test: `10**400` is a positive Integer, and adding it to a clock
+      # gives `Infinity` — a deadline that never passes, which is the wait this refuses.
+      def bounded!(name, value)
+        seconds = Float(value, exception: false)
+        return seconds if seconds&.finite? && seconds.positive?
+
+        raise ConfigurationError,
+              "#{name}: #{value.inspect[0, 60]} does not bound anything, so a cell that never answers " \
+              "would hold this call for as long as it liked. It must be a positive number of seconds."
       end
 
       def verify_classification!

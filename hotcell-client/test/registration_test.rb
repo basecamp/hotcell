@@ -68,6 +68,26 @@ class RegistrationTest < HotCellClientTest
     assert_match "would be recorded as a permanent one", error.message
   end
 
+  # `nil` is the case that matters: it reaches the transport as no deadline at all, so a cell that accepts
+  # the connection and never answers holds the caller for good — and the README describes cells from
+  # `after_initialize`, where that is a boot that does not finish. The rest cannot be a number of seconds.
+  def test_a_cell_cannot_be_registered_without_a_bound_on_its_calls
+    [ { timeout: nil }, { control_timeout: nil }, { control_timeout: 0 }, { control_timeout: -1 },
+      { control_timeout: Float::INFINITY }, { control_timeout: 10**400 },
+      { control_timeout: Object.new } ].each do |bad|
+      error = assert_raises HotCell::ConfigurationError, "#{bad.inspect} was accepted" do
+        HotCell.register "active_storage", **bad
+      end
+
+      assert_match(/timeout/, error.message)
+    end
+  end
+
+  def test_the_default_bounds_are_still_accepted
+    assert_equal 5, HotCell.register("active_storage").control_timeout
+    assert_equal 0.5, HotCell.register("archiver", control_timeout: 0.5).control_timeout
+  end
+
   def test_the_two_defaults_are_not_related
     refute HotCell::TransientFailure <= HotCell::PermanentFailure
     refute HotCell::PermanentFailure <= HotCell::TransientFailure
