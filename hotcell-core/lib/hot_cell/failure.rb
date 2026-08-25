@@ -76,6 +76,14 @@ module HotCell
             error_class: wire[:class], message: wire[:message]
       end
 
+      # For a message that is about to be written as one line of a log. `sanitize` leaves CR and LF alone,
+      # which is right for a message an application stores or re-raises, but a peer that puts a newline in
+      # one writes a second log line of its own — formatted and indented like the real ones. Escape them,
+      # and the rest of the control characters with them.
+      def one_line(text)
+        sanitize(text)&.gsub(/[[:cntrl:]]/) { |character| character.dump[1..-2] }
+      end
+
       def sanitize(message)
         return nil if message.nil?
 

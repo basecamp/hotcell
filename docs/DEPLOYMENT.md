@@ -436,6 +436,20 @@ like every other boot check here.
   somewhere else, so nothing else would catch a cell image that moved its gid. A cell too old to report
   them says nothing.
 
+Neither check trusts what the cell says. The process answering runs untrusted content, so its description
+is read inside a rescue: an answer this client cannot use is logged and ignored, and the cell is treated as
+one that answered nothing. What that catches is a misdeployment, not a compromised cell — a cell that has been taken over can answer a perfectly well-formed
+description that is simply false, and nothing on this side can tell.
+
+What the rescue covers is what a cell *says*. It does not cover a cell that never answers at boot:
+`control_timeout` bounds the answer and not the connection, so a listener that stops accepting until its
+backlog fills can hold the connect. That is [#20](https://github.com/basecamp/hotcell/issues/20).
+
+And it covers what raises at boot, not what a value does later. A description is handed back whole, so a
+cell can put a string in it that is not valid UTF-8, or a number that parses to an infinity. Neither raises
+here. The whole returned description stays untrusted: validate it for whatever you do with it — serializing,
+matching, storing or rendering are all places these values raise.
+
 ## Making the numbers agree
 
 Nothing checks these three for you.
