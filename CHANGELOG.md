@@ -8,6 +8,9 @@ This changelog covers five gems, which release together on the same version:
 - `activestorage-hotcell-client`
 - `activestorage-hotcell-server`
 
+## next / unreleased
+
+
 ## v0.2.0 / 2026-08-25
 
 ### HotCell::Client and HotCell::Server
