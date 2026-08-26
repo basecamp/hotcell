@@ -66,14 +66,13 @@ module HotCell
       @on_contract_skew&.call error, self
     end
 
-    # Static, and called once at boot. The cheapest way to catch a client pointed at a cell that does not
-    # carry the operation it wants, which is otherwise an `unsupported` on the first real request.
+    # Static, and called once at boot.
     #
     # Boot must not fail when a cell does not answer. A cell that is down at app boot is a degraded
     # deployment rather than a broken one, and an application that refuses to start because its thumbnail
     # cell is restarting is worse than one that serves placeholders. So this warns and carries on.
     #
-    # Nor when a cell answers something this client cannot read. The three warnings below reach into the
+    # Nor when a cell answers something this client cannot read. The two warnings below reach into the
     # description without checking types, so a cell that sends the wrong ones raises here — and the README
     # calls `describe_cells` from `after_initialize`, where that is not a failed check but an application
     # that does not boot. The process that wrote the description is the one that runs untrusted content.
@@ -86,7 +85,6 @@ module HotCell
 
       response.result.tap do |described|
         warn_about_timeout described
-        warn_about_missing_operations described
         warn_about_group_skew described
       end
     rescue StandardError => error
@@ -162,16 +160,6 @@ module HotCell
         HotCell.logger.warn "hotcell #{name}: HotCell.group is #{HotCell.group} and this cell runs in " \
                             "#{carried.inspect}, so it cannot open a file this application hands it and " \
                             "every operation that gives a tool a filename will fail with EACCES."
-      end
-
-      def warn_about_missing_operations(described)
-        carried = Array(described[:operations])
-        wanted = HotCell.clients.select { |client| client.hotcell == name }
-
-        wanted.reject { |client| carried.include?(client.operation) }.each do |client|
-          HotCell.logger.warn "hotcell #{name}: #{client} wants #{client.operation.inspect} and this cell " \
-                              "carries #{carried.inspect}"
-        end
       end
 
       # A `nil` timeout reaches `Transport::Socket#receive` as `deadline: nil`, and reading with no deadline

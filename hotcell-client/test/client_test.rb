@@ -28,10 +28,6 @@ class ClientTest < HotCellClientTest
     assert_match "must name its cell", error.message
   end
 
-  def test_every_client_is_discoverable_so_a_boot_check_can_find_it
-    assert_includes HotCell.clients, Uppercase
-  end
-
   # The caller is the one that knows what to do instead, so this is loud rather than silent.
   def test_calling_a_cell_whose_directory_is_unset
     HotCell.register "test"

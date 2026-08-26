@@ -60,13 +60,6 @@ module HotCell
       cells.key?(name.to_s)
     end
 
-    # Every HotCell::Client subclass, so a boot check can tell which cell is expected to carry what. This
-    # records what the process has loaded rather than what it has configured, so resetting registrations
-    # leaves it alone: the classes are still defined either way.
-    def clients
-      @clients ||= []
-    end
-
     # Call once at boot, after registering. Warns and carries on; see Cell#describe.
     def describe_cells
       warn_about_group

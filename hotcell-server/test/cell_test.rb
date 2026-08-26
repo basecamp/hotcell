@@ -91,7 +91,7 @@ class CellTest < HotCellServerTest
   # Transient, and the design document says otherwise. An accessory is not updated by a deploy, so an
   # application that ships a client for a new operation before anybody reboots the cell gets this at one
   # hundred percent until they do — and recording that as permanent condemns every blob uploaded during the
-  # window. A caller's typo shows up in the `unsupported` rate and in the client's boot-time warning instead.
+  # window. A caller's typo shows up in the `unsupported` rate and in the refusal, which names the operation.
   def test_an_unknown_operation_is_a_deploy_window_rather_than_a_verdict_on_the_input
     TestCell.boot do |cell|
       failure = assert_failed "unsupported", cell.call("test.nonexistent")

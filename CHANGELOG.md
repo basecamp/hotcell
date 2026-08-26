@@ -10,6 +10,12 @@ This changelog covers five gems, which release together on the same version:
 
 ## next / unreleased
 
+### HotCell::Client
+
+#### Breaking
+
+* `HotCell.describe_cells` no longer warns about a client whose operation the cell does not carry, and `HotCell.clients` is gone with it. The check could not tell a client the application calls from one it merely loaded, so a cell carrying a subset of what a gem ships warned on every boot. A request for an operation a cell does not carry is refused as `unsupported`, naming the operation, and that failure is transient and reaches the application's error reporting. An application that wants a boot check can write one over its own configuration.
+
 
 ## v0.2.0 / 2026-08-25
 
