@@ -141,18 +141,20 @@ jobs:
       # Each drop must fail the battery at its own isolation assertion — not merely exit non-zero, which an
       # unrelated hiccup (a bundle install outage, a flaky timing check) could also do and be misread as
       # the flag having been caught. So we require the expected message, which ties the failure to the
-      # dropped flag. --user has no entry: the image already sets USER 10001, so dropping the run flag is a
-      # no-op, and forcing root instead would fail at socket ownership rather than the uid check; the
-      # positive run above already fails if the image ever runs as root, and examples/gate covers the
-      # assertion. tmpfs-noexec is included: runc on this runner honours the tmpfs options, so dropping
-      # noexec produces a scratch the battery rejects (a runtime that force-mounts noexec would surface
-      # here as a passing run, which the message check turns into a loud failure rather than a silent one).
+      # dropped flag. Two flags have no entry:
+      #   --user: the image already sets USER 10001, so dropping the run flag is a no-op, and forcing root
+      #     instead would fail at socket ownership rather than the uid check. The positive run above already
+      #     fails if the image ever runs as root, and examples/gate covers the uid assertion directly.
+      #   tmpfs-noexec: this runner's container runtime force-mounts noexec on every tmpfs, so dropping the
+      #     option still yields a noexec scratch and the negative run would pass — verified empirically when
+      #     it was tried here. The positive run still asserts the noexec mount and examples/gate proves the
+      #     assertion rejects a tmpfs without it, so noexec stays covered without a negative job that the
+      #     environment cannot honour.
       - name: Conformance fails at the intended check with any one security flag dropped
         run: |
           declare -A expect=(
             [network]="network interfaces"
             [read-only]="not mounted read-only"
-            [tmpfs-noexec]="not mounted noexec"
             [cap-drop]="bounding capability set"
             [no-new-privileges]="gain new privileges"
           )
