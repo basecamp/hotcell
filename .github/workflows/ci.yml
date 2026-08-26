@@ -165,6 +165,11 @@ jobs:
             echo "$gadgets"
             exit 1
           fi
+      # `ignore-unfixed` gates on what a rebuild can actually fix: a fixable High or Critical means the base
+      # has drifted behind an available patch, which `--pull` in bin/example-image resolves. Vulnerabilities
+      # with no released fix would only be able to fail every unrelated PR until upstream ships one, so they
+      # are reported by the SBOM below rather than blocking here. This is a fixable-vuln gate, not a claim of
+      # zero Highs.
       - name: Scan the image for fixable High and Critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

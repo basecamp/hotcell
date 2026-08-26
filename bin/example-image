@@ -27,11 +27,6 @@ BUILD = File.join(REPO, "tmp", "example-image")
 CONTEXT = File.join(BUILD, "hotcell")
 GEMS = %w[ hotcell-core hotcell-server ].freeze
 
-# The one ruby the lock and the build must agree on. The template's frozen `bundle install` reads a
-# committed Gemfile.lock, so the lock is generated in this same image below and the build is pinned to it,
-# rather than to whatever the Dockerfile's own default drifts to.
-RUBY_TAG = "3.4"
-
 def edit(path)
   written = yield File.read(path)
   File.write path, written
@@ -83,20 +78,9 @@ substitute File.join(CONTEXT, "Dockerfile"), /^COPY .*Gemfile\* \.\/$/,
              "COPY --chown=hotcell:hotcell VERSION VERSION",
              *GEMS.map { |gem| "COPY --chown=hotcell:hotcell #{gem} #{gem}" } ].join("\n")
 
-# The template builds frozen, so a committed lockfile has to exist before `docker build`. An application
-# generates it once with `bundle install` and commits it; here the graph is the two path gems and their
-# dependencies, so resolving it in the base image the build uses produces a lockfile that image's frozen
-# install accepts — same ruby, same platform, same bundler.
-puts "locking the cell's gems"
-abort "bundle lock failed" unless system(
-  "docker", "run", "--rm",
-  "--volume", "#{CONTEXT}:/hotcell", "--workdir", "/hotcell",
-  "ruby:#{RUBY_TAG}-slim", "bundle", "lock")
-
 # `--pull` re-fetches the base tag so the image builds on the newest patched base rather than a stale local
 # layer — the freshness half of what the scan then verifies.
 puts "building #{TAG}"
-abort "docker build failed" unless system(
-  "docker", "build", "--pull", "--build-arg", "RUBY_VERSION=#{RUBY_TAG}", "--tag", TAG, CONTEXT)
+abort "docker build failed" unless system("docker", "build", "--pull", "--tag", TAG, CONTEXT)
 
 puts "built #{TAG} from #{CONTEXT}"
