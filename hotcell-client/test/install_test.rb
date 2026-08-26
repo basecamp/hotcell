@@ -54,6 +54,21 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # The cell image is the isolation boundary the application rests on, so the scaffold strips the
+  # setuid/setgid gadgets the base image carries — mount, umount, su and the rest — that a security image
+  # should not ship even though the runtime's cap-drop and no-new-privileges already neutralize them. The
+  # image scan job in CI holds the same guarantee against the real built image.
+  def test_install_strips_the_base_images_setuid_gadgets
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+
+      dockerfile = File.read(File.join(root, "hotcell", "Dockerfile"))
+
+      assert_match %r{find / .*-perm /06000 .*chmod a-s}, dockerfile,
+                   "the Dockerfile should strip the base image's setuid/setgid bits"
+    end
+  end
+
   def test_install_leaves_an_existing_file_exactly_as_it_is
     Dir.mktmpdir do |root|
       customized = File.join(root, "hotcell", "Dockerfile")

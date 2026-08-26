@@ -78,7 +78,9 @@ substitute File.join(CONTEXT, "Dockerfile"), /^COPY .*Gemfile\* \.\/$/,
              "COPY --chown=hotcell:hotcell VERSION VERSION",
              *GEMS.map { |gem| "COPY --chown=hotcell:hotcell #{gem} #{gem}" } ].join("\n")
 
+# `--pull` re-fetches the base tag so the image builds on the newest patched base rather than a stale local
+# layer — the freshness half of what the scan then verifies.
 puts "building #{TAG}"
-abort "docker build failed" unless system("docker", "build", "--tag", TAG, CONTEXT)
+abort "docker build failed" unless system("docker", "build", "--pull", "--tag", TAG, CONTEXT)
 
 puts "built #{TAG} from #{CONTEXT}"
