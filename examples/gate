@@ -4,16 +4,18 @@
 # The parts of the conformance gate that need neither a container nor a toolchain, so they run in the
 # no-toolchain suite alongside the development cell. Two regressions live here:
 #
-#   1. The battery's isolation check must observe every container security flag, and must treat a flag it
-#      cannot read as a failure rather than silence. The purple-team assessment removed the accessory's
+#   1. The battery's isolation check must observe each isolation flag conformance claims — the network,
+#      the read-only root, the noexec scratch, cap-drop, no-new-privileges, and the uid — and must treat a
+#      flag it cannot read as a failure rather than silence. The purple-team assessment removed the accessory's
 #      --cap-drop ALL as a negative control and every check still passed, because the battery never read
 #      the bounding capability set. This drives the check with a fake isolation result and proves it now
 #      rejects a non-empty capability set, a cleared no-new-privileges bit, a root uid, and — crucially —
 #      a nil for any of them, the shape a cell that cannot report a flag would return.
 #
 #   2. bin/conformance and bin/load must supply no `--ulimit stack`. docs/DEPLOYMENT.md forbids it: a
-#      lowered stack turns an overflow into a SIGSEGV the cell reports as a permanent killed/memory
-#      verdict, so a helper that set it would measure a shape operators are told not to deploy.
+#      lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
+#      verdict the caller retries against a limit that will fail it again, so a helper that set it would
+#      measure a shape operators are told not to deploy.
 #
 # The container conformance run and its negative jobs (see .github/workflows/ci.yml) are the end-to-end
 # proof; this is the fast guard that keeps the gate honest without Docker.

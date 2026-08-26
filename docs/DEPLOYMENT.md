@@ -110,10 +110,11 @@ through /proc/<pid>/mem. No container flag can set it. Set it to 1 or higher and
 
 A host that does not expose the file at all logs `cell.ptrace_scope_unknown` and boots anyway.
 
-**The security flags it cannot observe.** It reads three from inside the cell: `network: none` (the only
-interface is `lo`), `read-only` (the root filesystem refuses a write), and the tmpfs `noexec` flag. It does
-not observe `cap-drop`, `no-new-privileges`, the uid, the tmpfs `nosuid` and `nodev` flags, or
-`pids-limit`. Those are yours to get right, and "Verifying your accessory" is how.
+**The security flags it cannot observe.** It reads six from inside the cell: `network: none` (the only
+interface is `lo`), `read-only` (the root filesystem is mounted `ro`), the tmpfs `noexec` flag, `cap-drop`
+(the bounding capability set is empty), `no-new-privileges`, and the uid. A flag the cell cannot read fails
+the check rather than passing it. It does not observe the tmpfs `nosuid` and `nodev` flags, `pids-limit`,
+or the resource limits. Those are yours to get right, and "Verifying your accessory" is how.
 
 **Your application's group membership.** Conformance does check the shared group, because it runs the cell
 as `10001` against files a different user owns: `example.reopen` proves a cell can open an input by name,

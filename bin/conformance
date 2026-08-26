@@ -41,8 +41,9 @@ docker volume create "$VOLUME" >/dev/null
 
 # The security flags the accessory sets, added one at a time so a negative job can leave exactly one out.
 # `keep NAME arg...` appends the flag unless it is the one named in DROP. No --ulimit stack: docs/DEPLOYMENT.md
-# forbids it — a lowered stack turns an overflow into a SIGSEGV the cell reports as a permanent killed/memory
-# verdict, so the helper would measure a shape operators are told not to deploy.
+# forbids it — a lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
+# verdict the caller retries against a limit that will fail it again, so the helper would measure a shape
+# operators are told not to deploy.
 run=(docker run --detach --name "$CELL")
 
 keep() {
