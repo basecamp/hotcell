@@ -74,6 +74,27 @@ class ClassificationTest < HotCellClientTest
     assert_match "bad PNG header", error.message
   end
 
+  def test_a_verdict_can_be_rescued_as_one
+    register_with failed(code: "capacity")
+
+    begin
+      Anything.perform_in_hotcell [], [], {}
+      flunk "expected a raise"
+    rescue HotCell::Verdict => error
+      assert_equal "capacity", error.hot_cell_failure.code
+    end
+  end
+
+  def test_the_raised_exception_carries_the_failure_itself
+    register_with failed(code: "killed", cause: "deadline")
+
+    error = assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+
+    assert_equal "killed", error.hot_cell_failure.code
+    assert_equal "deadline", error.hot_cell_failure.cause
+    refute_predicate error.hot_cell_failure, :permanent?
+  end
+
   # Applications rescue broadly around representations, so "raise" is indistinguishable from "placeholder"
   # and contract skew is otherwise invisible. An application running several clients against several
   # independently-booted cells needs to know which one skewed.

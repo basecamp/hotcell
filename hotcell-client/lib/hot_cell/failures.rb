@@ -21,4 +21,17 @@ module HotCell
   # classification, so a later tidying pass that gives both a common ancestor silently turns every retryable
   # failure into a permanent one.
   class TransientFailure < StandardError; end
+
+  # Extended onto every exception the client raises, so an application can read the failure's code,
+  # cause and permanence without parsing the message — and rescue HotCell::Verdict itself, whatever
+  # classes the registration injected.
+  module Verdict
+    attr_reader :hot_cell_failure
+
+    def self.wrap(error, failure)
+      error.extend(self)
+      error.instance_variable_set(:@hot_cell_failure, failure)
+      error
+    end
+  end
 end
