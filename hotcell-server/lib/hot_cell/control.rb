@@ -39,8 +39,7 @@ module HotCell
     end
 
     # Static, and called once per registered cell at app boot. It is the cheapest way to catch a client
-    # pointed at a cell that does not carry the operation it wants, which is otherwise an `unsupported` on
-    # the first real request, and to catch a client whose own timeout is below what this cell may take.
+    # whose own timeout is below what this cell may take, and it is what `bin/hotcell describe` reads.
     def describe
       { v: PROTOCOL_VERSION, operations: Registry.names, groups: groups, **@configuration.to_h }
     end

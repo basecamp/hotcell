@@ -39,9 +39,8 @@ module ActiveStorage
       RETRY = { wait: :polynomially_longer, attempts: 10 }.freeze
 
       # The clients this gem ships, which is where the retry hook learns which cells' transient classes
-      # the jobs must retry. Deliberately not HotCell.clients: that records every client the process loaded,
-      # including an application's own for unrelated cells, and Active Storage's jobs have no business
-      # retrying those.
+      # the jobs must retry. Listed rather than discovered, so an application's own clients for unrelated
+      # cells stay out of it: Active Storage's jobs have no business retrying those.
       CLIENTS = [ Operations::Transformers::Image::Vips, Operations::Transformers::Image::Magick,
                   Operations::Analyzers::Image::Vips, Operations::Analyzers::Image::Magick,
                   Operations::Analyzers::Media::Ffprobe,

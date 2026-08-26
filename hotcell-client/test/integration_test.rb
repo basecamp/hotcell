@@ -183,15 +183,6 @@ class IntegrationTest < HotCellClientTest
     end
   end
 
-  # Otherwise this is an `unsupported` on the first real request, which is a bad place to learn it.
-  def test_describe_warns_when_the_cell_does_not_carry_what_a_client_wants
-    with_cell do
-      warnings = capturing_warnings { HotCell.describe_cells }
-
-      assert_match "IntegrationTest::Absent wants \"test.absent\"", warnings
-    end
-  end
-
   # A cell that is down at app boot is a degraded deployment, not a broken one. An application that refuses
   # to start because its thumbnail cell is restarting is worse than one that serves placeholders.
   def test_describe_warns_and_carries_on_when_a_cell_does_not_answer
@@ -283,12 +274,6 @@ class IntegrationTest < HotCellClientTest
   class Blocking < HotCell::Client
     hotcell "test"
     operation "test.blocking"
-  end
-
-  # Named after nothing the cell carries, to prove the boot check notices.
-  class Absent < HotCell::Client
-    hotcell "test"
-    operation "test.absent"
   end
 
   private

@@ -256,7 +256,7 @@ class for each side of the permanent split:
 HotCell.root  = ENV["HOTCELL_ROOT"]  # unset means every cell is off
 HotCell.group = ENV["HOTCELL_GROUP"] # the gid shared between app and cell
 
-# Quick health check at boot. Warns about a cell that is unreachable, missing an operation, or in the wrong group.
+# Quick health check at boot. Warns about a cell that is unreachable, slower than this client waits, or in the wrong group.
 Rails.application.config.after_initialize { HotCell.describe_cells }
 ```
 

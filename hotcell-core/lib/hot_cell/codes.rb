@@ -47,9 +47,9 @@ module HotCell
     # updated by a deploy, so an application that ships a client for a new operation before anybody reboots
     # the cell gets `unsupported` at one hundred percent for as long as that takes.
     #
-    # The two mistakes are not symmetrical. Retrying a caller's typo costs some work and shows up in the
-    # `unsupported` rate and in the client's boot-time warning. Recording a deploy window as permanent
-    # condemns every blob uploaded during it, and needs a hand-written backfill to undo.
+    # The two mistakes are not symmetrical. Retrying a caller's typo costs some work, and it says which
+    # operation in the refusal `worker.rb` writes and in the `unsupported` rate. Recording a deploy window
+    # as permanent condemns every blob uploaded during it, and needs a hand-written backfill to undo.
 
     # `killed` splits on what the worker hit, because a caller cannot otherwise tell a decompression
     # bomb from a slow afternoon. Size and memory are properties of the input, so the same bytes will

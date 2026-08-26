@@ -40,11 +40,6 @@ module HotCell
     class << self
       include Declarations
 
-      def inherited(subclass)
-        super
-        HotCell.clients << subclass
-      end
-
       def hotcell(name = nil)
         return inherited_value(:@cell_name) if name.nil?
 
