@@ -86,6 +86,12 @@ under "Container settings", mounts the example operations over `/hotcell/operati
 battery of checks from a second container over a shared volume: descriptor round-trips, each kill
 verdict, refusal at capacity, and the isolation flags. It exits non-zero on the first failed check.
 
+It then runs the same battery again against your image booted without one security flag at a time, and
+requires each run to fail at that flag's own check. That is what makes the isolation results a test of
+the flags rather than a restatement of them: a check that cannot see a flag would pass a cell running
+without it. A runtime that force-mounts `noexec` onto every tmpfs — Docker Desktop does — cannot host
+the `noexec` negative, and that one run reports `SKIP` with the reason.
+
 ```
 docker build -t my-cell:test hotcell/
 bin/conformance my-cell:test

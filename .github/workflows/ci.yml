@@ -118,9 +118,9 @@ jobs:
   # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
   # drives the example battery through it from a second container, checking the descriptor crossing the
   # container boundary, network: none, cap-drop, no-new-privileges, the read-only root and the noexec tmpfs.
-  # The negative step then boots the same image without one flag at a time and requires the battery to fail,
-  # so the claim above is a test rather than an assertion: a flag the battery cannot observe would let this
-  # step pass with the protection gone.
+  # It then boots the same image without one of those flags at a time and requires the battery to fail at
+  # that flag's own check, so the claim above is a test rather than an assertion. Those negative runs live in
+  # the script rather than in this step, so an operator running it against their own image gets them too.
   conformance:
     name: "container conformance"
     runs-on: ubuntu-latest
@@ -136,42 +136,8 @@ jobs:
           bundler-cache: true
       - name: Build the example cell image from the installed scaffold
         run: bin/example-image
-      - name: Conformance holds with every flag in place
+      - name: Conformance holds, and fails with any one security flag dropped
         run: bin/conformance hotcell:example
-      # Each drop must fail the battery at its own isolation assertion — not merely exit non-zero, which an
-      # unrelated hiccup (a bundle install outage, a flaky timing check) could also do and be misread as
-      # the flag having been caught. So we require the expected message, which ties the failure to the
-      # dropped flag. Two flags have no entry:
-      #   --user: the image already sets USER 10001, so dropping the run flag is a no-op, and forcing root
-      #     instead would fail at socket ownership rather than the uid check. The positive run above already
-      #     fails if the image ever runs as root, and examples/gate covers the uid assertion directly.
-      #   tmpfs-noexec: this runner's container runtime force-mounts noexec on every tmpfs, so dropping the
-      #     option still yields a noexec scratch and the negative run would pass — verified empirically when
-      #     it was tried here. The positive run still asserts the noexec mount and examples/gate proves the
-      #     assertion rejects a tmpfs without it, so noexec stays covered without a negative job that the
-      #     environment cannot honour.
-      - name: Conformance fails at the intended check with any one security flag dropped
-        run: |
-          declare -A expect=(
-            [network]="network interfaces"
-            [read-only]="not mounted read-only"
-            [cap-drop]="bounding capability set"
-            [no-new-privileges]="gain new privileges"
-          )
-          for drop in "${!expect[@]}"; do
-            echo "== booting without --$drop, expecting failure at: ${expect[$drop]} =="
-            if out="$(HOTCELL_CONFORMANCE_DROP="$drop" bin/conformance hotcell:example 2>&1)"; then
-              echo "$out"
-              echo "::error::conformance passed without --$drop; the battery does not verify that flag"
-              exit 1
-            fi
-            if ! grep -qF "${expect[$drop]}" <<<"$out"; then
-              echo "$out"
-              echo "::error::without --$drop the run failed, but not at the ${expect[$drop]} check; the failure is unrelated"
-              exit 1
-            fi
-            echo "ok: dropping --$drop failed at '${expect[$drop]}', as it must"
-          done
 
   # Provenance of the produced image: the cell is the boundary the application relies on, so what it ships
   # is gated the same way its behavior is. bin/example-image builds the installed scaffold, so this scans

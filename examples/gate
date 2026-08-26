@@ -97,6 +97,28 @@ end
   end
 end
 
+# The negative matrix lives in bin/conformance rather than in CI, so an operator running it against their
+# own image gets the negative controls too — a positive-only run is the vacuous shape this gate exists to
+# reject. Each negative greps the battery's output for the assertion belonging to the dropped flag, so the
+# text it looks for must be text the battery can actually print: a reworded assertion would otherwise turn
+# the negative run into a grep that never matches, passing for the wrong reason.
+CONFORMANCE = File.read(File.join(REPO, "bin/conformance"))
+ISOLATION_ASSERTIONS = File.read(File.join(REPO, "examples/lib/battery.rb"))[/def isolation\b.*?^      end$/m].to_s
+
+NEGATIVES = CONFORMANCE.scan(/^\s*"([a-z-]+)=([^"]+)"$/).to_h
+
+check("bin/conformance runs a negative for every flag it can drop") do
+  droppable = CONFORMANCE.scan(/^keep +([a-z-]+)/).flatten + [ "tmpfs-noexec" ]
+  missing = droppable.uniq.sort - NEGATIVES.keys
+  raise "no negative run for #{missing.join(", ")}" if missing.any?
+end
+
+NEGATIVES.each do |flag, message|
+  check("the negative run for #{flag} looks for a message the battery prints") do
+    raise "no isolation assertion contains #{message.inspect}" unless ISOLATION_ASSERTIONS.include?(message)
+  end
+end
+
 if FAILURES.empty?
   puts "PASS"
 else
