@@ -70,6 +70,9 @@ module HotCell
     # neither `reap` nor `drain_signals` nor `run` catches it. A typo would take the whole cell down from the
     # one path whose job is reporting a dead worker.
     FSIZE = "fsize"
+
+    # A cause for `unreadable`: the document demands credentials the cell does not have.
+    PROTECTED = "protected"
     MEMORY = "memory"
     DEADLINE = "deadline"
     CRASHED = "crashed"
