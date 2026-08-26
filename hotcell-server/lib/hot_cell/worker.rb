@@ -211,7 +211,8 @@ module HotCell
 
         response
       rescue *operation.unreadable => error
-        refuse "unreadable", error, timing
+        cause = error.class.respond_to?(:cause) ? error.class.cause : nil
+        refuse "unreadable", error, timing, cause: cause
       end
 
       # `post` returns what each output received and the worker used to throw all of it away, leaving the

@@ -20,16 +20,25 @@ module ActiveStorage
         # UnreadableInput is always in the rescue list, and this descends from it.
         class UnreadableDocument < ::HotCell::UnreadableInput; end
 
+        # The document demands credentials the cell does not have.
+        class ProtectedDocument < UnreadableDocument
+          def self.cause
+            ::HotCell::Codes::PROTECTED
+          end
+        end
+
         private
           # Runs the tool with unsetenv_others and a written environment, and turns a non-zero exit into
           # `unreadable`. The tool's own stderr is the only useful diagnostic, and it is attacker-influenced,
           # so it is capped and scrubbed on its way onto the wire like any other error message.
-          def run!(*command, pass: [])
+          # `causes` maps stderr patterns to the UnreadableDocument subclass to raise instead.
+          def run!(*command, pass: [], causes: {})
             result = run_tool(*command, pass: pass)
             return result if result.ok?
 
-            raise UnreadableDocument, "#{command.first} exited #{result.status.exitstatus}: " \
-                                      "#{result.err.to_s.strip[0, 200]}"
+            error = causes.detect { |pattern, _| result.err.to_s.match?(pattern) }&.last || UnreadableDocument
+            raise error, "#{command.first} exited #{result.status.exitstatus}: " \
+                         "#{result.err.to_s.strip[0, 200]}"
           end
 
           # An empty output means the tool said it succeeded and produced nothing, which the client would

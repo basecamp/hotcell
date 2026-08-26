@@ -94,7 +94,21 @@ class PreviewersTest < ActiveStorageHotCellTest
                                                         outputs: [ destination ])
 
         assert_predicate failure, :permanent?
+        assert_nil failure.cause
         assert_match "mutool", failure.message
+      end
+    end
+  end
+
+  def test_a_password_protected_pdf_answers_the_protected_cause
+    Cell.boot do |cell|
+      with_output(".png") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.pdf.mutool",
+                                                        inputs: [ fixture("protected.pdf") ],
+                                                        outputs: [ destination ])
+
+        assert_equal HotCell::Codes::PROTECTED, failure.cause
+        assert_predicate failure, :permanent?
       end
     end
   end
