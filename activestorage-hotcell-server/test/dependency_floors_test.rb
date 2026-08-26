@@ -35,16 +35,21 @@ class DependencyFloorsTest < ActiveStorageHotCellTest
       dependency.requirement
     end
 
-    # The declared requirement's effective lower bound must be at least `floor`, whatever form it takes —
-    # asserting the bound rather than a couple of point versions, so a later `>= 4.0, != 5.1.2` cannot slip a
-    # broken release back in below it. `"#{floor}.a"` is the highest prerelease that still sorts below `floor`,
-    # so a requirement admits it exactly when its lower bound is looser than `floor`.
-    def assert_effective_floor(gem_name, floor)
-      requirement = requirement_for(gem_name)
+    # The declared requirement's effective lower bound must be at least `floor`, whatever form the requirement
+    # takes — asserting the bound structurally rather than probing point versions, so neither a later
+    # `>= 4.0, != 5.1.2` nor a `>= 5.2.0.rc1` can slip a release lacking the API back in below it. An upper
+    # bound (`< 6`) is fine; only the lower-bound clauses decide the floor, and their tightest is the smallest
+    # version the requirement admits.
+    LOWER_BOUND_OPERATORS = %w[ >= > = ~> ].freeze
 
-      assert requirement.satisfied_by?(Gem::Version.new(floor)),
-             "#{gem_name} floor must admit #{floor}, the version that introduced the API the operations call"
-      refute requirement.satisfied_by?(Gem::Version.new("#{floor}.a")),
-             "#{gem_name} floor must admit nothing below #{floor}, which lacks that API at boot"
+    def assert_effective_floor(gem_name, floor)
+      lower_bounds = requirement_for(gem_name).requirements
+        .select { |operator, _version| LOWER_BOUND_OPERATORS.include?(operator) }
+        .map { |_operator, version| version }
+
+      assert_predicate lower_bounds, :any?, "#{gem_name} declares no lower bound; it must floor at #{floor}"
+      assert_operator lower_bounds.max, :>=, Gem::Version.new(floor),
+                      "#{gem_name} floor must be at least #{floor}, the version that introduced the API the " \
+                      "operations call at boot"
     end
 end
