@@ -54,6 +54,23 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # The cell image is the isolation boundary the application rests on, so the scaffold hardens the base it
+  # ships from. It strips the setuid/setgid gadgets the base image carries — mount, umount, su and the rest
+  # — and installs from a committed lockfile in frozen mode, so a clean build resolves the exact gems the
+  # lockfile names rather than whatever the sources happen to offer that day.
+  def test_install_hardens_the_cell_image
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+
+      dockerfile = File.read(File.join(root, "hotcell", "Dockerfile"))
+
+      assert_match %r{find / .*-perm /06000 .*chmod a-s}, dockerfile,
+                   "the Dockerfile should strip the base image's setuid/setgid bits"
+      assert_match "BUNDLE_FROZEN=true", dockerfile,
+                   "the cell should install its gems in frozen mode from a committed lockfile"
+    end
+  end
+
   def test_install_leaves_an_existing_file_exactly_as_it_is
     Dir.mktmpdir do |root|
       customized = File.join(root, "hotcell", "Dockerfile")

@@ -4,6 +4,11 @@
 # A cell carries a Ruby runtime and every gem in its loaded graph, all inside the blast radius, so treat
 # this file as a budget rather than an inventory. Which tools it holds is what decides its blast radius.
 
+# The base image. This tag is mutable: `ruby:3.4-slim` moves as Debian and Ruby publish patches, so a
+# clean build is only as reproducible and as patched as the tag on the day it runs. Build with
+# `docker build --pull` to always take the newest patched base. If you also need to name the exact image
+# you shipped, pin a digest (`FROM ruby:${RUBY_VERSION}-slim@sha256:…`) and refresh it on a schedule; the
+# image scan in CI is what catches a base that has drifted into known-vulnerable either way.
 ARG RUBY_VERSION=3.4
 FROM ruby:${RUBY_VERSION}-slim
 
@@ -23,16 +28,28 @@ RUN groupadd --gid 10001 hotcell && \
 # takes its ownership from the directory it covers. /hotcell is not: see the chown back to root below.
 RUN mkdir -p /run/hotcell/cell /hotcell/operations && chown -R hotcell:hotcell /run/hotcell /hotcell
 
+# Strip the setuid and setgid bits the base image ships (mount, umount, su, …). The cell runs as an
+# unprivileged user under `--cap-drop ALL` and `--security-opt no-new-privileges`, which already make these
+# gadgets inert; removing the bits keeps a security image from carrying escalation tools it never uses.
+# `-xdev` stays on the image's own filesystem; `chmod a-s` clears both bits.
+RUN find / -xdev -type f -perm /06000 -exec chmod a-s {} +
+
 # HOME is /tmp because the cell's user has no home directory, and bundler wants one. A worker replaces
 # it with its slot's home before it serves anything.
 ENV HOME=/tmp \
     BUNDLE_PATH=/hotcell/bundle \
     BUNDLE_WITHOUT=development \
+    BUNDLE_FROZEN=true \
     HOTCELL_OPERATIONS=/hotcell/operations \
     HOTCELL_DIR=/run/hotcell/cell
 
 WORKDIR /hotcell
 
+# `BUNDLE_FROZEN=true` above makes this install from a committed lockfile: a clean build resolves the exact
+# gems the lockfile names rather than whatever the sources offer that day, so two builds of one commit
+# produce one image. Generate the lockfile once by running `bundle install` in this directory, commit
+# `Gemfile.lock` next to the `Gemfile`, and regenerate it whenever you change a gem — the build refuses a
+# Gemfile that has drifted from the lockfile rather than silently re-resolving it.
 COPY --chown=hotcell:hotcell Gemfile* ./
 USER hotcell
 RUN bundle install

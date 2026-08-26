@@ -135,3 +135,53 @@ jobs:
         run: bin/example-image
       - run: bin/conformance hotcell:example
 
+  # Provenance of the produced image: the cell is the boundary the application relies on, so what it ships
+  # is gated the same way its behavior is. bin/example-image builds the installed scaffold, so this scans
+  # the exact image an application would build. The setuid check holds the escalation gadgets out; the
+  # Trivy scan fails the build on a fixable High or Critical rather than shipping one; the SBOM records
+  # what went in, so a later CVE can be answered against a named bill of materials.
+  image-scan:
+    name: "image scan and SBOM"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - name: Build the example cell image from the installed scaffold
+        run: bin/example-image
+      - name: Assert the image carries no setuid or setgid binaries
+        run: |
+          gadgets="$(docker run --rm --entrypoint sh hotcell:example -c 'find / -xdev -type f -perm /06000')"
+          if [ -n "$gadgets" ]; then
+            echo "the cell image ships setuid/setgid binaries it should have stripped:"
+            echo "$gadgets"
+            exit 1
+          fi
+      - name: Scan the image for fixable High and Critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hotcell:example
+          scan-type: image
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Generate a CycloneDX SBOM of the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: hotcell:example
+          scan-type: image
+          format: cyclonedx
+          output: hotcell-example.cdx.json
+      - name: Publish the SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hotcell-example-sbom
+          path: hotcell-example.cdx.json
+
