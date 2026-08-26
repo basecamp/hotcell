@@ -157,7 +157,9 @@ jobs:
         run: bin/example-image
       - name: Assert the image carries no setuid or setgid binaries
         run: |
-          gadgets="$(docker run --rm --entrypoint sh hotcell:example -c 'find / -xdev -type f -perm /06000')"
+          # As root so the traversal is complete — a non-root find would skip unreadable directories and
+          # could miss a gadget.
+          gadgets="$(docker run --rm --user 0 --entrypoint sh hotcell:example -c 'find / -xdev -type f -perm /06000')"
           if [ -n "$gadgets" ]; then
             echo "the cell image ships setuid/setgid binaries it should have stripped:"
             echo "$gadgets"
