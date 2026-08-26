@@ -16,16 +16,16 @@ require "test_helper"
 class DependencyFloorsTest < ActiveStorageHotCellTest
   GEMSPEC = Gem::Specification.load File.expand_path("../activestorage-hotcell-server.gemspec", __dir__)
 
-  # 5.1.2 and 4.13.2 lack `restricted_env=`; magick_operation.rb calls it at require time.
+  # `restricted_env=` arrived in mini_magick 5.2.0 — 5.1.2 and 4.13.2 lack it — and magick_operation.rb calls
+  # it at require time.
   def test_mini_magick_floor_provides_restricted_env
-    assert_floor_excludes "mini_magick", "5.1.2"
-    assert_floor_admits   "mini_magick", "5.2.0"
+    assert_effective_floor "mini_magick", "5.2.0"
   end
 
-  # 2.2.0 lacks `Vips.block_untrusted`; vips_operation.rb's before_fork guard refuses to boot without it.
+  # `Vips.block_untrusted` arrived in ruby-vips 2.2.1 — 2.2.0 lacks it — and vips_operation.rb's before_fork
+  # guard refuses to boot without it.
   def test_ruby_vips_floor_provides_block_untrusted
-    assert_floor_excludes "ruby-vips", "2.2.0"
-    assert_floor_admits   "ruby-vips", "2.2.1"
+    assert_effective_floor "ruby-vips", "2.2.1"
   end
 
   private
@@ -35,13 +35,16 @@ class DependencyFloorsTest < ActiveStorageHotCellTest
       dependency.requirement
     end
 
-    def assert_floor_excludes(gem_name, version)
-      refute requirement_for(gem_name).satisfied_by?(Gem::Version.new(version)),
-             "#{gem_name} floor must exclude #{version}, which lacks the API the operations call at boot"
-    end
+    # The declared requirement's effective lower bound must be at least `floor`, whatever form it takes —
+    # asserting the bound rather than a couple of point versions, so a later `>= 4.0, != 5.1.2` cannot slip a
+    # broken release back in below it. `"#{floor}.a"` is the highest prerelease that still sorts below `floor`,
+    # so a requirement admits it exactly when its lower bound is looser than `floor`.
+    def assert_effective_floor(gem_name, floor)
+      requirement = requirement_for(gem_name)
 
-    def assert_floor_admits(gem_name, version)
-      assert requirement_for(gem_name).satisfied_by?(Gem::Version.new(version)),
-             "#{gem_name} floor must admit #{version}, the version that introduced the API"
+      assert requirement.satisfied_by?(Gem::Version.new(floor)),
+             "#{gem_name} floor must admit #{floor}, the version that introduced the API the operations call"
+      refute requirement.satisfied_by?(Gem::Version.new("#{floor}.a")),
+             "#{gem_name} floor must admit nothing below #{floor}, which lacks that API at boot"
     end
 end
