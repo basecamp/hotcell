@@ -114,6 +114,32 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake test:activestorage
 
+  # The same conversions, resolved at the gemspec's declared dependency floors rather than at the newest gems.
+  # The default lane above always runs the latest mini_magick and ruby-vips, so it cannot catch a floor that
+  # names a version without the API the operations call at boot. This lane boots and converts against
+  # gemfiles/minimum.gemfile, so the floors we ship are the floors we test. One Ruby: the floors are gem
+  # versions, independent of the interpreter.
+  activestorage-minimum:
+    name: "activestorage (minimum dependencies)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      BUNDLE_GEMFILE: gemfiles/minimum.gemfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the converters
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y libvips42 mupdf-tools poppler-utils ffmpeg imagemagick
+      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b # v1.321.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - run: bundle exec rake test:activestorage
+
   # The container and isolation path, covered for real. bin/example-image runs the installer and builds
   # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
   # drives the example battery through it from a second container, checking the descriptor crossing the

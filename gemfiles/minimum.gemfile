@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+# Resolve the converter dependencies at the floors activestorage-hotcell-server.gemspec declares, rather than
+# at whatever is newest. The `activestorage-minimum` CI lane installs this and runs the real conversion suite,
+# so the floors we ship are the floors we test.
+#
+# The operations call `MiniMagick.restricted_env=` (mini_magick 5.2.0) and `Vips.block_untrusted` (ruby-vips
+# 2.2.1). A gemspec floor below either is a resolution that satisfies our own gemspec and then dies at boot,
+# with the whole toolchain offline. The default `activestorage` lane, on the newest gems, cannot see that —
+# this lane is what does. Each pin is the gemspec's own floor; raise it here in lockstep when a floor moves.
+eval_gemfile File.expand_path("../Gemfile", __dir__)
+
+gem "image_processing", "2.0.0"
+gem "mini_magick", "5.2.0"
+gem "ruby-vips", "2.2.1"
