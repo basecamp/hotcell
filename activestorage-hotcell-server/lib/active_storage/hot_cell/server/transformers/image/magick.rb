@@ -29,9 +29,17 @@ module ActiveStorage
                 ImageProcessing::MiniMagick
               end
 
-              # The staged path rather than /dev/fd; MagickOperation's comment says why.
               def source_path(source)
-                source.path
+                source.fd_path
+              end
+
+              # `source_path` names the input as the source's `/dev/fd` path, which `magick` can open only if it
+              # inherits the descriptor, so name the IO for mini_magick to put in its spawn map. Through the
+              # loader options rather than by pre-building a MiniMagick::Tool: a pre-built tool reaches
+              # ImageProcessing's `load_image` by its first branch, which drops `page`, `loader` and `geometry`
+              # without a word.
+              def source_loader_options(source)
+                { inherit_fds: [ source.to_io ] }
               end
 
               def describe(path, format)

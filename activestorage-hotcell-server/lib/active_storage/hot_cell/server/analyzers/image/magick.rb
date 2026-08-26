@@ -25,7 +25,7 @@ module ActiveStorage
 
             def perform(inputs, _outputs)
               source, = inputs
-              frames = identified(source.path)
+              frames = identified(source)
               width, height, orientation = frames.first
 
               { **dimensions(width, height, orientation), pages: frames.size, animated: frames.size > 1,
@@ -36,10 +36,10 @@ module ActiveStorage
               # One `identify` run reports every frame's dimensions and orientation, where MiniMagick::Image's
               # accessors (`valid?`, `width`, `pages`) each spawn an identify of their own — four execs per
               # analysis, two of them decoding every frame.
-              def identified(path)
-                frames = MiniMagick.identify do |identify|
+              def identified(source)
+                frames = MiniMagick.identify(inherit_fds: [ source.to_io ]) do |identify|
                   identify.format "%w %h %[orientation]\n"
-                  identify << path
+                  identify << source.fd_path
                 end.lines.map(&:split)
 
                 raise MiniMagick::Invalid, "ImageMagick does not recognise this as an image" if frames.empty?

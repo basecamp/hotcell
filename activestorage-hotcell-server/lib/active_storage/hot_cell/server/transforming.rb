@@ -21,23 +21,40 @@ module ActiveStorage
           # it to the library, which cannot reproduce those without restating them. Output#post makes the
           # one remaining copy, out through the caller's descriptor.
           encoded = destination.path(extension: format)
-          pipeline(source_path(source), format, operations).call(destination: encoded)
+          pipeline(source, format, operations).call(destination: encoded)
           destination.adopt encoded
 
           describe destination.path, format
         end
 
         private
-          # `loader(page: 0)` first is what Rails does, and it is what stops a multi-page TIFF or a
-          # hundred-frame GIF being decoded in full to produce one thumbnail. A caller's own `loader` arrives
-          # through `apply` and merges over it, which is also what Rails does — asking for every frame is
-          # `loader: { n: -1 }`.
-          def pipeline(path, format, operations)
+          # Three `loader` calls, and the order is the point: ImageProcessing merges them key by key, so the
+          # last one to write a key wins.
+          #
+          # `page: 0` is first, as a default the caller may replace. It is what Rails does, and what stops a
+          # multi-page TIFF or a hundred-frame GIF being decoded in full to produce one thumbnail; a caller
+          # who wants every frame sends `loader: { n: -1 }` through `apply` and gets it.
+          #
+          # `source_loader_options` is last, so the caller cannot replace it.
+          def pipeline(source, format, operations)
             processor
-              .source(path)
+              .source(source_path(source))
               .loader(page: 0)
               .convert(format)
               .apply(operations_for(operations))
+              .loader(**source_loader_options(source))
+          end
+
+          # What the toolchain needs in order to reach the source at all, which is not the same question as how
+          # the image is decoded. Empty here, because `source_path` normally answers a filename and a filename
+          # needs no help. An includer whose `source_path` names something the tool cannot open on its own
+          # overrides this to supply the rest — `Transformers::Image::Magick` is the one that does.
+          #
+          # It goes last in `pipeline` because it is not the caller's to change: a payload sending
+          # `loader: { inherit_fds: [] }` would otherwise leave the source naming a descriptor the tool has no
+          # way to open.
+          def source_loader_options(_source)
+            {}
           end
 
           # What Rails validates, and no more. `combine_options` is refused because it can never be one
