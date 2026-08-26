@@ -138,19 +138,37 @@ jobs:
         run: bin/example-image
       - name: Conformance holds with every flag in place
         run: bin/conformance hotcell:example
-      # tmpfs-noexec is deliberately not here: some container runtimes (Docker Desktop's LinuxKit among
-      # them) force noexec onto every tmpfs, which would mask the drop and make this step flaky. The
-      # positive run above still asserts the noexec mount, and examples/gate proves the assertion rejects a
-      # tmpfs without it — so noexec stays covered without an environment-dependent negative job.
-      - name: Conformance fails with any one security flag dropped
+      # Each drop must fail the battery at its own isolation assertion — not merely exit non-zero, which an
+      # unrelated hiccup (a bundle install outage, a flaky timing check) could also do and be misread as
+      # the flag having been caught. So we require the expected message, which ties the failure to the
+      # dropped flag. --user has no entry: the image already sets USER 10001, so dropping the run flag is a
+      # no-op, and forcing root instead would fail at socket ownership rather than the uid check; the
+      # positive run above already fails if the image ever runs as root, and examples/gate covers the
+      # assertion. tmpfs-noexec is included: runc on this runner honours the tmpfs options, so dropping
+      # noexec produces a scratch the battery rejects (a runtime that force-mounts noexec would surface
+      # here as a passing run, which the message check turns into a loud failure rather than a silent one).
+      - name: Conformance fails at the intended check with any one security flag dropped
         run: |
-          for drop in network read-only cap-drop no-new-privileges; do
-            echo "== booting without --$drop, expecting the battery to fail =="
-            if HOTCELL_CONFORMANCE_DROP="$drop" bin/conformance hotcell:example; then
+          declare -A expect=(
+            [network]="network interfaces"
+            [read-only]="not mounted read-only"
+            [tmpfs-noexec]="not mounted noexec"
+            [cap-drop]="bounding capability set"
+            [no-new-privileges]="gain new privileges"
+          )
+          for drop in "${!expect[@]}"; do
+            echo "== booting without --$drop, expecting failure at: ${expect[$drop]} =="
+            if out="$(HOTCELL_CONFORMANCE_DROP="$drop" bin/conformance hotcell:example 2>&1)"; then
+              echo "$out"
               echo "::error::conformance passed without --$drop; the battery does not verify that flag"
               exit 1
             fi
-            echo "ok: dropping --$drop failed the battery, as it must"
+            if ! grep -qF "${expect[$drop]}" <<<"$out"; then
+              echo "$out"
+              echo "::error::without --$drop the run failed, but not at the ${expect[$drop]} check; the failure is unrelated"
+              exit 1
+            fi
+            echo "ok: dropping --$drop failed at '${expect[$drop]}', as it must"
           done
 
   # Provenance of the produced image: the cell is the boundary the application relies on, so what it ships

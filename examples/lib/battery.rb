@@ -28,6 +28,15 @@ module Examples
     end
 
     def run
+      # The container shape comes first, before the timing-sensitive functional checks. A negative
+      # conformance run boots without one isolation flag and must fail here, at the flag it dropped; run
+      # last, it would first have to pass deadline, overload and the rest, and a flake in any of those
+      # would fail the run for a reason unrelated to the flag — reading as though the flag had been caught.
+      if @isolation
+        check("the isolation holds") { isolation }
+        check("a cell cannot widen what it was given") { tamper }
+      end
+
       check("describe lists the example operations") { describe }
       check("echo round-trips through the caller's descriptors") { echo }
       check("an operation re-opens both descriptors by path") { reopen }
@@ -46,8 +55,6 @@ module Examples
       check("offered overload answers capacity") { overload }
       check("the cell keeps serving afterwards") { still_serving }
       check("metrics answer on the control socket") { metrics }
-      check("the isolation holds") { isolation } if @isolation
-      check("a cell cannot widen what it was given") { tamper } if @isolation
 
       true
     end
