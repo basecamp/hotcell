@@ -117,7 +117,10 @@ jobs:
   # The container and isolation path, covered for real. bin/example-image runs the installer and builds
   # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
   # drives the example battery through it from a second container, checking the descriptor crossing the
-  # container boundary, network: none, cap-drop, the read-only root and the noexec tmpfs.
+  # container boundary, network: none, cap-drop, no-new-privileges, the read-only root and the noexec tmpfs.
+  # The negative step then boots the same image without one flag at a time and requires the battery to fail,
+  # so the claim above is a test rather than an assertion: a flag the battery cannot observe would let this
+  # step pass with the protection gone.
   conformance:
     name: "container conformance"
     runs-on: ubuntu-latest
@@ -133,7 +136,22 @@ jobs:
           bundler-cache: true
       - name: Build the example cell image from the installed scaffold
         run: bin/example-image
-      - run: bin/conformance hotcell:example
+      - name: Conformance holds with every flag in place
+        run: bin/conformance hotcell:example
+      # tmpfs-noexec is deliberately not here: some container runtimes (Docker Desktop's LinuxKit among
+      # them) force noexec onto every tmpfs, which would mask the drop and make this step flaky. The
+      # positive run above still asserts the noexec mount, and examples/gate proves the assertion rejects a
+      # tmpfs without it — so noexec stays covered without an environment-dependent negative job.
+      - name: Conformance fails with any one security flag dropped
+        run: |
+          for drop in network read-only cap-drop no-new-privileges; do
+            echo "== booting without --$drop, expecting the battery to fail =="
+            if HOTCELL_CONFORMANCE_DROP="$drop" bin/conformance hotcell:example; then
+              echo "::error::conformance passed without --$drop; the battery does not verify that flag"
+              exit 1
+            fi
+            echo "ok: dropping --$drop failed the battery, as it must"
+          done
 
   # Provenance of the produced image: the cell is the boundary the application relies on, so what it ships
   # is gated the same way its behavior is. bin/example-image builds the installed scaffold, so this scans

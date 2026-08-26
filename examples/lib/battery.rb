@@ -171,7 +171,16 @@ module Examples
 
         assert_equal [ "lo" ], result[:interfaces], "the cell's network interfaces"
         assert_equal false, result[:writable_root], "the cell's root filesystem took a write"
+        assert_equal true, result[:root_readonly], "the cell's root filesystem is not mounted read-only"
         assert_equal true, result[:scratch_noexec], "the cell's scratch is not mounted noexec"
+
+        # The container security flags. Each asserts the flag held, and a nil — the cell could not read the
+        # field — fails rather than passes, so a run that cannot see a capability is never mistaken for one
+        # that dropped it. This is the assertion ci.yml claims and, before it, did not make: without it the
+        # accessory's cap-drop ALL could be removed and every check still passed.
+        assert_equal 0, result[:cap_bound], "the cell's bounding capability set is non-empty (cap-drop ALL not in effect)"
+        assert_equal true, result[:no_new_privs], "the cell can gain new privileges (no-new-privileges not set)"
+        assert result[:uid].to_i.positive?, "the cell runs as root or could not report its uid: #{result[:uid].inspect}"
 
         assert result[:tool_env], "the env tool could not run inside the cell"
         extra = result[:tool_env] - %w[ HOME LANG LC_ALL PATH ]

@@ -41,8 +41,14 @@ namespace "test" do
     ruby "examples/devcell"
   end
 
+  desc "Check the conformance gate observes each isolation flag and sets no stack ulimit"
+  task :gate do
+    puts "\n## Checking the conformance gate"
+    ruby "examples/gate"
+  end
+
   desc "Run everything that needs no tools installed"
-  task hotcell: suites(HOTCELL) + [ "test:devcell" ]
+  task hotcell: suites(HOTCELL) + [ "test:gate", "test:devcell" ]
 
   desc "Run everything that needs the converters installed"
   task activestorage: suites(ACTIVE_STORAGE)
