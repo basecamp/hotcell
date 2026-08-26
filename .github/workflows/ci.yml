@@ -117,7 +117,10 @@ jobs:
   # The container and isolation path, covered for real. bin/example-image runs the installer and builds
   # what it wrote, so the scaffold an application actually gets is what is under test; bin/conformance then
   # drives the example battery through it from a second container, checking the descriptor crossing the
-  # container boundary, network: none, cap-drop, the read-only root and the noexec tmpfs.
+  # container boundary, network: none, cap-drop, no-new-privileges, the read-only root and the noexec tmpfs.
+  # It then boots the same image without one of those flags at a time and requires the battery to fail at
+  # that flag's own check, so the claim above is a test rather than an assertion. Those negative runs live in
+  # the script rather than in this step, so an operator running it against their own image gets them too.
   conformance:
     name: "container conformance"
     runs-on: ubuntu-latest
@@ -133,7 +136,8 @@ jobs:
           bundler-cache: true
       - name: Build the example cell image from the installed scaffold
         run: bin/example-image
-      - run: bin/conformance hotcell:example
+      - name: Conformance holds, and fails with any one security flag dropped
+        run: bin/conformance hotcell:example
 
   # Provenance of the produced image: the cell is the boundary the application relies on, so what it ships
   # is gated the same way its behavior is. bin/example-image builds the installed scaffold, so this scans

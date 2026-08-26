@@ -42,7 +42,6 @@ docker run --detach --name "$CELL" \
   --cap-drop ALL \
   --security-opt no-new-privileges:true \
   --user 10001:10001 \
-  --ulimit stack=2097152:2097152 \
   --env EXAMPLE_CONCURRENCY \
   --env EXAMPLE_QUEUE_SIZE \
   --env EXAMPLE_QUEUE_WAIT \

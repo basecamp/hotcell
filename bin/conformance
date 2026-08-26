@@ -5,6 +5,12 @@
 # a named volume. The socket appearing where HOTCELL_DIR said proves the env contract; the descriptor
 # crossing between the two containers is part of every check; the isolation checks prove the flags held.
 #
+# It then boots the same image again without one security flag at a time and requires the battery to fail
+# at that flag's own check. Without those negative runs the isolation checks are an assertion rather than a
+# test: a battery that never read the bounding capability set passed just as happily with --cap-drop ALL
+# removed, which is the bug this gate was rebuilt to catch. They run against whatever image you point it at,
+# so an operator gets the same proof of their own image that CI gets of the example one.
+#
 # Exits non-zero on the first failed check, so a user or CI can gate on it.
 #
 #   bin/conformance IMAGE [DRIVER_IMAGE]
@@ -21,6 +27,28 @@ CELL="hotcell-conformance-cell-$STAMP"
 VOLUME="hotcell-conformance-$STAMP"
 DIRECTORY="/run/hotcell/cell/conformance"
 
+# Which single security flag to boot without. Empty is the real deployment shape and the whole run: the
+# positive pass followed by the negative matrix below. A flag name is one negative boot on its own, which is
+# how this script re-invokes itself and how you reproduce a single failure by hand.
+DROP="${HOTCELL_CONFORMANCE_DROP:-}"
+
+# The negative matrix, in order: the flag `keep` names, and the text the battery prints when the check for
+# that flag fails. Matching the message rather than accepting any non-zero exit is what ties the failure to
+# the dropped flag — an unrelated hiccup (a bundle install outage, a flaky timing check) would otherwise be
+# misread as the flag having been caught. examples/gate holds each message against the battery's own
+# assertions, so a reworded assertion cannot rot this into a grep that never matches.
+#
+# --user is not here: the image already sets USER 10001, so dropping the run flag reaches no further, and
+# forcing root instead fails at socket ownership rather than at the uid check. The positive run asserts a
+# non-root uid and examples/gate covers the assertion directly.
+NEGATIVES=(
+  "network=network interfaces"
+  "read-only=not mounted read-only"
+  "tmpfs-noexec=not mounted noexec"
+  "cap-drop=bounding capability set"
+  "no-new-privileges=gain new privileges"
+)
+
 cleanup() {
   docker rm -f "$CELL" >/dev/null 2>&1 || true
   docker volume rm "$VOLUME" >/dev/null 2>&1 || true
@@ -32,23 +60,41 @@ trap cleanup EXIT
 # cell then could not create its own socket. See docs/DEPLOYMENT.md.
 docker volume create "$VOLUME" >/dev/null
 
-echo "booting $IMAGE with the accessory's flags, HOTCELL_DIR=$DIRECTORY"
-docker run --detach --name "$CELL" \
-  --network none \
-  --read-only \
-  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m \
-  --memory 2g --memory-swap 2g \
-  --cpus 2 \
-  --pids-limit 512 \
-  --cap-drop ALL \
-  --security-opt no-new-privileges:true \
-  --user 10001:10001 \
-  --ulimit stack=2097152:2097152 \
-  --env HOTCELL_DIR="$DIRECTORY" \
-  --env HOTCELL_OPERATIONS=/hotcell/operations \
-  --volume "$REPO/examples/operations:/hotcell/operations:ro" \
-  --volume "$VOLUME:/run/hotcell/cell" \
-  "$IMAGE" >/dev/null
+# The security flags the accessory sets, added one at a time so a negative job can leave exactly one out.
+# `keep NAME arg...` appends the flag unless it is the one named in DROP. No --ulimit stack: docs/DEPLOYMENT.md
+# forbids it — a lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
+# verdict the caller retries against a limit that will fail it again, so the helper would measure a shape
+# operators are told not to deploy.
+run=(docker run --detach --name "$CELL")
+
+keep() {
+  local name="$1"; shift
+  [ "$name" = "$DROP" ] || run+=("$@")
+}
+
+keep network      --network none
+keep read-only    --read-only
+# tmpfs must stay writable even when noexec is the dropped flag, or the run fails for want of scratch
+# rather than for the missing noexec the battery is meant to catch — so drop the option, not the mount.
+if [ "$DROP" = tmpfs-noexec ]; then
+  run+=(--tmpfs /tmp:rw,nosuid,nodev,size=512m)
+else
+  run+=(--tmpfs /tmp:rw,nosuid,nodev,noexec,size=512m)
+fi
+keep cap-drop          --cap-drop ALL
+keep no-new-privileges --security-opt no-new-privileges:true
+
+# --user is dropped from no negative run; see NEGATIVES. The battery still asserts a non-root uid as
+# defence for an image built without USER.
+run+=(--memory 2g --memory-swap 2g --cpus 2 --pids-limit 512 --user 10001:10001)
+run+=(--env HOTCELL_DIR="$DIRECTORY")
+run+=(--env HOTCELL_OPERATIONS=/hotcell/operations)
+run+=(--volume "$REPO/examples/operations:/hotcell/operations:ro")
+run+=(--volume "$VOLUME:/run/hotcell/cell")
+run+=("$IMAGE")
+
+echo "booting $IMAGE with the accessory's flags, HOTCELL_DIR=$DIRECTORY${DROP:+ (without --$DROP)}"
+"${run[@]}" >/dev/null
 
 # The driver runs as its own uid and joins the cell's group, which is the deployment the docs describe. As
 # root it would bypass the sockets' 0660 and prove nothing about the group that is meant to be carrying
@@ -79,4 +125,75 @@ fi
 echo
 echo "cell log:"
 docker logs "$CELL" 2>&1 | sed 's/^/  /'
+
+if [ -n "$DROP" ]; then
+  echo "PASS: $IMAGE supports hotcell (booted without --$DROP)"
+  exit 0
+fi
+
 echo "PASS: $IMAGE supports hotcell"
+
+# The positive cell has answered everything it is going to; each negative run boots its own.
+cleanup
+
+# Whether this runtime honours a tmpfs mounted without noexec. Docker Desktop's LinuxKit VM and GitHub's
+# runner both force noexec onto every tmpfs, and there the negative run boots a noexec scratch, passes, and
+# would report a working battery as broken. Ask the runtime rather than assume either way. 0 honoured,
+# 1 forced, 2 unanswerable.
+tmpfs_option_honoured() {
+  local mounts
+  mounts="$(docker run --rm --tmpfs /tmp:rw,nosuid,nodev,size=16m --entrypoint sh "$IMAGE" \
+    -c 'grep " /tmp " /proc/self/mounts' 2>/dev/null)" || return 2
+  case "$mounts" in
+    *noexec*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+echo
+echo "## Negative runs: each flag dropped in turn must fail the battery at its own check"
+
+failures=0
+
+for entry in "${NEGATIVES[@]}"; do
+  flag="${entry%%=*}"
+  expected="${entry#*=}"
+
+  if [ "$flag" = tmpfs-noexec ]; then
+    tmpfs_option_honoured && honoured=0 || honoured=$?
+    if [ "$honoured" -ne 0 ]; then
+      echo
+      if [ "$honoured" -eq 1 ]; then
+        echo "SKIP --tmpfs noexec: this runtime force-mounts noexec on every tmpfs, so a run without the"
+        echo "     option still gets a noexec scratch and could only fail for the wrong reason."
+      else
+        echo "SKIP --tmpfs noexec: could not read the scratch mount options from $IMAGE to tell whether this"
+        echo "     runtime honours the option."
+      fi
+      echo "     The positive run above still asserts the noexec mount."
+      continue
+    fi
+  fi
+
+  echo
+  echo "== booting without --$flag, expecting failure at: $expected =="
+  if out="$(HOTCELL_CONFORMANCE_DROP="$flag" "$0" "$IMAGE" "$DRIVER_IMAGE" 2>&1)"; then
+    echo "$out" | sed 's/^/  /'
+    echo "FAIL: conformance passed without --$flag, so the battery does not verify that flag"
+    failures=$((failures + 1))
+  elif ! grep -qF "$expected" <<<"$out"; then
+    echo "$out" | sed 's/^/  /'
+    echo "FAIL: without --$flag the run failed, but not at the '$expected' check, so the failure is unrelated"
+    failures=$((failures + 1))
+  else
+    echo "ok: dropping --$flag failed at '$expected', as it must"
+  fi
+done
+
+echo
+if [ "$failures" -gt 0 ]; then
+  echo "FAIL: $failures negative run(s) did not fail the way they must"
+  exit 1
+fi
+
+echo "PASS: $IMAGE supports hotcell, and the battery verifies each flag it reports on"

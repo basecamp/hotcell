@@ -1,0 +1,127 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The parts of the conformance gate that need neither a container nor a toolchain, so they run in the
+# no-toolchain suite alongside the development cell. Two regressions live here:
+#
+#   1. The battery's isolation check must observe each isolation flag conformance claims — the network,
+#      the read-only root, the noexec scratch, cap-drop, no-new-privileges, and the uid — and must treat a
+#      flag it cannot read as a failure rather than silence. The purple-team assessment removed the accessory's
+#      --cap-drop ALL as a negative control and every check still passed, because the battery never read
+#      the bounding capability set. This drives the check with a fake isolation result and proves it now
+#      rejects a non-empty capability set, a cleared no-new-privileges bit, a root uid, and — crucially —
+#      a nil for any of them, the shape a cell that cannot report a flag would return.
+#
+#   2. bin/conformance and bin/load must supply no `--ulimit stack`. docs/DEPLOYMENT.md forbids it: a
+#      lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
+#      verdict the caller retries against a limit that will fail it again, so a helper that set it would
+#      measure a shape operators are told not to deploy.
+#
+# The container conformance run and its negative jobs (see .github/workflows/ci.yml) are the end-to-end
+# proof; this is the fast guard that keeps the gate honest without Docker.
+
+require "bundler/setup"
+require_relative "lib/battery"
+
+REPO = File.expand_path("..", __dir__)
+FAILURES = []
+
+def check(name)
+  yield
+  puts "  ok #{name}"
+rescue StandardError => error
+  FAILURES << "#{name}: #{error.message}"
+  puts "  FAIL #{name}: #{error.message}"
+end
+
+# Drives Battery#isolation against a fixed isolation result, without a cell.
+def with_isolation_result(result)
+  Examples::Isolation.singleton_class.send(:define_method, :perform_in_hotcell) { |*| result }
+  yield
+ensure
+  Examples::Isolation.singleton_class.send(:remove_method, :perform_in_hotcell)
+end
+
+def isolation_raises?(result)
+  with_isolation_result(result) do
+    Examples::Battery.new(cell: nil, isolation: true).send(:isolation)
+    false
+  rescue Examples::Battery::Failed
+    true
+  end
+end
+
+SECURE = {
+  interfaces: [ "lo" ],
+  writable_root: false,
+  root_readonly: true,
+  scratch_noexec: true,
+  cap_bound: 0,
+  no_new_privs: true,
+  uid: 10001,
+  tool_env: %w[ HOME LANG LC_ALL PATH ],
+}.freeze
+
+# The full deployment shape passes.
+check("the isolation check passes when every flag holds") do
+  raise "the secure result did not pass" if isolation_raises?(SECURE)
+end
+
+# Each flag, wrong or unreadable, must fail — including nil, so a cell that cannot report a flag is never
+# read as a pass. cap_bound and no_new_privs and uid are the newly-observed flags; the rest guard the
+# ones the battery already checked.
+{
+  "a non-empty bounding capability set (cap-drop ALL not in effect)" => { cap_bound: 0xa80425fb },
+  "an unreadable bounding capability set"                            => { cap_bound: nil },
+  "a cleared no-new-privileges bit"                                 => { no_new_privs: false },
+  "an unreadable no-new-privileges bit"                             => { no_new_privs: nil },
+  "a root uid" => { uid: 0 },
+  "an unreadable uid" => { uid: nil },
+  "an extra network interface" => { interfaces: %w[ eth0 lo ] },
+  "a writable root filesystem" => { writable_root: true },
+  "a root filesystem not mounted read-only" => { root_readonly: false },
+  "an unreadable root mount" => { root_readonly: nil },
+  "a scratch that is not noexec" => { scratch_noexec: false },
+}.each do |description, override|
+  check("the isolation check fails on #{description}") do
+    raise "the battery accepted it" unless isolation_raises?(SECURE.merge(override))
+  end
+end
+
+# No stack ulimit in either helper.
+%w[ bin/conformance bin/load ].each do |script|
+  check("#{script} supplies no --ulimit stack") do
+    # Comment lines are allowed to name the flag they forbid; only a live command line counts.
+    code = File.readlines(File.join(REPO, script)).grep_v(/\A\s*#/).join
+    raise "found a stack ulimit" if code.match?(/--ulimit[=\s]+stack/)
+  end
+end
+
+# The negative matrix lives in bin/conformance rather than in CI, so an operator running it against their
+# own image gets the negative controls too — a positive-only run is the vacuous shape this gate exists to
+# reject. Each negative greps the battery's output for the assertion belonging to the dropped flag, so the
+# text it looks for must be text the battery can actually print: a reworded assertion would otherwise turn
+# the negative run into a grep that never matches, passing for the wrong reason.
+CONFORMANCE = File.read(File.join(REPO, "bin/conformance"))
+ISOLATION_ASSERTIONS = File.read(File.join(REPO, "examples/lib/battery.rb"))[/def isolation\b.*?^      end$/m].to_s
+
+NEGATIVES = CONFORMANCE.scan(/^\s*"([a-z-]+)=([^"]+)"$/).to_h
+
+check("bin/conformance runs a negative for every flag it can drop") do
+  droppable = CONFORMANCE.scan(/^keep +([a-z-]+)/).flatten + [ "tmpfs-noexec" ]
+  missing = droppable.uniq.sort - NEGATIVES.keys
+  raise "no negative run for #{missing.join(", ")}" if missing.any?
+end
+
+NEGATIVES.each do |flag, message|
+  check("the negative run for #{flag} looks for a message the battery prints") do
+    raise "no isolation assertion contains #{message.inspect}" unless ISOLATION_ASSERTIONS.include?(message)
+  end
+end
+
+if FAILURES.empty?
+  puts "PASS"
+else
+  warn "FAIL: #{FAILURES.size} check(s) failed"
+  exit 1
+end
