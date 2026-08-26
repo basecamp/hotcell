@@ -10,12 +10,12 @@ module Examples
 
   class Echo < ::HotCell::Client
     hotcell CELL
-    operation "example.echo"
+    operation "health.echo"
   end
 
   class Reopen < ::HotCell::Client
     hotcell CELL
-    operation "example.reopen"
+    operation "health.reopen"
   end
 
   class Tamper < ::HotCell::Client
