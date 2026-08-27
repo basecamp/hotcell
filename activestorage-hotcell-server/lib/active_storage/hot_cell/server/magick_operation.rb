@@ -50,9 +50,12 @@ module ActiveStorage
         abstract_operation
 
         # MiniMagick::Error is how mini_magick reports a `magick` that exited non-zero — the common shape of an
-        # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright. Both are the
-        # input's fault rather than the operation's.
-        unreadable MiniMagick::Error, MiniMagick::Invalid
+        # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright.
+        # ImageProcessing::Error is the pipeline's own verdict on the input against the requested
+        # transform — a multi-layer source into a single-layer destination, for example. All three are
+        # the input's fault rather than the operation's; unclassified, each was a transient `failed`
+        # that never marked the blob, so the same file spent a full conversion on every request.
+        unreadable MiniMagick::Error, MiniMagick::Invalid, ImageProcessing::Error
 
         # **Accepted risk.** A tool's output is not bounded on this path. `Operation#run_tool` caps what it
         # reads at 64KB and drops the rest as it arrives, because an input that makes a tool print gigabytes
