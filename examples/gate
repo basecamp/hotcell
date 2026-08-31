@@ -59,7 +59,8 @@ SECURE = {
   cap_bound: 0,
   no_new_privs: true,
   uid: 10001,
-  tool_env: %w[ HOME LANG LC_ALL PATH ],
+  tool_env: %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH ],
+  tool_omp: %w[ OMP_NUM_THREADS=2 OMP_THREAD_LIMIT=8 ],
 }.freeze
 
 # The full deployment shape passes.
@@ -82,6 +83,10 @@ end
   "a root filesystem not mounted read-only" => { root_readonly: false },
   "an unreadable root mount" => { root_readonly: nil },
   "a scratch that is not noexec" => { scratch_noexec: false },
+  "an image that sets no OpenMP thread count" => { tool_omp: %w[ OMP_THREAD_LIMIT=8 ] },
+  "an image that sets no OpenMP thread limit" => { tool_omp: %w[ OMP_NUM_THREADS=2 ] },
+  "an OpenMP thread count set to nothing" => { tool_omp: [ "OMP_NUM_THREADS=", "OMP_THREAD_LIMIT=8" ] },
+  "an OpenMP bound the cell could not report" => { tool_omp: nil },
 }.each do |description, override|
   check("the isolation check fails on #{description}") do
     raise "the battery accepted it" unless isolation_raises?(SECURE.merge(override))

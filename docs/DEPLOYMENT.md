@@ -22,6 +22,7 @@ own workload, where this one covers what the values mean.
   * [Performance](#performance)
   * [Security](#security)
   * [General](#general)
+  * [Bound the OpenMP thread pools](#bound-the-openmp-thread-pools)
   * [Sizing the numbers](#sizing-the-numbers)
 - [Cell settings](#cell-settings)
   * [Performance](#performance-1)
@@ -187,7 +188,7 @@ from the README's accessory, not recommendations.
 
 | Flag | Example | Tune it from |
 | --- | --- | --- |
-| `cpus` | `2` | The share of the host this cell may use. Start the cell's `concurrency` at twice this number. |
+| `cpus` | `2` | The share of the host this cell may use. Start the cell's `concurrency` at twice this number, and match the image's `OMP_NUM_THREADS` to it — see "Bound the OpenMP thread pools". |
 | `memory` | `2g` | The cgroup limit, counting every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. On a disk-backed scratch there is no tmpfs term — see "Where scratch lives". |
 | `memory-swap` | `2g` | Set it equal to `memory`. Omit it and Docker allows twice `memory` in swap, so the memory limit no longer holds. |
 | `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. Moving scratch onto disk decouples it from `memory` — see "Where scratch lives". |
@@ -220,6 +221,45 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. |
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
+| `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |
+| `OMP_THREAD_LIMIT` | `8` | The ceiling on that pool, including a library that raises the count itself. |
+
+### Bound the OpenMP thread pools
+
+**Set `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT` in the image.** The installed `Dockerfile` sets both, and
+on a large host neither is optional: without them a cell dies there. `hotcell:install` leaves an existing
+`Dockerfile` untouched, so add both by hand to a cell installed before this and rebuild its image.
+
+OpenMP sizes its thread pool from the host's core count, and a `cpus:` limit is a CFS quota rather than an
+affinity mask, so it does not lower that count — on a 98-core host libvips and ImageMagick ask for 98
+threads. Each thread stack is 8MB of private anonymous memory, which the cell's `memory` charges as
+`RLIMIT_DATA`: under a 1280MB limit, 96 of those stacks fit and 104 do not. Past that line `pthread_create` returns `EAGAIN`, which libgomp treats as unrecoverable — it writes
+
+```
+libgomp: Thread creation failed: Resource temporarily unavailable
+```
+
+to stderr and calls `exit(1)`. The worker dies before answering, so the caller gets a transient failure and
+the job retries it against a host that fails the same way. This killed 285 Basecamp workers in production
+on 2026-08-31 and forced a rollback.
+
+**Size `OMP_NUM_THREADS` from the container's `cpus`:** the number follows the allocation, not the example
+above. It is a thread count, so round a fractional quota down, and up to 1 below that. `OMP_THREAD_LIMIT` is the backstop against a library that raises the count itself by calling
+`omp_set_num_threads`, which is what ImageMagick does for `MAGICK_THREAD_LIMIT`.
+
+**The cell forwards the bound to the tools it execs.** A tool sees the environment its operation wrote for
+it rather than the worker's own, which is invariant 9, so the image's variables alone would bound
+in-process libvips and nothing else. `Operation#run_tool` and mini_magick both carry the pair from the
+cell's environment.
+
+**A deploy to staging or beta cannot catch a regression here.** The failure exists only at production's
+core count — which is how it reached production. So the guard is a test:
+`hotcell-client/test/install_test.rb` holds the scaffold's variables, and an image you customize needs its
+own.
+
+To verify a built image, write a GIF inside it and count `/proc/self/task` during the write. GIF is the
+cheapest probe: it is the only common output format that quantizes, and quantization is where the threads
+appear. Unbounded, the count tracks the visible cores; bounded, it stays at the limit.
 
 ### Sizing the numbers
 

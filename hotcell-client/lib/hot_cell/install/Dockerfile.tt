@@ -30,9 +30,17 @@ RUN mkdir -p /run/hotcell/cell /hotcell/operations && chown -R hotcell:hotcell /
 
 # HOME is /tmp because the cell's user has no home directory, and bundler wants one. A worker replaces
 # it with its slot's home before it serves anything.
+#
+# OpenMP sizes its thread pool from the host's core count, and a `cpus:` quota does not lower it, so an
+# unbounded libvips or ImageMagick asks a 98-core host for 98 threads, each with an 8MB stack.
+# `RLIMIT_DATA` charges those stacks, and libgomp calls `exit(1)` on the first `pthread_create` it cannot satisfy. Match
+# OMP_NUM_THREADS to the container's `cpus:`: the number follows the allocation rather than being 2.
+# OMP_THREAD_LIMIT bounds a library that raises the count itself, which is what ImageMagick does.
 ENV HOME=/tmp \
     BUNDLE_PATH=/hotcell/bundle \
     BUNDLE_WITHOUT=development \
+    OMP_NUM_THREADS=2 \
+    OMP_THREAD_LIMIT=8 \
     HOTCELL_OPERATIONS=/hotcell/operations \
     HOTCELL_DIR=/run/hotcell/cell
 

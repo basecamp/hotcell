@@ -196,8 +196,12 @@ module HotCell
         kept
       end
 
+      # The OpenMP variables come from the cell's environment rather than being named here: the number
+      # belongs to the image, which is configured to match the container's CPU quota. Without them
+      # `unsetenv_others: true` would hand an exec'd tool the pool the image's bound was meant to take away.
       def tool_environment(overrides)
-        { "HOME" => ENV["HOME"], "PATH" => ENV["PATH"], "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8" }
+        { "HOME" => ENV["HOME"], "PATH" => ENV["PATH"], "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8",
+          "OMP_NUM_THREADS" => ENV["OMP_NUM_THREADS"], "OMP_THREAD_LIMIT" => ENV["OMP_THREAD_LIMIT"] }
           .merge(overrides.transform_keys(&:to_s))
           .compact
       end

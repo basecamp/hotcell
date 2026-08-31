@@ -53,6 +53,29 @@ class EnvironmentTest < HotCellServerTest
     end
   end
 
+  # An exec'd tool sees only what run_tool wrote for it, so the image's OpenMP bound has to be written
+  # there too, or the shelled-out half of a toolchain — `magick`, `ffmpeg` — keeps an unbounded pool.
+  def test_a_tool_inherits_the_cells_openmp_bound
+    with_openmp_bound do
+      TestCell.boot do |cell|
+        seen = assert_ok(cell.call("test.environment")).result[:seen]
+
+        assert_includes seen, "OMP_NUM_THREADS=2"
+        assert_includes seen, "OMP_THREAD_LIMIT=8"
+      end
+    end
+  end
+
+  def test_a_tool_gets_no_openmp_bound_the_cell_does_not_have
+    without_openmp_bound do
+      TestCell.boot do |cell|
+        seen = assert_ok(cell.call("test.environment")).result[:seen]
+
+        assert_empty seen.grep(/\AOMP_/), "the cell invented a bound of its own"
+      end
+    end
+  end
+
   # capture3 accumulated both streams in full and handed them over at exit, so slicing afterwards bounded
   # only the Strings this method returned. An input that made a tool print 40MB of diagnostics had
   # already cost this worker 40MB of address space — which RLIMIT_DATA charges, arriving as a `memory`
@@ -74,5 +97,22 @@ class EnvironmentTest < HotCellServerTest
       yield
     ensure
       ENV.delete CANARY
+    end
+
+    # The environment a container would have given the cell. A developer's own shell may hold either
+    # variable, so both are restored rather than deleted.
+    def with_openmp_bound(count = "2", limit = "8")
+      original = ENV.slice("OMP_NUM_THREADS", "OMP_THREAD_LIMIT")
+      ENV["OMP_NUM_THREADS"] = count
+      ENV["OMP_THREAD_LIMIT"] = limit
+      yield
+    ensure
+      ENV.delete "OMP_NUM_THREADS"
+      ENV.delete "OMP_THREAD_LIMIT"
+      ENV.update original
+    end
+
+    def without_openmp_bound(&block)
+      with_openmp_bound(nil, nil, &block)
     end
 end

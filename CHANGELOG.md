@@ -16,6 +16,22 @@ This changelog covers five gems, which release together on the same version:
 
 * `HotCell.describe_cells` no longer warns about a client whose operation the cell does not carry, and `HotCell.clients` is gone with it. The check could not tell a client the application calls from one it merely loaded, so a cell carrying a subset of what a gem ships warned on every boot. A request for an operation a cell does not carry is refused as `unsupported`, naming the operation, and that failure is transient and reaches the application's error reporting. An application that wants a boot check can write one over its own configuration.
 
+#### Fixed
+
+* The installed `Dockerfile` sets `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT`. OpenMP sizes its thread pool from the host's core count, and a container's `cpus` quota is a CFS quota rather than an affinity mask, so libvips and ImageMagick asked a 98-core host for 98 threads however small the cell's share of it was. A thread stack is 8MB of private anonymous memory, which `RLIMIT_DATA` charges, so the pool alone cleared the cell's `memory` limit — and libgomp calls `exit(1)` on the first `pthread_create` it cannot satisfy. Match `OMP_NUM_THREADS` to the container's `cpus`. An upgrade leaves an existing `Dockerfile` alone, so a cell installed before this needs both added by hand and the image rebuilt. `docs/DEPLOYMENT.md` covers why the guard has to be a test rather than a deploy to beta: the failure exists only at production's core count.
+
+### HotCell::Server
+
+#### Fixed
+
+* `Operation#run_tool` carries `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT` from the cell's environment into the environment it writes for a tool. A tool sees only what its operation wrote for it, so the image's bound would otherwise have applied to in-process libvips and to nothing the cell execs.
+
+### ActiveStorage::HotCell::Server
+
+#### Fixed
+
+* `MiniMagick.cli_env` carries the cell's `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT`, so `magick` runs under the image's bound rather than sizing its pool from the host's cores. `MiniMagick.restricted_env` is what had removed them.
+
 
 ## v0.2.0 / 2026-08-25
 
