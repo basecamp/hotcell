@@ -69,6 +69,20 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # An unbounded OpenMP pool asks for one 8MB thread stack per host core, which `RLIMIT_DATA` charges, so
+  # a large host kills the cell where a small one only wastes memory. Neither a beta host nor a laptop has
+  # the cores to reproduce that, which is why the guard is a test rather than an environment.
+  def test_install_bounds_the_openmp_thread_pools
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+
+      dockerfile = File.read(File.join(root, "hotcell", "Dockerfile"))
+
+      assert_match(/^\s*OMP_NUM_THREADS=[1-9]\d*\s*\\?$/, dockerfile)
+      assert_match(/^\s*OMP_THREAD_LIMIT=[1-9]\d*\s*\\?$/, dockerfile)
+    end
+  end
+
   def test_install_leaves_an_existing_file_exactly_as_it_is
     Dir.mktmpdir do |root|
       customized = File.join(root, "hotcell", "Dockerfile")

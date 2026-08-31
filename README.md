@@ -340,6 +340,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 ```
 
+Match the `OMP_NUM_THREADS` the installed `Dockerfile` sets to the container's `cpus` below. OpenMP
+reads the host's core count, which a `cpus` quota does not lower, so an unbounded libvips or ImageMagick
+asks a large host for one 8MB thread stack per core and dies on its own memory limit -- see
+[Bound the OpenMP thread pools](docs/DEPLOYMENT.md#bound-the-openmp-thread-pools).
+
 Build the image from the `hotcell/` directory and deploy it as a second container beside the
 application, on the same host, sharing one volume that holds the sockets. With Kamal, that is one
 accessory per cell:

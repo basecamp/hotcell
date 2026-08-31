@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "etc"
 
 # Invariant 9: a tool sees only the environment its operation wrote for it. `Operation#run_tool` holds it
 # with `unsetenv_others: true`, and the magick operations do not use it — mini_magick spawns `magick`
@@ -38,7 +39,82 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     end
   end
 
+  # `magick` sees only the environment mini_magick writes for it, so the image's OpenMP bound has to be
+  # named in `cli_env`; the restriction above is otherwise what takes it away.
+  def test_the_cli_env_carries_the_cells_openmp_bound
+    bound = { "OMP_NUM_THREADS" => "2", "OMP_THREAD_LIMIT" => "8" }
+
+    assert_equal bound, magick_cli_env_under(bound)
+    assert_empty magick_cli_env_under({}), "the cell invented a bound of its own"
+  end
+
+  # mini_magick, rather than our hash: it is unbounded in the gemspec, and a version that stopped merging
+  # `cli_env` would leave the assertion above passing and `magick` unbounded again.
+  def test_mini_magick_hands_the_bound_to_magick
+    skip "ImageMagick is not installed" unless magick_installed?
+    skip "a #{Etc.nprocessors}-core host cannot tell a bounded pool from an unbounded one" if
+      Etc.nprocessors < 4
+
+    assert_operator magick_threads_through_mini_magick("OMP_NUM_THREADS" => "2"), :<,
+                    magick_threads_through_mini_magick({})
+  end
+
+  # The premise: `magick` reads OMP_NUM_THREADS out of the environment it is given, so naming it in
+  # `cli_env` bounds a real pool.
+  def test_magick_reads_an_openmp_bound_out_of_its_environment
+    skip "a #{Etc.nprocessors}-core host cannot tell a bounded pool from an unbounded one" if
+      Etc.nprocessors < 4
+
+    assert_operator magick_thread_resource("OMP_NUM_THREADS" => "2"), :<, magick_thread_resource({})
+  end
+
   private
+    def magick_cli_env_under(environment)
+      JSON.parse in_a_child(environment, <<~RUBY)
+        require "json"
+        require "active_storage/hot_cell/server/magick_operation"
+        puts JSON.dump(MiniMagick.cli_env.slice("OMP_NUM_THREADS", "OMP_THREAD_LIMIT"))
+      RUBY
+    end
+
+    # Through mini_magick's own spawn rather than IO.popen, which is the whole point: what mini_magick
+    # merges into that child is what the assertion is about. Nothing here rescues, so a child that cannot
+    # run fails the test rather than reading as a bound of zero.
+    def magick_threads_through_mini_magick(environment)
+      output = in_a_child(environment, <<~'RUBY')
+        require "active_storage/hot_cell/server/magick_operation"
+        print MiniMagick.convert { |command| command.list "resource" }[/Thread: (\d+)/, 1]
+      RUBY
+
+      Integer(output)
+    end
+
+    # The operation reads the variables at require time, so each case needs its own process. A developer's
+    # own shell may hold either, so the child starts from neither and takes only what the case gives it.
+    def in_a_child(environment, script)
+      environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil }.merge(environment)
+      lib = File.expand_path("../lib", __dir__)
+
+      IO.popen([ environment, RbConfig.ruby, "-I", lib, "-r", "bundler/setup", "-e", script ], &:read)
+    end
+
+    # Both sides start from no bound at all: a runner holding one of its own would otherwise compare a
+    # bounded pool against a bounded pool.
+    def magick_installed?
+      system "magick", "-version", out: File::NULL, err: File::NULL
+    rescue Errno::ENOENT
+      false
+    end
+
+    def magick_thread_resource(environment)
+      environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil }.merge(environment)
+      output = IO.popen([ environment, "magick", "-list", "resource" ], &:read)
+
+      Integer(output[/Thread: (\d+)/, 1])
+    rescue Errno::ENOENT
+      skip "ImageMagick is not installed"
+    end
+
     def with_refusing_policy_in_the_environment
       Dir.mktmpdir "hotcell-magick-policy" do |directory|
         File.write File.join(directory, "policy.xml"), <<~XML

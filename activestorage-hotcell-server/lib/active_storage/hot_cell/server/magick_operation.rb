@@ -22,8 +22,14 @@ require "image_processing/mini_magick"
 # is covered too. Note what this is: mini_magick filters the environment it was given, where `run_tool`
 # writes a fresh one. Driving `magick` directly would make it ours, and that is the separate enhancement
 # this class already names.
+#
+# The OpenMP variables come from the cell's environment rather than being named here: the number belongs
+# to the image, which is configured to match the container's CPU quota. Without them the restriction would
+# hand `magick` the pool the image's bound was meant to take away. `run_tool` carries the same pair.
 MiniMagick.restricted_env = true
-MiniMagick.cli_env = { "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8" }
+MiniMagick.cli_env = { "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8",
+                       "OMP_NUM_THREADS" => ENV["OMP_NUM_THREADS"],
+                       "OMP_THREAD_LIMIT" => ENV["OMP_THREAD_LIMIT"] }.compact
 
 module ActiveStorage
   module HotCell

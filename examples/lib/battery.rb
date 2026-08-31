@@ -190,8 +190,18 @@ module Examples
         assert result[:uid].to_i.positive?, "the cell runs as root or could not report its uid: #{result[:uid].inspect}"
 
         assert result[:tool_env], "the env tool could not run inside the cell"
-        extra = result[:tool_env] - %w[ HOME LANG LC_ALL PATH ]
+        extra = result[:tool_env] - %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH ]
         assert_equal [], extra, "an exec'd tool sees more than the written environment"
+
+        # The one check here about the image rather than the runtime. An unbounded OpenMP pool takes one
+        # 8MB thread stack per host core, which RLIMIT_DATA charges, so an image that dropped the bound
+        # passes every other check and kills a worker only on a host with the cores to do it. A positive
+        # number, because a variable set to the empty string is present and bounds nothing.
+        omp = Array(result[:tool_omp])
+        assert omp.grep(/\AOMP_NUM_THREADS=[1-9][0-9]*\z/).any?,
+               "the image sets no OpenMP thread count: #{omp.inspect}"
+        assert omp.grep(/\AOMP_THREAD_LIMIT=[1-9][0-9]*\z/).any?,
+               "the image sets no OpenMP thread limit: #{omp.inspect}"
       end
 
       # The other half of the shared group. It lets a cell read an input and write an output, and this is

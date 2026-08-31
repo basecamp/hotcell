@@ -7,6 +7,9 @@
 # Each answers nil where the platform cannot say (macOS has no /sys and no /proc), so the same file loads
 # in a native development cell; the battery reads that nil as a failed check rather than a pass, so a cell
 # that cannot report a flag never passes for silence.
+#
+# The OpenMP variables come back with their values rather than as names alone: an image that set one to
+# the empty string bounds nothing and would pass a check that only asked whether it was there.
 module Examples
   class Isolation < HotCell::Operation
     operation "example.isolation"
@@ -21,7 +24,8 @@ module Examples
         cap_bound: cap_bound,
         no_new_privs: no_new_privs,
         uid: Process.uid,
-        tool_env: tool.ok? ? tool.out.lines.map { |line| line.split("=", 2).first }.sort : nil }
+        tool_env: tool.ok? ? tool.out.lines.map { |line| line.split("=", 2).first }.sort : nil,
+        tool_omp: tool.ok? ? tool.out.lines.grep(/\AOMP_/).map(&:chomp).sort : nil }
     end
 
     private
