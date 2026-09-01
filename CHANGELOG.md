@@ -34,6 +34,8 @@ This changelog covers five gems, which release together on the same version:
 
 * `request`, `request.abandoned`, `worker.crashed` and `worker.killed` carry `hotcell.op`, the operation the line is about. A cell runs several operations at once and they do not share limits, so `worker.killed cause=fsize` on a host serving three PDF operations named none of them — and no join was available anywhere else, since the response carries no operation and `hotcell_killed` is tagged `cell` and `cause` only. The worker parses the name out of the request; the supervisor, which never reads one, learns it from the worker's report and holds it, because a killed worker cannot write its own `worker.killed`. Where the name is not known — a request that never parsed, a crash between requests, a worker that died before it reported — the field is `null` rather than the name of an earlier request. See [docs/LOGS.md](docs/LOGS.md).
 
+* `worker.undispatchable` carries `hotcell.op` too. It is the one line where the supervisor reads a request, because the worker died between the fork and the dispatch write, so nothing else has read it and the supervisor is the side that answers it. It peeks the line rather than reading it, taking neither the bytes nor the caller's descriptors off the connection, and never waits for one that has not arrived.
+
 #### Fixed
 
 * `Operation#run_tool` carries `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT` from the cell's environment into the environment it writes for a tool. A tool sees only what its operation wrote for it, so the image's bound would otherwise have applied to in-process libvips and to nothing the cell execs.

@@ -14,6 +14,9 @@ module HotCell
   # the trusted side on a bounded buffer — but the supervisor does not need to, and staying out of the
   # request is what lets it dispatch a connection whose descriptors are still queued on it.
   #
+  # `peeked_op` is the one place it looks at a request, on the one path where no worker ever will, and it
+  # peeks rather than reads so that even there nothing leaves the connection.
+  #
   # Dispatching rather than letting workers accept is what makes the rest work. The supervisor needs to own
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
   # knows when every worker started its current request, which is what the deadline needs.
@@ -394,7 +397,7 @@ module HotCell
         true
       rescue SystemCallError, IOError => error
         log.write "worker.undispatchable", pid: child.pid, slot: child.slot.number,
-                                           error: error.class.name
+                                           op: peeked_op(connection), error: error.class.name
 
         # Released rather than finished: this is the only path that hands the connection back to be answered
         # here, so the client connection must not be closed on the way out. `retire` closes the worker's
@@ -404,6 +407,37 @@ module HotCell
         retire child
         answer connection, Failure.new(code: Codes::KILLED, cause: Codes::CRASHED, message: error.message)
         false
+      end
+
+      # The one request line the supervisor ever reads, and it reads it because this request is already
+      # over: the dispatch failed, no worker will serve it, and this is the side that answers it a line
+      # below. Every other request stays unread here, which is what lets `dispatch` hand a worker a
+      # connection whose bytes and descriptors are still queued on it.
+      #
+      # A peek, and a bytes-only `recv` rather than `recvmsg`, so it takes neither. Two reasons, and the
+      # first is the one that decides it: `send_message` can send the ancillary data and then fail on the
+      # rest of the line, so this path can be reached with a worker already holding a copy of this
+      # connection — and a supervisor that had consumed the request would have taken it from that worker.
+      # The second is that a `recvmsg` would install the caller's descriptors here, in the process that
+      # holds every other connection and the listener.
+      #
+      # Non-blocking, because a caller that has connected and not sent yet must never park the loop that
+      # enforces every other request's deadline. There is deliberately no retry: a line that has not all
+      # arrived leaves the operation unnamed, the same as one that never came.
+      #
+      # It answers nil for anything that goes wrong, including a socket error and a line that will not
+      # parse. A log field is never worth the cell, and this runs inside that same loop.
+      #
+      # Not bounded to a registered operation the way a worker's report is, and the difference is which side
+      # the name came from. This is the request itself, from the trusted side, naming what a worker's own
+      # `request` line would have named had one ever read it. The peek limit bounds its size.
+      def peeked_op(connection)
+        peeked = connection.socket.recv_nonblock(MAX_REQUEST_BYTES, Socket::MSG_PEEK, exception: false)
+        return nil unless peeked.is_a?(String) && peeked.include?("\n")
+
+        Request.parse(peeked.force_encoding(Encoding::UTF_8)).op
+      rescue StandardError
+        nil
       end
 
       def available_child

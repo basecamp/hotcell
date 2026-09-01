@@ -35,7 +35,7 @@ Everything else is ours and sits under `hotcell.*`:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `hotcell.slot` | integer | The slot number. On nearly every event. |
-| `hotcell.op` | string | The operation the line is about, on `request`, `request.abandoned`, `worker.crashed` and `worker.killed`. `null` where the worker died or failed before it knew: a request that never parsed, or a crash between requests. Never the name of an earlier request. |
+| `hotcell.op` | string | The operation the line is about, on `request`, `request.abandoned`, `worker.crashed`, `worker.killed` and `worker.undispatchable`. `null` where the name was not known: a request that never parsed, a crash between requests, a worker that died before it reported. Never the name of an earlier request. |
 | `hotcell.code` | string | The response code of a `request` (`"ok"`, `"failed"`, `"killed"`, ...). |
 | `hotcell.permanent` | boolean | Whether a `request` failure is permanent. |
 | `hotcell.cause` | string | Why a worker was killed (`"deadline"`, `"memory"`, `"fsize"`, ...). |
@@ -68,7 +68,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `worker.deadline` | WARN | `hotcell.slot`, `hotcell.deadline_s` |
 | `worker.lingered` | WARN | `hotcell.slot`, `hotcell.grace_s` |
 | `worker.unforkable` | ERROR | `hotcell.slot`, `error.type`, `error.message` |
-| `worker.undispatchable` | ERROR | `hotcell.slot`, `error.type` |
+| `worker.undispatchable` | ERROR | `hotcell.slot`, `hotcell.op`, `error.type` |
 | `worker.unreadable_report` | ERROR | `message` |
 | `control.abandoned` | WARN | `hotcell.waited_s` |
 | `control.unanswerable` | WARN | `error.type`, `error.message` |
@@ -146,6 +146,12 @@ reporting leaves `hotcell.op` null rather than borrowing the name of the request
 
 Because it arrives from the one process here that runs untrusted code, a reported name is bounded to an
 operation this cell registered before it is written down.
+
+`worker.undispatchable` is the exception to all of that, and the one line where the supervisor reads a
+request. The worker died between the fork and the dispatch write, so nothing has read the request and the
+supervisor is the side that answers it. It peeks the line rather than reading it, so neither the bytes nor
+the caller's descriptors leave the connection, and it never waits: a caller that has not sent yet, or a
+line still arriving, leaves the field null.
 
 ## The contract with the collector
 
