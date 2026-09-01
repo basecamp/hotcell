@@ -40,23 +40,22 @@ module HotCell
     # `/dev/fd/N` gives a fresh file description at offset zero, so a read here does not disturb the
     # descriptor the supervisor still holds.
     #
-    # Darwin gets a different implementation of that promise, because it cannot keep it this way. There is
-    # no procfs behind `/dev/fd`, so opening the path is dup(2): one shared offset, and a reader that has
-    # read leaves the next open mid-file. libvips sniffs a format by opening the path once per candidate
-    # loader, so the second loader reads past the magic bytes and a readable file is called unreadable.
+    # Darwin cannot keep that promise, so it keeps the behavior instead. `/dev/fd` has no procfs behind it
+    # there, and opening the path is dup(2): one shared offset, so what one reader consumes the next open
+    # skips. libvips sniffs a format by opening the path once per candidate loader, so the second loader
+    # reads past the magic bytes and a readable file is called unreadable.
     #
-    # Darwin answers with the filename behind the descriptor instead, which a by-name open does start at
-    # zero. That is a corner cut on purpose: it hands a tool a path the cold side chose, which the rest of
-    # this class exists to prevent. Darwin is a development platform and nothing else — no container, no
-    # isolation, the cell running as the caller on the caller's own filesystem, where that path was already
-    # within reach and hiding it protected nothing. What has to match on the two platforms is the behavior
-    # an operation sees: a path that reads the input from its first byte, however many times it is opened.
-    # How that is arrived at does not have to match, and here it does not.
+    # Darwin answers with the filename behind the descriptor, which a by-name open does start at zero. That
+    # hands a tool a path the cold side chose, which the rest of this class exists to prevent — a corner cut
+    # on purpose. Darwin is a development platform and nothing else: no container, no isolation, the cell
+    # running as the caller on the caller's own filesystem, where hiding a path it could already reach
+    # protected nothing. What has to match across platforms is what an operation sees — a path that reads
+    # from the first byte however many times it is opened — not how that is arrived at.
     if RUBY_PLATFORM.include?("darwin")
       F_GETPATH = 50 # sys/fcntl.h; Ruby's Fcntl module does not carry it
 
       def fd_path
-        buffer = "\0" * 1024 # MAXPATHLEN, which the kernel fills in place
+        buffer = "\0" * 1024 # F_GETPATH writes the path into a buffer the caller supplies, MAXPATHLEN wide
         io.fcntl F_GETPATH, buffer
         buffer[/\A[^\0]+/]
       end

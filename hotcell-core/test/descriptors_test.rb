@@ -192,10 +192,10 @@ class DescriptorsTest < HotCellTest
     end
   end
 
-  # fd_path claims a reopen is a fresh file description at offset zero, so a tool may read the input and
-  # the supervisor's own descriptor is left where it was. On macOS opening /dev/fd/N dups the descriptor
-  # instead, so the offset is shared: the second reader resumes where the first stopped. libvips opens the
-  # path once per loader while it sniffs, which is how a HEIC file becomes unreadable there.
+  # The kernel owns this promise, and on macOS it does not keep it: opening `/dev/fd/N` dups the descriptor
+  # rather than reopening the file, so the offset is shared and the second reader resumes where the first
+  # stopped. libvips sniffs by opening the path once per candidate loader, so a HEIC file is called
+  # unreadable there.
   def test_reopening_fd_path_reads_from_zero_and_leaves_the_descriptor_alone
     with_file("source bytes") do |path|
       reading(path) do |io|
