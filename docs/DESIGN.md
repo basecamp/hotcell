@@ -291,6 +291,18 @@ implementation.
     not own the file. Changing a mode needs ownership, and `cap-drop ALL` leaves no capability that
     overrides it — so a shared group enforces the invariant and a shared uid cannot.
 
+19. **On darwin, `open("/dev/fd/N")` is a `dup` of fd N rather than a reopen of the file behind it.**
+    Linux's `/dev/fd` is `/proc/self/fd`, where the open is real and starts at offset zero; darwin's is
+    the `fdesc` filesystem, and its open shares the caller's file offset. A tool is free to open the path
+    it is handed more than once — libvips sniffs a format by opening it once per candidate loader and
+    reading the first few bytes — and on a shared offset each of those reads starts where the last one
+    stopped. A HEIC file, whose loader is late in libvips' priority order, is never recognised and comes
+    back `unreadable` with no error anywhere. Reopening the caller's own file is not available as a
+    remedy: its path is the cold side's, and no path the cold side chose is ever visible to a tool. So
+    `Input#fd_path` stages on
+    darwin, and an uncontainerized macOS cell pays for a copy and the `RLIMIT_FSIZE` ceiling that bounds
+    it. Production is Linux and pays neither.
+
 ## Why descriptors rather than a shared volume
 
 The obvious alternative is a directory mounted into both containers: the app writes an input file and

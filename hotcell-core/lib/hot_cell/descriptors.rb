@@ -36,11 +36,16 @@ module HotCell
     # sees it too when the worker hands the fd across the exec at the same number — see Operation#run_tool.
     #
     # This is what keeps a multi-gigabyte input off a small tmpfs: the descriptor is the caller's own file,
-    # readable at any size, where staging it would be a write and RLIMIT_FSIZE bounds writes. Reopening
-    # `/dev/fd/N` gives a fresh file description at offset zero, so a read here does not disturb the
-    # descriptor the supervisor still holds.
+    # readable at any size, where staging it would be a write and RLIMIT_FSIZE bounds writes. On Linux,
+    # reopening `/dev/fd/N` gives a fresh file description at offset zero, so a read here does not disturb
+    # the descriptor the supervisor still holds. Darwin's fdesc filesystem does not — see Input#fd_path.
     def fd_path
       "/dev/fd/#{io.fileno}"
+    end
+
+    # Whether this platform's `/dev/fd/N` is a reopen of the file behind fd N, or a dup of fd N itself.
+    def self.reopens_descriptors?
+      !RUBY_PLATFORM.include?("darwin")
     end
 
     def close
@@ -102,6 +107,20 @@ module HotCell
     # On call rather than up front, so an operation that never asks for a staged path never pays for the copy.
     def path
       @path ||= copied_to(scratch_path)
+    end
+
+    # Staged rather than named on darwin, where `open("/dev/fd/N")` is a dup of fd N and shares its offset
+    # rather than starting a fresh read at zero. A tool is free to open the path it is handed more than
+    # once — libvips sniffs an image's format by opening it once per candidate loader and reading the first
+    # few bytes — and on a shared offset each of those reads starts where the last one stopped. A loader
+    # late in the priority order then never sees the file's magic, and a readable file comes back
+    # unreadable. Reopening the caller's own file instead is not available here by design: its path is the
+    # cold side's and no tool is to see it.
+    #
+    # So darwin pays for a copy and for the RLIMIT_FSIZE ceiling that bounds it, which is the cost of an
+    # uncontainerized cell answering what the Linux one answers. Production is Linux and pays neither.
+    def fd_path
+      self.class.reopens_descriptors? ? super : path
     end
 
     private

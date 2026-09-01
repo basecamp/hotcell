@@ -93,7 +93,8 @@ module Examples
           result = Reopen.perform_in_hotcell([ input ], [ output ])
 
           assert_equal MESSAGE, File.binread(output_path), "the message carried through both paths"
-          assert_equal false, result[:staged], "a descriptor was staged onto scratch rather than used in place"
+          assert_equal !result[:reopens], result[:staged],
+            "a descriptor was staged onto scratch rather than used in place"
         end
       end
 

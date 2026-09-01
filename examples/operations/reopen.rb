@@ -1,9 +1,13 @@
 # frozen_string_literal: true
 
-# The same round trip as echo, through both paths instead of both descriptors. `/dev/fd/N` is a fresh
-# open, rechecked against the opening process's uid and the file's mode, so this succeeds only when the
-# cell can open the caller's own files by name. Echo consumes the descriptors directly and never
+# The same round trip as echo, through both paths instead of both descriptors. On Linux `/dev/fd/N` is a
+# fresh open, rechecked against the opening process's uid and the file's mode, so this succeeds only when
+# the cell can open the caller's own files by name. Echo consumes the descriptors directly and never
 # establishes that, which is why both exist.
+#
+# On darwin that open is a `dup` instead, so an input names a staged copy and this establishes nothing
+# about permissions there. `reopens` says which of the two the cell answered from, because a cell need not
+# run on the platform the battery does.
 #
 # Both directions, because they are different permissions and a tool may need either: an input is readable
 # by the group and an output is writable by it, and one of the shipped operations re-opens each. Reading
@@ -23,7 +27,8 @@ module Examples
         File.open(destination.fd_path, "wb") { |output| output.write(input.read) }
       end
 
-      { bytes: bytes, staged: source.staged? || destination.staged? }
+      { bytes: bytes, staged: source.staged? || destination.staged?,
+        reopens: HotCell::Descriptor.reopens_descriptors? }
     end
   end
 end

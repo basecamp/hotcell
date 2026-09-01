@@ -13,6 +13,17 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Core
+
+#### Fixed
+
+* `Input#fd_path` stages its input on darwin, where `open("/dev/fd/N")` is a `dup` of fd N and shares its
+  offset rather than reopening the file at zero. A tool that opens the path more than once — libvips does,
+  once per candidate loader, to sniff a format — walked that offset forward, so a file whose loader is late
+  in the priority order came back `unreadable` with no error recorded. This only ever affected an
+  uncontainerized cell on macOS, which is the supported development path; Linux reopens and is unchanged.
+  The cost on darwin is a copy and the `RLIMIT_FSIZE` ceiling that bounds one.
+
 
 ## v0.3.0 / 2026-09-01
 

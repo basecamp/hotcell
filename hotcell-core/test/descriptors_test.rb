@@ -60,6 +60,55 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  # Every operation that hands a tool a filename hands it this one, and a tool is free to open it more
+  # than once: libvips sniffs an image's format by opening the path once per candidate loader and reading
+  # the first few bytes. Each of those opens has to start at the beginning, whatever the platform makes of
+  # /dev/fd — on darwin the open is a dup and the reads would otherwise walk a shared offset forward,
+  # leaving a file whose loader is late in the priority order unrecognised.
+  def test_reading_an_inputs_fd_path_twice_reads_the_same_bytes
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+          assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+        end
+      end
+    end
+  end
+
+  # The bytes a tool reads through the path are the caller's, whichever route the platform takes to them.
+  def test_an_inputs_fd_path_reads_the_callers_bytes
+    with_file("source bytes") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          assert_equal "source bytes", File.binread(input.fd_path)
+        end
+      end
+    end
+  end
+
+  # The darwin branch, run everywhere: the two tests above pass on Linux without the branch existing at
+  # all, and the platform that needs it is not in the gating CI lane for this suite.
+  def test_an_input_stages_where_the_platform_does_not_reopen_descriptors
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          without_reopened_descriptors do
+            assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+            assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+            assert_equal input.path, input.fd_path
+          end
+        end
+      end
+    end
+  end
+
   def test_asking_an_input_for_its_path_copies_its_bytes_to_a_filename_the_cold_side_never_named
     with_file("source bytes") do |source|
       Dir.mktmpdir do |scratch|
@@ -221,4 +270,15 @@ class DescriptorsTest < HotCellTest
       writing(path) { |io| assert HotCell::Output.new(io) }
     end
   end
+
+  private
+    # What this answers is a property of the platform, so the branch the machine is not on is only
+    # reachable by saying so. Defined on the subclass rather than on Descriptor, whose own singleton
+    # carries the real one.
+    def without_reopened_descriptors
+      HotCell::Input.define_singleton_method(:reopens_descriptors?) { false }
+      yield
+    ensure
+      HotCell::Input.singleton_class.remove_method :reopens_descriptors?
+    end
 end
