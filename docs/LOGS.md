@@ -35,6 +35,7 @@ Everything else is ours and sits under `hotcell.*`:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `hotcell.slot` | integer | The slot number. On nearly every event. |
+| `hotcell.op` | string | The operation the line is about, on `request`, `request.abandoned`, `worker.crashed`, `worker.killed` and `worker.undispatchable`. `null` where the name was not known: a request that never parsed, a crash between requests, a worker that died before it reported. Never the name of an earlier request. |
 | `hotcell.code` | string | The response code of a `request` (`"ok"`, `"failed"`, `"killed"`, ...). |
 | `hotcell.permanent` | boolean | Whether a `request` failure is permanent. |
 | `hotcell.cause` | string | Why a worker was killed (`"deadline"`, `"memory"`, `"fsize"`, ...). |
@@ -58,16 +59,16 @@ Everything else is ours and sits under `hotcell.*`:
 | `cell.stopping` | INFO | `hotcell.running`, `hotcell.queued` |
 | `cell.stopped` | INFO | — |
 | `cell.ptrace_scope_unknown` | ERROR | `hotcell.path`, `message` |
-| `request` | INFO | `hotcell.slot`, `hotcell.code`, `hotcell.permanent`, `event.outcome`, `event.duration.ms`, `hotcell.timing` |
-| `request.abandoned` | WARN | `hotcell.slot` |
+| `request` | INFO | `hotcell.slot`, `hotcell.op`, `hotcell.code`, `hotcell.permanent`, `event.outcome`, `event.duration.ms`, `hotcell.timing` |
+| `request.abandoned` | WARN | `hotcell.slot`, `hotcell.op` |
 | `worker.forked` | INFO | `hotcell.slot` |
 | `worker.reaped` | INFO | `hotcell.slot`, `hotcell.served`, `hotcell.signal`, `process.exit_code` |
-| `worker.crashed` | ERROR | `hotcell.slot`, `error.type`, `error.message` |
-| `worker.killed` | WARN | `hotcell.slot`, `hotcell.cause`, `hotcell.signal`, `event.duration.ms`, `hotcell.stderr` |
+| `worker.crashed` | ERROR | `hotcell.slot`, `hotcell.op`, `error.type`, `error.message` |
+| `worker.killed` | WARN | `hotcell.slot`, `hotcell.op`, `hotcell.cause`, `hotcell.signal`, `event.duration.ms`, `hotcell.stderr` |
 | `worker.deadline` | WARN | `hotcell.slot`, `hotcell.deadline_s` |
 | `worker.lingered` | WARN | `hotcell.slot`, `hotcell.grace_s` |
 | `worker.unforkable` | ERROR | `hotcell.slot`, `error.type`, `error.message` |
-| `worker.undispatchable` | ERROR | `hotcell.slot`, `error.type` |
+| `worker.undispatchable` | ERROR | `hotcell.slot`, `hotcell.op`, `error.type` |
 | `worker.unreadable_report` | ERROR | `message` |
 | `control.abandoned` | WARN | `hotcell.waited_s` |
 | `control.unanswerable` | WARN | `error.type`, `error.message` |
@@ -115,14 +116,44 @@ complete non-JSON lines at ingest.
 A request:
 
 ```json
-{"@timestamp":"2026-08-14T21:05:28.252Z","service":{"name":"hotcell"},"event":{"action":"request","outcome":"success","duration":{"ms":9.6}},"log":{"level":"INFO"},"process":{"pid":83},"hotcell":{"slot":0,"code":"ok","permanent":null,"timing":{"queued_ms":0.4,"perform_ms":0.52}}}
+{"@timestamp":"2026-08-14T21:05:28.252Z","service":{"name":"hotcell"},"event":{"action":"request","outcome":"success","duration":{"ms":9.6}},"log":{"level":"INFO"},"process":{"pid":83},"hotcell":{"slot":0,"op":"active_storage.transform_image","code":"ok","permanent":null,"timing":{"queued_ms":0.4,"perform_ms":0.52}}}
 ```
 
 A crash:
 
 ```json
-{"@timestamp":"2026-08-14T21:05:29.107Z","service":{"name":"hotcell"},"event":{"action":"worker.crashed"},"log":{"level":"ERROR"},"process":{"pid":83},"error":{"type":"NoMethodError","message":"undefined method 'blur' for nil"},"hotcell":{"slot":0}}
+{"@timestamp":"2026-08-14T21:05:29.107Z","service":{"name":"hotcell"},"event":{"action":"worker.crashed"},"log":{"level":"ERROR"},"process":{"pid":83},"error":{"type":"NoMethodError","message":"undefined method 'blur' for nil"},"hotcell":{"slot":0,"op":"active_storage.transform_image"}}
 ```
+
+## Which operation a line is about
+
+`hotcell.op` is what makes a cell's own logs answer "which operation did this?". A cell runs several
+operations at once and they do not share limits, so an unattributed `worker.killed` cannot be acted on, and
+nothing else supplies the name: the response carries no operation, and `hotcell_killed` is tagged `cell`
+and `cause` only.
+
+The two sides learn it differently, which is why it can be absent.
+
+A **worker** parses it out of the request it is serving, so `request`, `request.abandoned` and
+`worker.crashed` carry it from the moment the request parses until the worker goes back to waiting. A
+request that never parsed has no name, and neither does a crash between requests.
+
+The **supervisor** never reads a request a worker is going to serve, since staying out of it is what lets
+it dispatch a connection whose descriptors are still queued on it. It learns the name from the worker's
+report, sent once the request has parsed and before the worker touches an untrusted byte. That is what lets
+`worker.killed` name an operation the dead worker cannot report, and a worker that died first leaves the
+field null rather than borrowing the last request's name.
+
+That report comes from the one process here that runs untrusted code, so the name is bounded to an
+operation this cell registered. The bound is on the report and nowhere else: a `request` line names
+whatever the caller asked for, including a name no operation answers to, which is what `unsupported` is
+about and worth seeing. A name whose report would not fit one control line is not sent at all, so
+`worker.killed` goes unattributed rather than losing the narrowed deadline that shares the line.
+
+`worker.undispatchable` is the exception, and the one line where the supervisor reads a request: the worker
+died between the fork and the dispatch write, so nothing else has read it. It peeks rather than reads, so
+neither the bytes nor the caller's descriptors leave the connection, and it never waits, so a request that
+has not arrived leaves the field null.
 
 ## The contract with the collector
 

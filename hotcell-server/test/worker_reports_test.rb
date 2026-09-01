@@ -85,6 +85,34 @@ class WorkerReportsTest < HotCellServerTest
     assert_equal CEILING, @child.deadline
   end
 
+  # The name arrives on the same report as the narrowed deadline, for a line the worker will not live to
+  # write itself.
+  def test_a_reported_op_is_held_for_the_line_the_worker_will_not_live_to_write
+    apply({ deadline: 5, op: "test.echo" }.to_json)
+
+    assert_equal "test.echo", @child.op
+  end
+
+  # The op rides an untrusted report straight into a log line, so an unregistered name is dropped.
+  def test_a_reported_op_is_bounded_to_an_operation_this_cell_registered
+    apply({ deadline: 5, op: "test.never_registered" }.to_json)
+    assert_nil @child.op
+
+    apply({ deadline: 5, op: [] }.to_json)
+    assert_nil @child.op
+
+    assert_equal 5, @child.deadline, "the deadline on the same report still applied"
+  end
+
+  # An unattributed line reads as unattributed; one carrying the last name this slot served does not.
+  def test_a_dispatch_clears_the_op_the_last_request_reported
+    apply({ deadline: 5, op: "test.echo" }.to_json)
+
+    make_busy
+
+    assert_nil @child.op
+  end
+
   # The reported code rides an untrusted worker report, so it becomes a counter key and a Symbol. A report
   # of `code: []` reached `Counters#record`, which calls `to_sym`, raised NoMethodError past the rescue that
   # names only MessageError and JSON::ParserError, and `run`'s ensure shut the cell down. One malformed

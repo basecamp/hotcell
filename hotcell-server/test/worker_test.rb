@@ -47,3 +47,51 @@ class WorkerTest < HotCellServerTest
       JSON.parse @control.first.gets, symbolize_names: true
     end
 end
+
+# The narrowed deadline and the operation name ride one control line, and the supervisor drops an
+# over-limit report whole, so a long enough name takes the deadline with it.
+class WorkerReportSizeTest < RegistryIsolatedTest
+  def setup
+    super
+    @control = UNIXSocket.pair(:STREAM)
+    @worker = HotCell::Worker.new slot: HotCell::Slot.build(Dir.mktmpdir("hotcell-report-size"), 0),
+                                  configuration: HotCell::Configuration.new,
+                                  control: HotCell::Connection.new(@control.last),
+                                  log: HotCell::Log.null
+  end
+
+  def teardown
+    @control.each { |socket| socket.close unless socket.closed? }
+    super
+  end
+
+  def test_a_long_operation_name_does_not_displace_the_narrowed_deadline
+    operation = Class.new(HotCell::Operation) do
+      operation "test.#{"x" * 1200}"
+      limits deadline: 1
+    end
+
+    assert_reports_the_deadline operation
+  end
+
+  # A short name that encodes long: JSON writes a NUL as six bytes, so a budget on the name passes this.
+  def test_a_name_that_escapes_long_does_not_displace_the_narrowed_deadline_either
+    operation = Class.new(HotCell::Operation) do
+      operation "\x00" * 167
+      limits deadline: 1
+    end
+
+    assert_reports_the_deadline operation
+  end
+
+  private
+    def assert_reports_the_deadline(operation)
+      @worker.instance_variable_set :@op, operation.operation_name
+      @worker.send :report_deadline, operation
+
+      line = @control.first.gets
+      assert_operator line.bytesize, :<=, HotCell::Worker::DISPATCH_BYTES,
+                      "the supervisor drops a report this size whole, narrowed deadline and all"
+      assert_equal 1, JSON.parse(line, symbolize_names: true)[:deadline]
+    end
+end

@@ -125,6 +125,26 @@ module HotCell
       end
     end
 
+    # `Exception` so it escapes `serve`'s `rescue StandardError` and reaches `run`, the only path that
+    # writes `worker.crashed`.
+    class Fatal < HotCell::Operation
+      operation "test.fatal"
+
+      def perform(_inputs, _outputs)
+        raise Exception, "a worker cannot answer for this one"
+      end
+    end
+
+    # Hangs in the boot hook, which runs before the worker reports its operation.
+    class SlowBoot < HotCell::Operation
+      operation "test.slow_boot"
+      before_worker_boot { sleep 60 }
+
+      def perform(_inputs, _outputs)
+        {}
+      end
+    end
+
     class Undecodable < HotCell::Operation
       operation "test.undecodable"
 

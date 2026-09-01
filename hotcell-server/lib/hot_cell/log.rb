@@ -65,9 +65,11 @@ module HotCell
       # deadline loop until the runtime resumed. A non-blocking write answers `:wait_writable` for the full
       # pipe instead, and the line is dropped like any other.
       #
-      # A short count would be a torn line, which a write at or under PIPE_BUF cannot produce. The one line
-      # that can exceed it is cell.boot's inventory, written once before the loop enforces anything and
-      # against an empty pipe.
+      # A short count would be a torn line, which a write at or under PIPE_BUF cannot produce. Torn is worse
+      # than dropped: the stub has no newline, so the next line written is glued to it and a reader loses
+      # both. cell.boot's inventory can exceed it, written once against an empty pipe before the loop
+      # enforces anything, and so can worker.killed — 512 bytes of stderr become 3072 when every one is a
+      # control character, and the operation name and envelope spend most of what is left.
       def emit(line)
         @io.write_nonblock line, exception: false
       rescue SystemCallError, IOError

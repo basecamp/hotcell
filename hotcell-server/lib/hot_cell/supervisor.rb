@@ -14,6 +14,8 @@ module HotCell
   # the trusted side on a bounded buffer — but the supervisor does not need to, and staying out of the
   # request is what lets it dispatch a connection whose descriptors are still queued on it.
   #
+  # `peeked_op` is the exception, on the one path where no worker will read the request.
+  #
   # Dispatching rather than letting workers accept is what makes the rest work. The supervisor needs to own
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
   # knows when every worker started its current request, which is what the deadline needs.
@@ -22,7 +24,7 @@ module HotCell
     # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
     # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
+                       :op, :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
       def self.build(slot:, pid:, control:, deadline:, stderr: nil)
         new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b,
             stderr: stderr, captured: "".b
@@ -51,6 +53,7 @@ module HotCell
         self.dispatched_at = at
         self.deadline = deadline
         self.killed_for = nil
+        self.op = nil
         self.served += 1
       end
 
@@ -390,7 +393,7 @@ module HotCell
         true
       rescue SystemCallError, IOError => error
         log.write "worker.undispatchable", pid: child.pid, slot: child.slot.number,
-                                           error: error.class.name
+                                           op: peeked_op(connection), error: error.class.name
 
         # Released rather than finished: this is the only path that hands the connection back to be answered
         # here, so the client connection must not be closed on the way out. `retire` closes the worker's
@@ -400,6 +403,20 @@ module HotCell
         retire child
         answer connection, Failure.new(code: Codes::KILLED, cause: Codes::CRASHED, message: error.message)
         false
+      end
+
+      # Safe only because the dispatch failed: no worker will serve this request. A peek and a bytes-only
+      # `recv`, never `recvmsg` — a partial `send_message` can leave a worker holding this connection, and
+      # consuming the request would take it from that worker. `recv_nonblock` rather than `MSG_DONTWAIT`,
+      # whose blocking `recv` parks on an empty socket; it leaves O_NONBLOCK alone on 3.3, 3.4 and 4.0,
+      # which a worker's SCM_RIGHTS duplicate would otherwise share.
+      def peeked_op(connection)
+        peeked = connection.socket.recv_nonblock(MAX_REQUEST_BYTES, Socket::MSG_PEEK, exception: false)
+        return nil unless peeked.is_a?(String) && peeked.include?("\n")
+
+        Request.parse(peeked.force_encoding(Encoding::UTF_8)).op
+      rescue StandardError
+        nil
       end
 
       def available_child
@@ -622,6 +639,7 @@ module HotCell
 
         if message[:deadline]
           child.deadline = narrowed_deadline(message[:deadline])
+          child.op = reported_op(message[:op])
         elsif message[:idle]
           return unreadable_report child, "idle report from a worker with no request" unless child.busy?
 
@@ -670,6 +688,11 @@ module HotCell
       def reported_cause?(code, cause)
         outcome_code(code) == Codes::KILLED && cause.is_a?(String) &&
           Codes::PERMANENT_BY_CAUSE.key?(cause)
+      end
+
+      # Bounded to a registered name: this rides an untrusted worker report straight into a log line.
+      def reported_op(reported)
+        reported if reported.is_a?(String) && Registry.lookup(reported)
       end
 
       def outcome_code(reported)
@@ -843,7 +866,7 @@ module HotCell
 
         captured = child.stderr_field
 
-        log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
+        log.write "worker.killed", pid: child.pid, slot: child.slot.number, op: child.op, cause: cause,
                                    signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at),
                                    **captured
 

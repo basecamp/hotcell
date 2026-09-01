@@ -21,6 +21,7 @@ module HotCell
       @log = log
       @booted = nil
       @effective = {}
+      @op = nil
     end
 
     # exit! rather than exit, so that no finalizer and no library teardown ever runs. There is deliberately no
@@ -48,8 +49,8 @@ module HotCell
 
       exit! 0
     rescue Exception => error
-      log.write "worker.crashed", pid: Process.pid, slot: slot.number, error: error.class.name,
-                                  message: Failure.sanitize(error.message)
+      log.write "worker.crashed", pid: Process.pid, slot: slot.number, op: @op,
+                                  error: error.class.name, message: Failure.sanitize(error.message)
       exit! 1
     end
 
@@ -88,6 +89,9 @@ module HotCell
       # called recvmsg, so the caller's own descriptors are still queued on it and this worker's recvmsg
       # is what installs them.
       def await_dispatch
+        # Not in `serve`'s ensure: `worker.crashed` is written from `run`, past it.
+        @op = nil
+
         line, descriptors = control.receive_message(limit: DISPATCH_BYTES)
         return nil if line.nil?
 
@@ -174,6 +178,7 @@ module HotCell
 
       def handle(line, received, timing)
         request = Request.parse(line)
+        @op = request.op
 
         unless request.current_version?
           return refuse("protocol", request.version_mismatch, timing)
@@ -264,8 +269,22 @@ module HotCell
       # The supervisor enforces the deadline and never reads a request, so it cannot know that this
       # operation asked for less than the cell's maximum. The worker is the only thing that knows, and it
       # says so before it touches an untrusted byte.
+      #
+      # The name rides along because a killed worker cannot write its own `worker.killed`.
       def report_deadline(operation)
-        tell deadline: effective(operation).deadline
+        named = { deadline: effective(operation).deadline, op: @op }
+
+        tell(**(fits?(named) ? named : named.merge(op: nil)))
+      end
+
+      # The supervisor drops an over-limit report whole, so an oversized name would take the narrowed
+      # deadline with it. Measured on the encoded line and not the name's length, because escaping decides:
+      # JSON writes a NUL as six bytes. Dropped rather than truncated, which can end mid-character and
+      # raise out of `tell`, or match the registry as a different operation.
+      def fits?(message)
+        (JSON.generate(message) << "\n").bytesize <= DISPATCH_BYTES
+      rescue StandardError
+        false
       end
 
       # The cause travels with the code so the supervisor can still count a kill by cause. It used to read
@@ -299,7 +318,7 @@ module HotCell
 
         connection.write_line line_for(response)
       rescue SystemCallError, IOError
-        log.write "request.abandoned", pid: Process.pid, slot: slot.number
+        log.write "request.abandoned", pid: Process.pid, slot: slot.number, op: @op
       end
 
       def line_for(response)
@@ -311,7 +330,8 @@ module HotCell
       def record(response, timing)
         return if response.nil?
 
-        log.write "request", pid: Process.pid, slot: slot.number, code: response.failure&.code || "ok",
+        log.write "request", pid: Process.pid, slot: slot.number, op: @op,
+                             code: response.failure&.code || "ok",
                              permanent: response.failure&.permanent?,
                              outcome: response.failure ? "failure" : "success",
                              duration_ms: timing.elapsed_ms, timing: response.timing
