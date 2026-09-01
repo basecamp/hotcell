@@ -20,6 +20,8 @@ This changelog covers five gems, which release together on the same version:
 
 * The installed `Dockerfile` sets `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT`. OpenMP sizes its thread pool from the host's core count, and a container's `cpus` quota is a CFS quota rather than an affinity mask, so libvips and ImageMagick asked a 98-core host for 98 threads however small the cell's share of it was. A thread stack is 8MB of private anonymous memory, which `RLIMIT_DATA` charges, so the pool alone cleared the cell's `memory` limit — and libgomp calls `exit(1)` on the first `pthread_create` it cannot satisfy. Match `OMP_NUM_THREADS` to the container's `cpus`. An upgrade leaves an existing `Dockerfile` alone, so a cell installed before this needs both added by hand and the image rebuilt. `docs/DEPLOYMENT.md` covers why the guard has to be a test rather than a deploy to beta: the failure exists only at production's core count.
 
+* The installed `Dockerfile` applies Debian's pending security patches with an `apt-get upgrade` after the `FROM`. `docker build --pull` takes the newest base tag, but the tag itself can sit behind an advisory that is already in `trixie-security` until [docker-library/ruby](https://github.com/docker-library/ruby) rebuilds it, so a clean build shipped a fixable High that no rebuild of the cell could clear. Upgrading during the build makes the image's patch level its own rather than upstream's release cadence, and it stops the class rather than the one advisory. An upgrade leaves an existing `Dockerfile` alone, so a cell installed before this needs the line added by hand and the image rebuilt.
+
 ### HotCell::Server
 
 #### Fixed

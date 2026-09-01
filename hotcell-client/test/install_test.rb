@@ -83,6 +83,20 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # `--pull` takes the newest base tag, but that tag itself can sit behind a Debian advisory until
+  # docker-library/ruby rebuilds it, and the image scan gate blocks on a fixable High no rebuild of this
+  # repository can clear. Applying the pending security patches during the build makes the gate's claim the
+  # image's own rather than upstream's release cadence.
+  def test_install_applies_the_bases_pending_security_patches
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+
+      dockerfile = File.read(File.join(root, "hotcell", "Dockerfile"))
+
+      assert_match(/apt-get update && apt-get upgrade -y.*rm -rf \/var\/lib\/apt\/lists/, dockerfile)
+    end
+  end
+
   def test_install_leaves_an_existing_file_exactly_as_it_is
     Dir.mktmpdir do |root|
       customized = File.join(root, "hotcell", "Dockerfile")
