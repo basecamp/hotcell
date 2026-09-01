@@ -49,8 +49,7 @@ class WorkerTest < HotCellServerTest
 end
 
 # The narrowed deadline and the operation name ride one control line, and the supervisor drops an
-# over-limit report whole. A long enough name takes the deadline with it, and the supervisor then holds the
-# request to the cell's maximum instead of the one the operation asked for.
+# over-limit report whole, so a long enough name takes the deadline with it.
 class WorkerReportSizeTest < RegistryIsolatedTest
   def setup
     super
@@ -75,8 +74,7 @@ class WorkerReportSizeTest < RegistryIsolatedTest
     assert_reports_the_deadline operation
   end
 
-  # A short name that encodes long. JSON writes a NUL as six bytes, so 167 of them are 167 bytes of name
-  # and 1002 of report: a budget set on the name passes this, and the report is still dropped.
+  # A short name that encodes long: JSON writes a NUL as six bytes, so a budget on the name passes this.
   def test_a_name_that_escapes_long_does_not_displace_the_narrowed_deadline_either
     operation = Class.new(HotCell::Operation) do
       operation "\x00" * 167

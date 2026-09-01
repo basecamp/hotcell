@@ -89,10 +89,7 @@ module HotCell
       # called recvmsg, so the caller's own descriptors are still queued on it and this worker's recvmsg
       # is what installs them.
       def await_dispatch
-        # Cleared here and not in `serve`'s ensure: `worker.crashed` is written from `run`, past that
-        # ensure, so clearing there left a crash mid-request unable to name the request. The name now lasts
-        # as long as the worker holds one, and a crash between requests names nothing rather than the
-        # previous request.
+        # Not in `serve`'s ensure: `worker.crashed` is written from `run`, past it.
         @op = nil
 
         line, descriptors = control.receive_message(limit: DISPATCH_BYTES)
@@ -273,25 +270,17 @@ module HotCell
       # operation asked for less than the cell's maximum. The worker is the only thing that knows, and it
       # says so before it touches an untrusted byte.
       #
-      # The name rides along because the same side needs it. A killed worker cannot write its own
-      # `worker.killed`, and this report is the supervisor's only chance to learn what it was running.
+      # The name rides along because a killed worker cannot write its own `worker.killed`.
       def report_deadline(operation)
         named = { deadline: effective(operation).deadline, op: @op }
 
         tell(**(fits?(named) ? named : named.merge(op: nil)))
       end
 
-      # The name and the deadline share one control line, and the supervisor drops an over-limit report
-      # whole. A long enough name took the narrowed deadline with it and left the request held to the cell's
-      # maximum, so the name is what goes.
-      #
-      # Measured on the encoded line rather than the name's length, because escaping decides: JSON writes a
-      # NUL as six bytes, so 167 of them clear any budget set on the name and still overrun the report.
-      #
-      # Dropped rather than truncated. A byte-boundary cut can end mid-character, and JSON.generate raises
-      # on that invalid UTF-8 out of a `tell` not looking for it. A character-boundary cut is worse: the
-      # supervisor checks the name against the registry, so a truncated one is rejected, or attributes the
-      # kill to the wrong operation when the prefix is itself registered.
+      # The supervisor drops an over-limit report whole, so an oversized name would take the narrowed
+      # deadline with it. Measured on the encoded line and not the name's length, because escaping decides:
+      # JSON writes a NUL as six bytes. Dropped rather than truncated, which can end mid-character and
+      # raise out of `tell`, or match the registry as a different operation.
       def fits?(message)
         (JSON.generate(message) << "\n").bytesize <= DISPATCH_BYTES
       rescue StandardError

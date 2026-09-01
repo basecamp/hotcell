@@ -125,8 +125,8 @@ module HotCell
       end
     end
 
-    # Raises past `serve`, which rescues StandardError, so it reaches `run` — the only path that writes
-    # `worker.crashed`. `test.broken` cannot get there: an ordinary error is answered on the connection.
+    # `Exception` so it escapes `serve`'s `rescue StandardError` and reaches `run`, the only path that
+    # writes `worker.crashed`.
     class Fatal < HotCell::Operation
       operation "test.fatal"
 
@@ -135,9 +135,7 @@ module HotCell
       end
     end
 
-    # Hangs in its boot hook, which runs before the worker reports its operation, so the supervisor kills a
-    # worker whose operation it never learned. `worker.killed` must leave that unnamed rather than fill it
-    # in with whatever the slot served last.
+    # Hangs in the boot hook, which runs before the worker reports its operation.
     class SlowBoot < HotCell::Operation
       operation "test.slow_boot"
       before_worker_boot { sleep 60 }

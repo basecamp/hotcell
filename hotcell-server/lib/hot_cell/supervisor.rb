@@ -14,8 +14,7 @@ module HotCell
   # the trusted side on a bounded buffer — but the supervisor does not need to, and staying out of the
   # request is what lets it dispatch a connection whose descriptors are still queued on it.
   #
-  # `peeked_op` is the one place it looks at a request, on the one path where no worker ever will, and it
-  # peeks so that even there nothing leaves the connection.
+  # `peeked_op` is the exception, on the one path where no worker will read the request.
   #
   # Dispatching rather than letting workers accept is what makes the rest work. The supervisor needs to own
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
@@ -54,8 +53,6 @@ module HotCell
         self.dispatched_at = at
         self.deadline = deadline
         self.killed_for = nil
-        # Set from the worker's own report, which arrives once it has parsed the request. A worker that
-        # dies first has no operation to name, and the last one this slot served would read as attribution.
         self.op = nil
         self.served += 1
       end
@@ -408,25 +405,11 @@ module HotCell
         false
       end
 
-      # Safe only because this request is already over: the dispatch failed, no worker will serve it, and
-      # this is the side that answers it a line below.
-      #
-      # A peek, and a bytes-only `recv` rather than `recvmsg`, so it takes neither the bytes nor the
-      # descriptors. `send_message` can send the ancillary data and then fail on the rest of the line, so a
-      # worker may already hold a copy of this connection, and a consuming read would take the request from
-      # it. A `recvmsg` would also install the caller's descriptors in the process that holds every other
-      # connection and the listener.
-      #
-      # `recv_nonblock` rather than a blocking `recv` with `MSG_DONTWAIT`, which parks on an empty socket
-      # because Ruby waits for readability whatever the flag says. Nothing here may wait: a caller that has
-      # not sent yet would park the loop enforcing every other request's deadline. On 3.3, 3.4 and 4.0
-      # it leaves O_NONBLOCK alone, which matters because a worker's SCM_RIGHTS duplicate shares that flag.
-      #
-      # No retry, so a half-arrived line goes unnamed like one that never came, and nil for anything else
-      # that goes wrong: a log field is never worth the cell, and this runs in that same loop.
-      #
-      # Not bounded to the registry the way a worker's report is. This is the request itself, from the
-      # trusted side, naming what the worker's own `request` line would have named had one read it.
+      # Safe only because the dispatch failed: no worker will serve this request. A peek and a bytes-only
+      # `recv`, never `recvmsg` — a partial `send_message` can leave a worker holding this connection, and
+      # consuming the request would take it from that worker. `recv_nonblock` rather than `MSG_DONTWAIT`,
+      # whose blocking `recv` parks on an empty socket; it leaves O_NONBLOCK alone on 3.3, 3.4 and 4.0,
+      # which a worker's SCM_RIGHTS duplicate would otherwise share.
       def peeked_op(connection)
         peeked = connection.socket.recv_nonblock(MAX_REQUEST_BYTES, Socket::MSG_PEEK, exception: false)
         return nil unless peeked.is_a?(String) && peeked.include?("\n")
@@ -707,10 +690,7 @@ module HotCell
           Codes::PERMANENT_BY_CAUSE.key?(cause)
       end
 
-      # The name rides the same untrusted report as the deadline and goes straight into a log line, so it
-      # is bounded to one this cell registered. Unbounded, a compromised worker puts the better part of a
-      # `DISPATCH_BYTES` line of its own choosing into `worker.killed`, which an operator reads when
-      # deciding what to do about a kill.
+      # Bounded to a registered name: this rides an untrusted worker report straight into a log line.
       def reported_op(reported)
         reported if reported.is_a?(String) && Registry.lookup(reported)
       end

@@ -2,13 +2,7 @@
 
 require "test_helper"
 
-# Which operation a line is about, on the five events that could not say. A cell runs several operations at
-# once and they do not share limits, so an unattributed `killed cause=fsize` could not be acted on, and
-# neither the response nor `hotcell_killed` could supply the name.
-#
-# The two sides learn it differently. A worker parses it out of the request it is serving. The supervisor
-# never reads a request a worker is going to serve, so it learns the name from the worker's own report and
-# holds it, which is what lets `worker.killed` name an operation the dead worker cannot report.
+# Which operation a line is about, on the five events that could not say.
 class OperationInLogsTest < HotCellServerTest
   def test_a_request_line_names_the_operation
     TestCell.boot do |cell|
@@ -18,7 +12,6 @@ class OperationInLogsTest < HotCellServerTest
     end
   end
 
-  # The worker is holding the request when the caller goes, so this is the one line it can still attribute.
   def test_an_abandoned_request_names_the_operation
     TestCell.boot do |cell|
       connection = cell.connect
@@ -29,8 +22,7 @@ class OperationInLogsTest < HotCellServerTest
     end
   end
 
-  # The line the issue was raised for. The worker is dead by the time it is written, so the name comes from
-  # the report it sent before starting work.
+  # The worker is dead by the time this line is written, so the name comes from its earlier report.
   def test_a_killed_worker_is_attributed_to_the_operation_it_was_running
     TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
       assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), cause: "deadline"
@@ -47,8 +39,7 @@ class OperationInLogsTest < HotCellServerTest
     end
   end
 
-  # A request that never parsed has no name to give, and the alternative is the previous request's, which
-  # is worse than saying nothing because it reads as attributed.
+  # The alternative to saying nothing is the previous request's name, which reads as attributed.
   def test_a_request_that_never_parsed_names_no_operation
     TestCell.boot(max_requests_per_worker: 3, concurrency: 1) do |cell|
       assert_ok cell.call("test.echo")
@@ -60,21 +51,17 @@ class OperationInLogsTest < HotCellServerTest
     end
   end
 
-  # The one line no worker is involved in: it died between the fork and the dispatch write, so nothing has
-  # read the request and the supervisor answers it. This is the only place it reads a request line.
+  # The supervisor answers this one itself, and it is the only place it reads a request line.
   def test_an_undispatchable_request_names_the_operation
     assert_equal "test.echo", undispatchable(sent: request_line("test.echo"))
   end
 
-  # A caller that has not sent yet and a line still arriving are the same case: nothing to read without
-  # waiting, and waiting is what this must never do.
+  # A caller that has not sent yet and a line still arriving are the same case: nothing to read.
   def test_an_undispatchable_request_that_has_not_arrived_names_no_operation
     assert_nil undispatchable(sent: nil)
     assert_nil undispatchable(sent: %({"v":1,"op":"test.echo"))
   end
 
-  # The simple form of the property: peeking leaves the request and its descriptors where they were. The
-  # test below puts it in the topology that makes it matter.
   def test_the_peek_leaves_the_request_and_its_descriptors_on_the_connection
     ours, theirs = UNIXSocket.pair(:STREAM)
 
@@ -85,8 +72,7 @@ class OperationInLogsTest < HotCellServerTest
 
         assert_equal "test.echo", supervisor.send(:peeked_op, HotCell::Connection.new(ours))
 
-        # A peek that consumed the message leaves `receive_message` blocking on a socket nobody will write
-        # to again, so without this the regression is a hung suite rather than a failing test.
+        # Without this a consuming peek hangs the suite here instead of failing.
         assert ours.wait_readable(1), "the peek took the request off the connection"
 
         line, descriptors = HotCell::Connection.new(ours).receive_message
@@ -100,9 +86,8 @@ class OperationInLogsTest < HotCellServerTest
     [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
   end
 
-  # `send_message` can deliver the ancillary data and then fail on the rest of the line, so the supervisor
-  # peeks a connection whose `SCM_RIGHTS` duplicate a worker already holds. Both halves have to survive on
-  # that copy: the request bytes and the caller's descriptors.
+  # The topology that makes the peek matter: a partial `send_message` leaves a worker holding a duplicate,
+  # and both the request bytes and the caller's descriptors have to survive on it.
   def test_the_peek_leaves_the_request_for_a_worker_holding_a_duplicate_of_the_connection
     ours, theirs = UNIXSocket.pair(:STREAM)
     to_worker, worker_side = UNIXSocket.pair(:STREAM)
@@ -132,8 +117,7 @@ class OperationInLogsTest < HotCellServerTest
     [ ours, theirs, to_worker, worker_side ].each { |socket| socket&.close unless socket&.closed? }
   end
 
-  # The peek runs in the loop that enforces every request's deadline, so a blocking regression is a stuck
-  # cell. Bounded here rather than left to the suite's own timeout to notice.
+  # The peek runs in the loop enforcing every request's deadline, so a blocking regression is a stuck cell.
   def test_the_peek_does_not_wait_on_a_caller_that_has_not_sent
     ours, theirs = UNIXSocket.pair(:STREAM)
     connection = HotCell::Connection.new(ours)
@@ -146,9 +130,8 @@ class OperationInLogsTest < HotCellServerTest
     [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
   end
 
-  # Peeking retains no descriptor, which a `recvmsg` in its place would. Exactly that and no more: an
-  # implementation that installed each and closed it before returning would pass. What must not happen is
-  # the supervisor accumulating the caller's descriptors.
+  # Exactly this and no more: an implementation that installed each descriptor and closed it before
+  # returning would pass. What must not happen is the supervisor accumulating them.
   def test_the_peek_retains_no_descriptors_in_the_supervisor
     ours, theirs = UNIXSocket.pair(:STREAM)
 
@@ -156,8 +139,7 @@ class OperationInLogsTest < HotCellServerTest
       reading(path) do |input|
         HotCell::Connection.new(theirs).send_message HotCell::Request.new(op: "test.echo", inputs: 1).to_line,
                                                      descriptors: [ input ]
-        # Built before the count: each `supervisor` opens `File::NULL` for its null log, and three inside
-        # the loop read exactly like three installed descriptors.
+        # Built before the count: each `supervisor` opens `File::NULL`, which reads like an install.
         peeker = supervisor
         connection = HotCell::Connection.new(ours)
         before = open_descriptors
@@ -171,9 +153,8 @@ class OperationInLogsTest < HotCellServerTest
     [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
   end
 
-  # The end-to-end form of `Child#dispatched` clearing the name. The worker reported `test.echo`, then took
-  # a request whose boot hook hangs before the operation is reported, and was killed there. The supervisor
-  # never learned what it was running, and the line has to say so rather than name `test.echo`.
+  # The worker reported `test.echo`, then took one whose boot hook hangs before the operation is reported.
+  # The supervisor never learned what it was killing, and the line must not fall back to `test.echo`.
   def test_a_kill_before_the_worker_reports_names_no_operation
     TestCell.boot(deadline: 0.3, concurrency: 1, max_requests_per_worker: 3) do |cell|
       assert_ok cell.call("test.echo")
@@ -184,7 +165,6 @@ class OperationInLogsTest < HotCellServerTest
   end
 
   private
-    # Reproduces the death between the fork and the dispatch write that `worker.undispatchable` reports.
     def undispatchable(sent:)
       Dir.mktmpdir "hotcell-undispatchable" do |directory|
         log_path = File.join(directory, "cell.log")
@@ -207,8 +187,7 @@ class OperationInLogsTest < HotCellServerTest
       end
     end
 
-    # `dig` answers nil for a key that is not there, so it cannot tell an unknown operation from a missing
-    # field. This requires the field, and null.
+    # `dig` cannot tell an unknown operation from a missing field. This requires the field, and null.
     def logged_op(line)
       assert line.fetch(:hotcell).key?(:op), "the line carries no op field at all"
 
