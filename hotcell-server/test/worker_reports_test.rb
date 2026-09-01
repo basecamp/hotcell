@@ -85,6 +85,37 @@ class WorkerReportsTest < HotCellServerTest
     assert_equal CEILING, @child.deadline
   end
 
+  # The supervisor never reads a request, so the operation name arrives on the same report as the narrowed
+  # deadline — and it lands in `worker.killed`, which the supervisor writes because a killed worker cannot.
+  def test_a_reported_op_is_held_for_the_line_the_worker_will_not_live_to_write
+    apply({ deadline: 5, op: "test.echo" }.to_json)
+
+    assert_equal "test.echo", @child.op
+  end
+
+  # The op rides an untrusted worker report straight into a log line, so it is bounded to a name this cell
+  # registered. Passed through, a compromised worker chooses the better part of a kilobyte of that line, on
+  # every request, for as long as the cell runs.
+  def test_a_reported_op_is_bounded_to_an_operation_this_cell_registered
+    apply({ deadline: 5, op: "test.never_registered" }.to_json)
+    assert_nil @child.op
+
+    apply({ deadline: 5, op: [] }.to_json)
+    assert_nil @child.op
+
+    assert_equal 5, @child.deadline, "the deadline on the same report still applied"
+  end
+
+  # A worker that dies before it reports has no op, and the name of the request this slot served last is
+  # worse than none: an unattributed line reads as unattributed, a misattributed one does not.
+  def test_a_dispatch_clears_the_op_the_last_request_reported
+    apply({ deadline: 5, op: "test.echo" }.to_json)
+
+    make_busy
+
+    assert_nil @child.op
+  end
+
   # The reported code rides an untrusted worker report, so it becomes a counter key and a Symbol. A report
   # of `code: []` reached `Counters#record`, which calls `to_sym`, raised NoMethodError past the rescue that
   # names only MessageError and JSON::ParserError, and `run`'s ensure shut the cell down. One malformed

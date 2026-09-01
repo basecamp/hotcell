@@ -21,6 +21,7 @@ module HotCell
       @log = log
       @booted = nil
       @effective = {}
+      @op = nil
     end
 
     # exit! rather than exit, so that no finalizer and no library teardown ever runs. There is deliberately no
@@ -48,8 +49,8 @@ module HotCell
 
       exit! 0
     rescue Exception => error
-      log.write "worker.crashed", pid: Process.pid, slot: slot.number, error: error.class.name,
-                                  message: Failure.sanitize(error.message)
+      log.write "worker.crashed", pid: Process.pid, slot: slot.number, op: @op,
+                                  error: error.class.name, message: Failure.sanitize(error.message)
       exit! 1
     end
 
@@ -88,6 +89,13 @@ module HotCell
       # called recvmsg, so the caller's own descriptors are still queued on it and this worker's recvmsg
       # is what installs them.
       def await_dispatch
+        # Cleared here rather than on the way out of `serve`, because `worker.crashed` is written from `run`
+        # — past that ensure, with the exception already in flight — and clearing there left the one line
+        # that reports a crash mid-request unable to name the request. Here the name lasts exactly as long as
+        # the worker is holding something: a crash between requests has no operation to name, and the last
+        # one this worker served would read as attribution rather than as the guess it is.
+        @op = nil
+
         line, descriptors = control.receive_message(limit: DISPATCH_BYTES)
         return nil if line.nil?
 
@@ -174,6 +182,7 @@ module HotCell
 
       def handle(line, received, timing)
         request = Request.parse(line)
+        @op = request.op
 
         unless request.current_version?
           return refuse("protocol", request.version_mismatch, timing)
@@ -264,8 +273,12 @@ module HotCell
       # The supervisor enforces the deadline and never reads a request, so it cannot know that this
       # operation asked for less than the cell's maximum. The worker is the only thing that knows, and it
       # says so before it touches an untrusted byte.
+      #
+      # The name rides along for the same reason and is needed by the same side. A killed worker cannot
+      # write its own `worker.killed`, so the supervisor writes it — and this report, sent before the
+      # untrusted byte, is the only chance it has to learn what the worker was about to run.
       def report_deadline(operation)
-        tell deadline: effective(operation).deadline
+        tell deadline: effective(operation).deadline, op: @op
       end
 
       # The cause travels with the code so the supervisor can still count a kill by cause. It used to read
@@ -299,7 +312,7 @@ module HotCell
 
         connection.write_line line_for(response)
       rescue SystemCallError, IOError
-        log.write "request.abandoned", pid: Process.pid, slot: slot.number
+        log.write "request.abandoned", pid: Process.pid, slot: slot.number, op: @op
       end
 
       def line_for(response)
@@ -311,7 +324,8 @@ module HotCell
       def record(response, timing)
         return if response.nil?
 
-        log.write "request", pid: Process.pid, slot: slot.number, code: response.failure&.code || "ok",
+        log.write "request", pid: Process.pid, slot: slot.number, op: @op,
+                             code: response.failure&.code || "ok",
                              permanent: response.failure&.permanent?,
                              outcome: response.failure ? "failure" : "success",
                              duration_ms: timing.elapsed_ms, timing: response.timing

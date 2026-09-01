@@ -22,7 +22,7 @@ module HotCell
     # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
     # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
+                       :op, :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
       def self.build(slot:, pid:, control:, deadline:, stderr: nil)
         new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b,
             stderr: stderr, captured: "".b
@@ -51,6 +51,10 @@ module HotCell
         self.dispatched_at = at
         self.deadline = deadline
         self.killed_for = nil
+        # Cleared here and set from the worker's own report, which arrives once it has parsed the request.
+        # A worker that dies before it reports has no operation to name, and naming the last one this slot
+        # served would read as attribution rather than as the guess it is.
+        self.op = nil
         self.served += 1
       end
 
@@ -622,6 +626,7 @@ module HotCell
 
         if message[:deadline]
           child.deadline = narrowed_deadline(message[:deadline])
+          child.op = reported_op(message[:op])
         elsif message[:idle]
           return unreadable_report child, "idle report from a worker with no request" unless child.busy?
 
@@ -670,6 +675,14 @@ module HotCell
       def reported_cause?(code, cause)
         outcome_code(code) == Codes::KILLED && cause.is_a?(String) &&
           Codes::PERMANENT_BY_CAUSE.key?(cause)
+      end
+
+      # The operation name rides the same untrusted report as the deadline and goes straight into a log
+      # line, so it is bounded to a name this cell registered rather than passed through. Unbounded, a
+      # compromised worker writes the better part of a `DISPATCH_BYTES` line of its own choosing into the
+      # cell's log on every request, and `worker.killed` is a line an operator reads to decide something.
+      def reported_op(reported)
+        reported if reported.is_a?(String) && Registry.lookup(reported)
       end
 
       def outcome_code(reported)
@@ -843,7 +856,7 @@ module HotCell
 
         captured = child.stderr_field
 
-        log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
+        log.write "worker.killed", pid: child.pid, slot: child.slot.number, op: child.op, cause: cause,
                                    signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at),
                                    **captured
 

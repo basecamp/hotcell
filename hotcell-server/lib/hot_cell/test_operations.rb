@@ -125,6 +125,16 @@ module HotCell
       end
     end
 
+    # Raises past `serve`, which rescues StandardError, so it reaches `run` — the only path that writes
+    # `worker.crashed`. `test.broken` cannot get there: an ordinary error is answered on the connection.
+    class Fatal < HotCell::Operation
+      operation "test.fatal"
+
+      def perform(_inputs, _outputs)
+        raise Exception, "a worker cannot answer for this one"
+      end
+    end
+
     class Undecodable < HotCell::Operation
       operation "test.undecodable"
 
