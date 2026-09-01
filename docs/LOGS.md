@@ -149,6 +149,10 @@ operation this cell registered before it is written down. That bound is on the w
 else: a `request` line names whatever the caller asked for, including a name no operation answers to, which
 is the case `unsupported` is about and the one worth seeing.
 
+An operation name over 256 bytes is not reported at all, so the line is unattributed rather than the
+narrowed deadline riding with it being lost. The two share one control line and the supervisor drops an
+oversized report whole.
+
 `worker.undispatchable` is the exception to all of that, and the one line where the supervisor reads a
 request. The worker died between the fork and the dispatch write, so nothing has read the request and the
 supervisor is the side that answers it. It peeks the line rather than reading it, so neither the bytes nor

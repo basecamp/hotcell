@@ -60,7 +60,7 @@ class OperationInLogsTest < HotCellServerTest
 
       wait_until(what: "both requests to be logged") { cell.log_events("request").size == 2 }
 
-      assert_equal [ "test.echo", nil ], cell.log_events("request").map { |line| line.dig(:hotcell, :op) }
+      assert_equal [ "test.echo", nil ], cell.log_events("request").map { |line| logged_op(line) }
     end
   end
 
@@ -156,9 +156,12 @@ class OperationInLogsTest < HotCellServerTest
     [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
   end
 
-  # Peeking installs no descriptor, which a `recvmsg` in its place would. The count is the only thing that
-  # tells the two implementations apart from outside.
-  def test_the_peek_installs_no_descriptors_in_the_supervisor
+  # Peeking retains no descriptor, which a `recvmsg` in its place would. The count is what tells the two
+  # implementations apart from outside, and it is worth being exact about what it proves: an
+  # implementation that installed each descriptor and closed it again before returning would pass this.
+  # What must not happen is the supervisor accumulating the caller's descriptors, and that is what this
+  # sees.
+  def test_the_peek_retains_no_descriptors_in_the_supervisor
     ours, theirs = UNIXSocket.pair(:STREAM)
 
     with_file("input bytes") do |path|
@@ -173,7 +176,7 @@ class OperationInLogsTest < HotCellServerTest
 
         3.times { peeker.send :peeked_op, connection }
 
-        assert_equal before, open_descriptors, "the peek installed the caller's descriptors"
+        assert_equal before, open_descriptors, "the supervisor kept the caller's descriptors"
       end
     end
   ensure
@@ -189,7 +192,7 @@ class OperationInLogsTest < HotCellServerTest
       assert_ok cell.call("test.echo")
       assert_failed "killed", cell.call("test.slow_boot", timeout: 20), cause: "deadline"
 
-      assert_nil wait_for_event(cell, "worker.killed").first.dig(:hotcell, :op)
+      assert_nil logged_op(wait_for_event(cell, "worker.killed").first)
     end
   end
 
@@ -211,11 +214,19 @@ class OperationInLogsTest < HotCellServerTest
             .send(:dispatch, child, HotCell::Connection.new(cell_side), 0),
                  "the dispatch was expected to fail"
 
-          logged(log_path, "worker.undispatchable").dig(:hotcell, :op)
+          logged_op logged(log_path, "worker.undispatchable")
         ensure
           (control + [ caller_side, cell_side ]).each { |socket| socket.close unless socket.closed? }
         end
       end
+    end
+
+    # `dig` answers nil for a key that is not there, so it cannot tell "the operation is unknown" from
+    # "the field was left out". The field has to be present and null.
+    def logged_op(line)
+      assert line.fetch(:hotcell).key?(:op), "the line carries no op field at all"
+
+      line.dig(:hotcell, :op)
     end
 
     def supervisor(directory: Dir.mktmpdir("hotcell-supervisor"), log_path: nil)
