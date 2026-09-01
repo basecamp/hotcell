@@ -8,12 +8,19 @@ This changelog covers five gems, which release together on the same version:
 - `activestorage-hotcell-client`
 - `activestorage-hotcell-server`
 
+A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
+gem but are what an operator runs against their own image.
+
 ## next / unreleased
 
 
 ## v0.3.0 / 2026-09-01
 
 ### HotCell::Client
+
+#### Added
+
+* The installed `Dockerfile` strips the setuid and setgid bits off every binary in the image as its last root step, so the strip covers anything a `RUN` above it installed rather than the base image alone. The cell already runs unprivileged under `--cap-drop ALL` and `--security-opt no-new-privileges`, which make `mount`, `su` and the rest inert, so this removes escalation tools a security image should not carry rather than closing a reachable path. The scaffold also now documents what it deliberately does not do for you: build with `docker build --pull`, pin a base digest and refresh it on a schedule if you need to name the exact image you shipped, and commit a platform-correct `Gemfile.lock` and build frozen for a reproducible dependency graph. Frozen mode is off by default so a freshly installed scaffold builds before you have generated a lockfile. An upgrade leaves an existing `Dockerfile` alone, so a cell installed before this needs the strip added by hand and the image rebuilt.
 
 #### Breaking
 
@@ -47,7 +54,24 @@ This changelog covers five gems, which release together on the same version:
 
 #### Fixed
 
+* `activestorage-hotcell-server` requires `mini_magick >= 5.2.0` and `ruby-vips >= 2.2.1`. The declared floors were `4.0` and `2.2`, but `MagickOperation` sets `MiniMagick.restricted_env=` at require time and `VipsOperation`'s `before_fork` guard requires `Vips.block_untrusted`, neither of which exists at those floors. A bundle that satisfied the gemspec could resolve `mini_magick` 5.1.2 or `ruby-vips` 2.2.0 and fail to boot — a `NoMethodError` on the magick side, a fail-closed `ConfigurationError` on the vips side — taking the whole conversion toolchain offline.
+
 * `MiniMagick.cli_env` carries the cell's `OMP_NUM_THREADS` and `OMP_THREAD_LIMIT`, so `magick` runs under the image's bound rather than sizing its pool from the host's cores. `MiniMagick.restricted_env` is what had removed them.
+
+
+### Tooling
+
+#### Changed
+
+* `bin/conformance` verifies the container flags it claims rather than asserting them. The isolation check read the network interfaces, whether the root took a write, whether scratch was `noexec`, and an exec'd tool's environment — it never read the bounding capability set, so `--cap-drop ALL` could be dropped from the run and every check still passed. The read-only check was weak the same way: `File.writable?("/")` is false for the cell's non-root user whether or not the root is read-only. The `isolation` operation now reports what the kernel exposes — the bounding capability set and the no-new-privileges bit from `/proc/self/status`, the uid, and the root mount's read-only option from `/proc/self/mounts` — and the battery requires each. A field the cell cannot read comes back `nil` and fails, so a run that cannot see a flag is never mistaken for one that set it.
+
+* `bin/conformance` runs its own negative controls: it re-invokes itself once per flag with `HOTCELL_CONFORMANCE_DROP`, booting without `network`, `read-only`, `cap-drop` and `no-new-privileges` in turn, and requires each run to fail at that flag's own assertion rather than merely exiting non-zero. The `tmpfs-noexec` negative is decided by probing the runtime, so a runtime that force-mounts `noexec` reports `SKIP` with the reason instead of passing vacuously. The isolation checks run first, before the timing-sensitive deadline and overload checks, so a dropped flag fails there rather than behind a flake. `examples/gate` is a fast container-free guard that drives the isolation check with fabricated results, proves it rejects every insecure or unreadable value, and holds the negatives' expected messages against the battery's assertions so a reworded assertion cannot rot a negative into a grep that never matches.
+
+* `bin/conformance` and `bin/load` no longer pass `--ulimit stack=2097152:2097152`. `docs/DEPLOYMENT.md` forbids a lowered stack — an overflow becomes a `SIGSEGV` the supervisor reports as a transient `killed`/`crashed` — so the helpers were measuring a shape operators are told not to deploy. `examples/gate` asserts neither script sets it.
+
+#### Fixed
+
+* `docs/DEPLOYMENT.md` no longer tells operators that conformance cannot observe `cap-drop`, `no-new-privileges` or the uid, and that `read-only` is checked by attempting a write. All four were true before the checks above and false after.
 
 
 ## v0.2.0 / 2026-08-25

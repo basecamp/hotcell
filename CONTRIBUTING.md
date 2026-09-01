@@ -18,6 +18,7 @@ your own application — start with [README.md](README.md) instead.
 - [Style](#style)
 - [Writing it down](#writing-it-down)
   * [Accepted risk](#accepted-risk)
+  * [The changelog](#the-changelog)
 - [CI](#ci)
 - [Making a release](#making-a-release)
 
@@ -247,6 +248,25 @@ false, because what a tool reads from `$HOME` is configuration and configuration
 
 This applies to security reviews in particular, including ones run by agents. Reporting a priced risk back
 as a new finding costs a maintainer the same argument every time.
+
+### The changelog
+
+**Every pull request that changes behavior updates `CHANGELOG.md` in the same pull request.** A change
+merged without its entry is a change nobody outside this repository will hear about: the release notes are
+assembled from that file and from nothing else, so the entry does not get written later — it gets written
+never, and the version ships silently. Three of v0.3.0's pull requests went out that way.
+
+Add to the `next / unreleased` section, under the gem the change is in — or under `Tooling` for the checks
+and scripts in `bin/` and `examples/`, which ship in no gem — and under `Breaking`, `Security`, `Added`,
+`Fixed` or `Changed`. Read the entries already there before writing one: they say what changed and *why the
+old behavior was wrong*, in the voice the rest of this repository uses, and an entry that only names the
+diff is not one of them. Say what an upgrade does not do for the reader — an installed `Dockerfile` an
+upgrade leaves alone is the recurring case.
+
+Skip the entry only for a change no consumer can observe: a test, a refactor, a comment, a CI tweak. If you
+are unsure, write one.
+
+This applies to agents. If you opened the pull request, the entry is part of it.
 
 ## CI
 
