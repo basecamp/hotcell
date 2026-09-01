@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "socket"
+require "fcntl"
 require "fileutils"
 require "tmpdir"
 
@@ -21,12 +22,31 @@ module HotCell
     # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
     # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
-                       :retired_at, :buffer, keyword_init: true) do
-      def self.build(slot:, pid:, control:, deadline:)
-        new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b
+                       :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
+      def self.build(slot:, pid:, control:, deadline:, stderr: nil)
+        new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b,
+            stderr: stderr, captured: "".b
+      end
+
+      # Keeps the last MAX_MESSAGE_BYTES rather than the first, because the line that ended the request is
+      # the last one written. Trimmed on every read, so a worker that never stops printing costs no more
+      # than that.
+      def capture_stderr(chunk)
+        captured << chunk
+        excess = captured.bytesize - Failure::MAX_MESSAGE_BYTES
+        captured.slice! 0, excess if excess.positive?
+      end
+
+      # A silent worker gets no field at all: `Log#document` does not compact the hotcell namespace, so a nil
+      # would put `"stderr":null` on every death a cell reports.
+      def stderr_field
+        captured.empty? ? {} : { stderr: Failure.sanitize(captured, keep: :tail) }
       end
 
       def dispatched(connection, deadline, at:)
+        # An earlier request's warning is not this request's death. Not a boundary, though: a descendant
+        # holding fd 2 writes whenever it likes, and a sibling can open /proc/<pid>/fd/2 and write there too.
+        captured.clear
         self.connection = connection
         self.dispatched_at = at
         self.deadline = deadline
@@ -105,6 +125,12 @@ module HotCell
     # far above any real scrape rate rather than as a throttle.
     CONTROL_BACKLOG = 64
 
+    # What one pass reads off a worker's fd 2, and how many reads the reap's final drain gets. Sized to
+    # clear a full pipe rather than to bound memory — `Child#capture_stderr` does that — so reading further
+    # would only mean a fresher tail.
+    STDERR_READ_BYTES = 16 * 1024
+    STDERR_FINAL_READS = 8
+
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
     def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
@@ -163,6 +189,7 @@ module HotCell
       def sources
         [ @signals ].tap do |list|
           list.concat @children.each_value.map { |child| child.control.socket }.reject(&:closed?)
+          list.concat @children.each_value.filter_map(&:stderr).reject(&:closed?)
           list.concat @control_pending.map { |pending| pending.connection.socket }.reject(&:closed?)
           list.push @work, @control unless @stopping
         end
@@ -187,8 +214,13 @@ module HotCell
         when @work then accept_work
         when @control then accept_control
         else
-          pending = pending_control(source)
-          pending ? read_control(pending) : child_reported(source)
+          if (pending = pending_control(source))
+            read_control pending
+          elsif (child = child_writing_stderr(source))
+            drain_stderr child
+          else
+            child_reported source
+          end
         end
       end
 
@@ -378,34 +410,38 @@ module HotCell
         number = free_slot or return nil
         slot = Slot.build(workspace, number)
         supervisor_side, worker_side = UNIXSocket.pair(:STREAM)
+        stderr_reader, stderr_writer = IO.pipe
 
         # A fork that fails is a host under pressure, not a reason to stop serving. The request stays queued
         # and is either dispatched on a later pass or answered `capacity` when its wait runs out.
         pid = begin
           fork do
-            become_worker supervisor_side
+            become_worker supervisor_side, stderr_reader, stderr_writer
             Worker.new(slot: slot, configuration: configuration, control: Connection.new(worker_side),
                        log: log).run
           end
         rescue SystemCallError => error
           log.write "worker.unforkable", slot: number, error: error.class.name, message: error.message
-          supervisor_side.close
-          worker_side.close
+          [ supervisor_side, worker_side, stderr_reader, stderr_writer ].each(&:close)
           return nil
         end
 
+        # The write end goes now rather than at the reap. Held here, the pipe never reports end of stream,
+        # `sources` keeps a dead worker's read end forever, and a worker that said nothing is
+        # indistinguishable from one that has not finished saying it.
         worker_side.close
+        stderr_writer.close
         log.write "worker.forked", pid: pid, slot: number
 
         @children[number] = Child.build(slot: slot, pid: pid, control: Connection.new(supervisor_side),
-                                        deadline: configuration.limits.deadline)
+                                        deadline: configuration.limits.deadline, stderr: stderr_reader)
       end
 
       # Everything the supervisor holds and the worker must not: the listener, the signal pipe, the other
       # children's control sockets, and every connection the supervisor is still holding for somebody else.
       # The connection this worker is about to serve arrives over SCM_RIGHTS a moment from now, so closing
       # the inherited copy here costs nothing and stops it lingering for the worker's whole life.
-      def become_worker(supervisor_side)
+      def become_worker(supervisor_side, stderr_reader, stderr_writer)
         [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
 
         # Its own process group, so the deadline reaches the tools this request started rather than only the
@@ -438,9 +474,66 @@ module HotCell
         @children.each_value do |child|
           child.control.close
           child.connection&.close
+          child.stderr&.close
         end
         @queue.each { |(connection, _)| connection.close }
         @control_pending.each { |pending| pending.connection.close }
+
+        # fd 2 becomes the pipe, and it stays non-blocking. `IO.pipe` already returns both ends O_NONBLOCK
+        # and `reopen` is a dup2, which shares the file description — so the flag would ride along on its
+        # own. It is set here anyway, because a decision this load-bearing should be in the code rather than
+        # only in a comment, and because it then survives a Ruby that stops handing out non-blocking pipes.
+        #
+        # A blocking fd 2 would put backpressure into the image-processing path, which was never designed
+        # for it: a warning written from inside libvips is a `write(2)` in a C call Ruby cannot interrupt, so
+        # the conversion would wait on the supervisor's scheduling — nearest exactly when the host is under
+        # pressure and the supervisor is scheduled least. That trade is refused; the conversion path must
+        # never wait on the supervisor. What non-blocking loses instead is in docs/LOGS.md, and a test pins
+        # the flag so that a well-meaning fix has to argue with it.
+        stderr_reader.close
+        stderr_writer.fcntl Fcntl::F_SETFL, stderr_writer.fcntl(Fcntl::F_GETFL) | Fcntl::O_NONBLOCK
+        $stderr.reopen stderr_writer
+        stderr_writer.close
+      end
+
+      # One bounded read per pass, never a loop until the pipe is empty: this runs inside the loop that
+      # enforces every request's deadline, and the peer is a worker that can print as fast as it likes.
+      #
+      # End of stream closes the read end. It has to: an EOF pipe is permanently readable, so leaving it in
+      # `sources` turns the run loop into a spin between the worker's exit and its reap.
+      def drain_stderr(child)
+        chunk = begin
+          child.stderr.read_nonblock(STDERR_READ_BYTES, exception: false)
+        rescue SystemCallError
+          nil
+        end
+        return if chunk == :wait_readable
+        return child.stderr.close if chunk.nil?
+
+        child.capture_stderr chunk
+      end
+
+      # A worker's last line sits in the pipe after the process is gone, so the reap reads once more — and
+      # under a flat bound rather than to end of stream. End of stream never arrives while a descendant
+      # holds the write end, and "until the pipe is momentarily empty" terminates only by winning a race
+      # against whoever is writing.
+      def drain_stderr_after_exit(child)
+        STDERR_FINAL_READS.times do
+          break if child.stderr.nil? || child.stderr.closed?
+
+          chunk = begin
+            child.stderr.read_nonblock(STDERR_READ_BYTES, exception: false)
+          rescue SystemCallError
+            nil
+          end
+          break if chunk.nil? || chunk == :wait_readable
+
+          child.capture_stderr chunk
+        end
+      end
+
+      def child_writing_stderr(source)
+        @children.each_value.find { |child| child.stderr.equal?(source) }
       end
 
       # Buffered and non-blocking, for the same reason read_control is, and more so: readability means a byte
@@ -699,11 +792,19 @@ module HotCell
             child_reported child.control.socket
           end
 
+          # Sweep before the last drain, not after. fd 2 is never close-on-exec, so everything this worker
+          # spawned holds the write end too — swept first, what those wrote is waiting to be read rather
+          # than arriving after the last read. The sweep does not make the pipe quiet: SIGKILL is
+          # asynchronous, and a `setsid` descendant is deliberately never reached, so its final bytes are
+          # best effort like everything else here.
           sweep_group child
+          drain_stderr_after_exit child
+
           @children.delete child.slot.number
           answer_for child, status
           discard child
           child.control.close
+          child.stderr&.close
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,
                                      signal: signal_name(status), exit_code: status.exitstatus
@@ -740,11 +841,17 @@ module HotCell
         counters.record Codes::KILLED
         counters.record_kill cause
 
-        log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
-                                   signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at)
+        captured = child.stderr_field
 
+        log.write "worker.killed", pid: child.pid, slot: child.slot.number, cause: cause,
+                                   signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at),
+                                   **captured
+
+        # The capture rides the verdict as well as the log line, so an application logs
+        # `killed: crashed (libgomp: ...)` rather than a bare `crashed`. Additive on the wire: `from_wire`
+        # reads named keys, so an old client ignores the field and a new one against an old cell meets nil.
         answer child.connection,
-               Failure.new(code: Codes::KILLED, cause: cause, signal: signal_name(status)),
+               Failure.new(code: Codes::KILLED, cause: cause, signal: signal_name(status), **captured),
                timing: { perform_ms: Clock.ms_since(child.dispatched_at) }
       end
 

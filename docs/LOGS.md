@@ -48,6 +48,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `hotcell.timing` | object | A request's phase timings: `queued_ms`, `perform_ms`, and any measured phases. |
 | `hotcell.deadline_s` / `hotcell.grace_s` / `hotcell.waited_s` | number | The limit that was hit, on the event that reports hitting it. |
 | `hotcell.path` | string | The file the cell could not verify, on `cell.ptrace_scope_unknown`. |
+| `hotcell.stderr` | string | The tail of what a dying worker wrote to file descriptor 2, at most 512 bytes. On `worker.killed` only, and absent when it wrote nothing. See below. |
 
 ## Events
 
@@ -62,7 +63,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `worker.forked` | INFO | `hotcell.slot` |
 | `worker.reaped` | INFO | `hotcell.slot`, `hotcell.served`, `hotcell.signal`, `process.exit_code` |
 | `worker.crashed` | ERROR | `hotcell.slot`, `error.type`, `error.message` |
-| `worker.killed` | WARN | `hotcell.slot`, `hotcell.cause`, `hotcell.signal`, `event.duration.ms` |
+| `worker.killed` | WARN | `hotcell.slot`, `hotcell.cause`, `hotcell.signal`, `event.duration.ms`, `hotcell.stderr` |
 | `worker.deadline` | WARN | `hotcell.slot`, `hotcell.deadline_s` |
 | `worker.lingered` | WARN | `hotcell.slot`, `hotcell.grace_s` |
 | `worker.unforkable` | ERROR | `hotcell.slot`, `error.type`, `error.message` |
@@ -73,6 +74,41 @@ Everything else is ours and sits under `hotcell.*`:
 | `slot.uncleaned` | WARN | `hotcell.slot`, `hotcell.home`, `message` (boot sweep only) |
 | `slot.undiscarded` | WARN | `hotcell.slot`, `hotcell.home` |
 | `slot.unswept` | WARN | `hotcell.slot`, `hotcell.home` |
+
+## What a worker wrote to fd 2
+
+A worker's fd 2 is a pipe to the supervisor, which drains it as the worker runs and attaches the tail to
+the `worker.killed` reporting its death. The same text rides the failure the caller receives, so an
+application logs `killed: crashed (libgomp: ...)` rather than a bare `crashed`.
+
+It exists for the death nothing else in a cell can describe. `HotCell::Worker#run` rescues `Exception`, so
+a worker that died with no `worker.crashed` line probably died without Ruby raising at all: a C library
+called `exit()`, and said why on fd 2.
+
+```
+libgomp: Thread creation failed: Resource temporarily unavailable
+```
+
+**The text is not evidence — it establishes neither who wrote it nor which request it belongs to**, the
+caveat `hotcell.signal` and `hotcell.cause` already carry. It comes from the one process in a cell that
+runs untrusted code, over an unauthenticated channel: everything a worker spawned inherits fd 2, so a tool
+can write long after the request it belongs to finished, and a sibling worker can open `/proc/<pid>/fd/2`
+and write whatever it likes, since workers share a uid and `kernel.yama.ptrace_scope` protects memory
+rather than descriptors. The supervisor clears the buffer at each dispatch, which keeps an old warning off
+an unrelated death in the ordinary case. It is not a boundary.
+
+**The capture is best effort, because fd 2 is non-blocking.** A C library writing to a full pipe gets `EAGAIN`
+and loses the line, and a fatal handler cannot retry — it writes once and calls `exit()`. That costs nothing
+in the case this exists for, where libgomp's one short line meets an empty pipe. What it loses is the fatal
+from a decoder that had already filled the pipe with warnings, where the field reports the tail of those
+warnings instead. The alternative was refused: a blocking fd 2 would make a warning written from inside
+libvips wait on the supervisor's scheduling, in a C call Ruby cannot interrupt, and that wait is nearest
+exactly when the host is under pressure.
+
+**Only a death is reported.** A worker that warns and then answers normally leaves no field behind, on any
+event. So a tool that dies while its worker survives is not described here, and a cell's stderr no longer
+reaches the container's log driver at all — which loses nothing, because the fleet's OTel collector drops
+complete non-JSON lines at ingest.
 
 ## Examples
 

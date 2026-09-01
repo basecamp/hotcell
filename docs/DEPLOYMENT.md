@@ -243,6 +243,10 @@ to stderr and calls `exit(1)`. The worker dies before answering, so the caller g
 the job retries it against a host that fails the same way. This killed 285 Basecamp workers in production
 on 2026-08-31 and forced a rollback.
 
+That line reaches a log now: the supervisor captures what a worker writes to fd 2 and attaches its tail to
+the `worker.killed` that reports its death, as `hotcell.stderr`, and to the failure the caller receives. See
+`docs/LOGS.md`.
+
 **Size `OMP_NUM_THREADS` from the container's `cpus`:** the number follows the allocation, not the example
 above. It is a thread count, so round a fractional quota down, and up to 1 below that. `OMP_THREAD_LIMIT` is the backstop against a library that raises the count itself by calling
 `omp_set_num_threads`, which is what ImageMagick does for `MAGICK_THREAD_LIMIT`.

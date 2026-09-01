@@ -22,6 +22,12 @@ This changelog covers five gems, which release together on the same version:
 
 * The installed `Dockerfile` applies Debian's pending security patches with an `apt-get upgrade` after the `FROM`. `docker build --pull` takes the newest base tag, but the tag itself can sit behind an advisory that is already in `trixie-security` until [docker-library/ruby](https://github.com/docker-library/ruby) rebuilds it, so a clean build shipped a fixable High that no rebuild of the cell could clear. Upgrading during the build makes the image's patch level its own rather than upstream's release cadence, and it stops the class rather than the one advisory. An upgrade leaves an existing `Dockerfile` alone, so a cell installed before this needs the line added by hand and the image rebuilt.
 
+### HotCell::Core and HotCell::Server
+
+#### Added
+
+* A worker's file descriptor 2 is a pipe to the supervisor, which drains it as it runs and attaches the last 512 bytes to the `worker.killed` that reports its death, as `hotcell.stderr`, and to the failure the caller receives, as `stderr`. A C library that calls `exit()` raises nothing, so `worker.crashed` is never written and the connection carries a bare `crashed`; the account of what happened was on fd 2, which goes to the container runtime's log driver, where the fleet's collector drops complete non-JSON lines at ingest. `libgomp: Thread creation failed: Resource temporarily unavailable` is the line this exists for. The field is there to make a death legible, not to ship a cell's stderr anywhere, so a worker that warns and then answers normally reports nothing. The capture is best effort and untrusted: fd 2 stays non-blocking so that a warning written from inside libvips can never wait on the supervisor's scheduling, and everything a worker spawned inherits the descriptor. `docs/LOGS.md` states what the field is and is not.
+
 ### HotCell::Server
 
 #### Fixed
