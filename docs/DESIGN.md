@@ -301,7 +301,8 @@ implementation.
     remedy: its path is the cold side's, and no path the cold side chose is ever visible to a tool. So
     `Input#fd_path` stages on
     darwin, and an uncontainerized macOS cell pays for a copy and the `RLIMIT_FSIZE` ceiling that bounds
-    it. Production is Linux and pays neither.
+    it — an input larger than the operation's `file_size` is refused there as `fsize` rather than read in
+    place. Production is Linux and pays neither.
 
 ## Why descriptors rather than a shared volume
 

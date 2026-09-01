@@ -22,7 +22,9 @@ gem but are what an operator runs against their own image.
   once per candidate loader, to sniff a format — walked that offset forward, so a file whose loader is late
   in the priority order came back `unreadable` with no error recorded. This only ever affected an
   uncontainerized cell on macOS, which is the supported development path; Linux reopens and is unchanged.
-  The cost on darwin is a copy and the `RLIMIT_FSIZE` ceiling that bounds one.
+  The cost on darwin is a copy and the `RLIMIT_FSIZE` ceiling that bounds one: an input larger than the
+  operation's `file_size` is refused there as a permanent `fsize` verdict rather than read in place. A
+  refusal for a file too large to copy, in place of a wrong answer for an ordinary one.
 
 
 ## v0.3.0 / 2026-09-01
