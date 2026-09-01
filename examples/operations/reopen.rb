@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# The same round trip as echo, through both paths instead of both descriptors. `/dev/fd/N` is a fresh
-# open, rechecked against the opening process's uid and the file's mode, so this succeeds only when the
-# cell can open the caller's own files by name. Echo consumes the descriptors directly and never
+# The same round trip as echo, through both paths instead of both descriptors. `fd_path` is a fresh open by
+# name — `/dev/fd/N` on Linux, the file's own path on macOS — rechecked against the opening process's uid
+# and the file's mode, so this succeeds only when the cell can open the caller's own files by name. Echo consumes the descriptors directly and never
 # establishes that, which is why both exist.
 #
 # Both directions, because they are different permissions and a tool may need either: an input is readable

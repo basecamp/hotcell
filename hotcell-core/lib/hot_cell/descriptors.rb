@@ -39,8 +39,30 @@ module HotCell
     # readable at any size, where staging it would be a write and RLIMIT_FSIZE bounds writes. Reopening
     # `/dev/fd/N` gives a fresh file description at offset zero, so a read here does not disturb the
     # descriptor the supervisor still holds.
-    def fd_path
-      "/dev/fd/#{io.fileno}"
+    #
+    # Darwin cannot keep that promise, so it keeps the behavior instead. `/dev/fd` has no procfs behind it
+    # there, and opening the path is dup(2): one shared offset, so what one reader consumes the next open
+    # skips. libvips sniffs a format by opening the path once per candidate loader, so the second loader
+    # reads past the magic bytes and a readable file is called unreadable.
+    #
+    # Darwin answers with the filename behind the descriptor, which a by-name open does start at zero. That
+    # hands a tool a path the cold side chose, which the rest of this class exists to prevent — a corner cut
+    # on purpose. Darwin is a development platform and nothing else: no container, no isolation, the cell
+    # running as the caller on the caller's own filesystem, where hiding a path it could already reach
+    # protected nothing. What has to match across platforms is what an operation sees — a path that reads
+    # from the first byte however many times it is opened — not how that is arrived at.
+    if RUBY_PLATFORM.include?("darwin")
+      F_GETPATH = 50 # sys/fcntl.h; Ruby's Fcntl module does not carry it
+
+      def fd_path
+        buffer = "\0" * 1024 # F_GETPATH writes the path into a buffer the caller supplies, MAXPATHLEN wide
+        io.fcntl F_GETPATH, buffer
+        buffer[/\A[^\0]+/]
+      end
+    else
+      def fd_path
+        "/dev/fd/#{io.fileno}"
+      end
     end
 
     def close

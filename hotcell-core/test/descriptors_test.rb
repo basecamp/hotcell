@@ -192,6 +192,22 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  # The kernel owns this promise, and on macOS it does not keep it: opening `/dev/fd/N` dups the descriptor
+  # rather than reopening the file, so the offset is shared and the second reader resumes where the first
+  # stopped. libvips sniffs by opening the path once per candidate loader, so a HEIC file is called
+  # unreadable there.
+  def test_reopening_fd_path_reads_from_zero_and_leaves_the_descriptor_alone
+    with_file("source bytes") do |path|
+      reading(path) do |io|
+        input = HotCell::Input.new(io)
+
+        assert_equal "source", File.open(input.fd_path, "rb") { |reopened| reopened.read(6) }
+        assert_equal "source", File.open(input.fd_path, "rb") { |reopened| reopened.read(6) }
+        assert_equal 0, io.pos
+      end
+    end
+  end
+
   def test_closing_twice_is_harmless
     with_file do |path|
       reading(path) do |io|

@@ -13,6 +13,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Core
+
+#### Fixed
+
+* `Descriptor#fd_path` answers with the filename behind the descriptor on macOS rather than `/dev/fd/N`. Opening `/dev/fd/N` is a real open on Linux and a `dup(2)` on macOS, where `/dev/fd` has no procfs behind it, so every opener shared one offset: libvips, which opens the path once per candidate loader while it sniffs a format, read past a HEIC file's magic bytes and reported a readable file as `unreadable`. macOS is a development platform for a cell and nothing else — uncontainerized, running as the caller — so this trades away the property that no path the cold side chose is visible to a tool, on the one platform where that path was already within reach. Linux is untouched.
+
 
 ## v0.3.0 / 2026-09-01
 
