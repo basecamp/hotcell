@@ -96,6 +96,7 @@ module HotCell
 
   class Input < Descriptor
     ACCESS_MODE = Fcntl::O_RDONLY
+    STAGE_CHUNK = 1024 * 1024
 
     # Copies the bytes onto the worker's own scratch on the first call and returns the filename. This is the
     # fallback, for an operation that genuinely needs a real file. Prefer `fd_path`, which reads the
@@ -125,24 +126,35 @@ module HotCell
     end
 
     private
-      # From byte zero rather than from wherever the descriptor is sitting, and left where it was found. The
-      # descriptor arrives over SCM_RIGHTS, so it carries the caller's own file offset: an application that
-      # handed over an IO it had already read from would otherwise be staged a copy with its prefix
-      # missing, where `/dev/fd/N` on a reopening platform reads the file whole. What a tool is given must
-      # not depend on which of the two routes it came by.
+      # From byte zero rather than from wherever the descriptor is sitting. The descriptor arrives over
+      # SCM_RIGHTS, so it carries the caller's own file offset: an application that handed over an IO it
+      # had already read from would otherwise be staged a copy with its prefix missing, where `/dev/fd/N`
+      # on a reopening platform reads the file whole. What a tool is given must not depend on which of the
+      # two routes it came by.
       #
-      # Seek and restore rather than `IO.copy_stream`'s own `src_offset`, which darwin ignores: there it
-      # copies with `fcopyfile` and the offset argument does not reach it, so a positional copy silently
-      # became a copy from the caller's position — on the one platform that now stages for every operation.
-      # Nothing else reads this descriptor while the copy runs: the client is blocked on the response and
-      # the worker serves one request.
+      # `pread` rather than a seek, because the offset is not this side's to move. SCM_RIGHTS shares the
+      # open file description, so `io.pos = 0` here is a write to the application's own IO — and only the
+      # thread that called is blocked on the response, so another of its threads reading that IO would read
+      # from a position this worker set. Reading positionally leaves nothing to restore and no window in
+      # which the caller can observe an offset it did not choose. `IO.copy_stream`'s own `src_offset` is
+      # not that: darwin copies with `fcopyfile`, where the argument never arrives and the copy silently
+      # starts at the caller's position instead.
       def copied_to(path)
-        position = io.pos
-        io.pos = 0
-        File.open(path, "wb") { |file| IO.copy_stream(io, file) }
+        File.open(path, "wb") do |file|
+          offset = 0
+          while (chunk = read_at(offset))
+            file.write chunk
+            offset += chunk.bytesize
+          end
+        end
+
         path
-      ensure
-        io.pos = position
+      end
+
+      def read_at(offset)
+        io.pread(STAGE_CHUNK, offset)
+      rescue EOFError
+        nil
       end
   end
 

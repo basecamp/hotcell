@@ -139,6 +139,62 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  # The descriptor shares its open file description, and so its offset, with the application's own IO: only
+  # the thread that called is blocked on the response, so a seek here is a write to something another of
+  # the caller's threads may be reading. Staging must therefore not seek at all, which is a stronger claim
+  # than leaving the offset where it was found — seek-and-restore also does that, everywhere except the
+  # window in between, and that window is not observable from a test without racing it.
+  def test_staging_an_input_never_seeks_the_descriptor_the_caller_shares
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          io.read(4)
+          seeks = watch_seeks(io)
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+          staged = input.path
+
+          assert_empty seeks, "staging seeked a descriptor it shares with the caller"
+          assert_equal "0123456789abcdef", File.binread(staged)
+          assert_equal 4, io.pos
+          assert_equal "456789abcdef", io.read
+        end
+      end
+    end
+  end
+
+  # And nothing writes the offset on the way out either, so a copy that cannot be made leaves it alone.
+  def test_a_staging_copy_that_fails_leaves_the_descriptors_offset_alone
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          io.read(4)
+          seeks = watch_seeks(io)
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "absent", "input") })
+
+          assert_raises(SystemCallError) { input.path }
+          assert_empty seeks, "staging seeked a descriptor it shares with the caller"
+          assert_equal 4, io.pos
+        end
+      end
+    end
+  end
+
+  # More bytes than one positional read returns, so the loop that assembles them is covered rather than
+  # skipped by every fixture being smaller than a single chunk.
+  def test_staging_an_input_larger_than_one_read_copies_every_byte
+    bytes = "0123456789abcdef" * (HotCell::Input::STAGE_CHUNK / 8)
+
+    with_file(bytes) do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          assert_equal bytes, File.binread(input.path)
+        end
+      end
+    end
+  end
+
   def test_an_inputs_fd_path_ignores_the_offset_the_caller_left_behind
     with_file("0123456789abcdef") do |source|
       Dir.mktmpdir do |scratch|
@@ -308,6 +364,13 @@ class DescriptorsTest < HotCellTest
     # What this answers is a property of the platform, so the branch the machine is not on is only
     # reachable by saying so. Defined on the subclass rather than on Descriptor, whose own singleton
     # carries the real one.
+    # Records rather than refuses, so the assertion that reports the seek is the one that names it.
+    def watch_seeks(io)
+      [].tap do |seeks|
+        io.define_singleton_method(:pos=) { |offset| seeks << offset }
+      end
+    end
+
     def without_reopened_descriptors
       HotCell::Input.define_singleton_method(:reopens_descriptors?) { false }
       yield
