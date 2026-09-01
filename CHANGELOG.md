@@ -26,6 +26,11 @@ gem but are what an operator runs against their own image.
   operation's `file_size` is refused there as a permanent `fsize` verdict rather than read in place. A
   refusal for a file too large to copy, in place of a wrong answer for an ordinary one.
 
+* `Input#path` copies from byte zero rather than from wherever the caller left the descriptor, and no
+  longer moves it. The descriptor arrives over `SCM_RIGHTS` and carries the caller's own file offset, so an
+  application that handed over an IO it had already read from was staged a copy with its prefix missing,
+  where `/dev/fd/N` reads the file whole.
+
 
 ## v0.3.0 / 2026-09-01
 

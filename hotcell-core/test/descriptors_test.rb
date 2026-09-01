@@ -123,6 +123,39 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  # The descriptor carries the caller's own offset across SCM_RIGHTS, and neither route to the bytes may
+  # depend on it: `/dev/fd/N` on a reopening platform reads the file whole, so staging has to as well.
+  def test_staging_an_input_the_caller_had_already_read_from_copies_the_whole_file
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          io.read(4)
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          assert_equal "0123456789abcdef", File.binread(input.path)
+          assert_equal 4, io.pos
+        end
+      end
+    end
+  end
+
+  def test_an_inputs_fd_path_ignores_the_offset_the_caller_left_behind
+    with_file("0123456789abcdef") do |source|
+      Dir.mktmpdir do |scratch|
+        reading(source) do |io|
+          io.read(4)
+          input = HotCell::Input.new(io, scratch: -> { File.join(scratch, "input") })
+
+          assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+
+          without_reopened_descriptors do
+            assert_equal "0123", File.open(input.fd_path, "rb") { |file| file.read(4) }
+          end
+        end
+      end
+    end
+  end
+
   def test_an_input_copies_once_and_answers_the_same_path_after_that
     with_file("source bytes") do |source|
       Dir.mktmpdir do |scratch|

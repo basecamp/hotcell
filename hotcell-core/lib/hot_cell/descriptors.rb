@@ -124,8 +124,13 @@ module HotCell
     end
 
     private
+      # From byte zero rather than from wherever the descriptor is sitting, and without moving it. The
+      # descriptor arrives over SCM_RIGHTS, so it carries the caller's own file offset: an application that
+      # handed over an IO it had already read from would otherwise be staged a copy with its prefix
+      # missing, where `/dev/fd/N` on a reopening platform reads the file whole. What a tool is given must
+      # not depend on which of the two routes it came by.
       def copied_to(path)
-        File.open(path, "wb") { |file| IO.copy_stream(io, file) }
+        File.open(path, "wb") { |file| IO.copy_stream(io, file, nil, 0) }
         path
       end
   end
