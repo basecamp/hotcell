@@ -279,5 +279,5 @@ The five gems release together on one version, and `VERSION` at the repository r
   - [ ] `for f in pkg/*.gem ; do gem push $f ; done`
   - [ ] create a release at https://github.com/basecamp/hotcell/releases
 - Post-release
-  - [ ] `bundle exec rake version:bump[1.3.0.alpha]`, and open a new `next / unreleased` section in
+  - [ ] `bundle exec rake version:bump[1.3.0.dev]`, and open a new `next / unreleased` section in
         `CHANGELOG.md`, so that `master` never reports a version that was released
