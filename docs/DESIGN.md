@@ -289,7 +289,9 @@ implementation.
     The mode is also what enforces invariant 4 once a tool holds a filename: at `0400` even the owner is
     refused `O_RDWR`, and at `0200` even the owner is refused a read. That holds only while the cell does
     not own the file. Changing a mode needs ownership, and `cap-drop ALL` leaves no capability that
-    overrides it — so a shared group enforces the invariant and a shared uid cannot.
+    overrides it — so a shared group enforces the invariant and a shared uid cannot. All of this is the
+    reopening platform's; on darwin there is no reopen to check and an input named by `fd_path` is a copy
+    the cell itself owns, so neither the `EACCES` nor the mode enforcement above applies there. See 19.
 
 19. **On darwin, `open("/dev/fd/N")` is a `dup` of fd N rather than a reopen of the file behind it.**
     Linux's `/dev/fd` is `/proc/self/fd`, where the open is real and starts at offset zero; darwin's is

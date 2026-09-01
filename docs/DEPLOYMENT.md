@@ -287,7 +287,9 @@ The cgroup limit is what bounds real memory across the cell.
 
 **An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
 place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
-`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
+`file_size`. On darwin `/dev/fd/N` does not reopen and every input named by `fd_path` is staged, so a
+development mac charges its inputs too and refuses one larger than `file_size` as `fsize`. Production is
+Linux and charges neither. An operation that needs a filename copies the input onto scratch first, and the kernel
 charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
 write, and count a staged input as one of them.
 
@@ -446,9 +448,10 @@ servers:
 The sockets are `0660` and owned by the cell's user and group, so without the group your application
 cannot connect to a cell at all.
 
-And an operation that hands a tool a filename does not copy the input. It re-opens the descriptor as
-`/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user rather than the
-caller's. The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
+And an operation that hands a tool a filename does not copy the input, on Linux. It re-opens the descriptor
+as `/dev/fd/N`. That is a fresh open, and the kernel rechecks it against the **cell's** user rather than the
+caller's. (On darwin that open is a dup rather than a reopen, so the input is staged and no recheck happens
+at all — the group is not what makes an uncontainerized macOS cell work.) The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
 Active Storage tempfile is exactly that.
 
 Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,

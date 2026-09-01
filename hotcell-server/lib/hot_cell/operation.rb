@@ -150,7 +150,8 @@ module HotCell
     # verdict, which is permanent, for a document whose only crime was being noisy.
     # `pass` hands the tool a set of the worker's own descriptors — an input to read, an output to write —
     # at their existing fd numbers, so the tool reaches them as `/dev/fd/N` (Descriptor#fd_path) and no
-    # byte is copied onto scratch to give it a filename. A fd handed to a child this way loses its
+    # byte is copied onto scratch to give it a filename — on Linux, where that path reopens the file. On
+    # darwin `Input#fd_path` stages instead and the copy is charged, which `pass:` does not change. A fd handed to a child this way loses its
     # close-on-exec, which is exactly the inheritance wanted, and only for these; the worker's other
     # descriptors are untouched. Passing an fd at its own number cannot collide with the stdio pipes popen3
     # installs on 0, 1 and 2, because a received descriptor is never one of those.

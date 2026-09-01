@@ -13,6 +13,10 @@ module HotCell
   # operation that consumes the descriptor never pays for its input, which is what lets a small file_size
   # accept a large upload — but the kernel does not distinguish the two writes, so one number covers both.
   #
+  # That holds where `/dev/fd/N` reopens the file behind it, which is Linux and so production. On darwin it
+  # is a dup and every input named by `fd_path` is staged (Input#fd_path), so a development mac pays
+  # file_size for its inputs as well and needs headroom for the largest one it will be handed.
+  #
   # memory does not multiply by concurrency, and that is the easiest mistake to make here. It is an
   # address-space charge on one worker. The cgroup limit is what bounds real memory across the cell, and
   # it counts the tmpfs too, so size the two separately.

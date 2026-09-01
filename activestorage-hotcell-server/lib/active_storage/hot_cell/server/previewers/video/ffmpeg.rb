@@ -48,7 +48,8 @@ module ActiveStorage
               # past it as the fixed flags around them change.
               #
               # Both descriptors go to ffmpeg: it reads /dev/fd for the source and writes /dev/fd for the frame,
-              # so neither the input nor the output touches scratch. Writing the descriptor directly leaves
+              # so neither the input nor the output touches scratch on Linux. On darwin the source is staged
+              # first, so a video larger than this operation's file_size is refused there rather than previewed. Writing the descriptor directly leaves
               # partial bytes in the caller's file on a mid-write failure where a staged output would have left
               # it empty — harmless here, because run! turns a non-zero exit into a refusal and the previewer
               # discards its output on any failure, but it is a real property of the direct write.

@@ -325,7 +325,8 @@ module HotCell
 
     # Hands an exec'd tool the input descriptor and has it read the bytes back through /dev/fd, so a test
     # can prove run_tool's `pass:` exposes a descriptor to a tool without staging it. Reports whether the
-    # input was copied onto scratch, which must be false.
+    # input was copied onto scratch, which must be false where `/dev/fd/N` reopens and true on darwin,
+    # where it does not — the test asserts against the platform rather than against false.
     class ReadThroughFd < HotCell::Operation
       operation "test.read_through_fd"
 
