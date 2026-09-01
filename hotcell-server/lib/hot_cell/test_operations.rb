@@ -135,6 +135,18 @@ module HotCell
       end
     end
 
+    # Hangs in its boot hook, which runs before the worker reports its operation. So the supervisor kills a
+    # worker whose operation it never learned, which is the case `worker.killed` must leave unnamed rather
+    # than fill in with whatever this slot served last.
+    class SlowBoot < HotCell::Operation
+      operation "test.slow_boot"
+      before_worker_boot { sleep 60 }
+
+      def perform(_inputs, _outputs)
+        {}
+      end
+    end
+
     class Undecodable < HotCell::Operation
       operation "test.undecodable"
 

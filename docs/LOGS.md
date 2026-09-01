@@ -145,7 +145,9 @@ name the operation at all: the worker is dead by the time that line is written. 
 reporting leaves `hotcell.op` null rather than borrowing the name of the request the slot served last.
 
 Because it arrives from the one process here that runs untrusted code, a reported name is bounded to an
-operation this cell registered before it is written down.
+operation this cell registered before it is written down. That bound is on the worker's report and nowhere
+else: a `request` line names whatever the caller asked for, including a name no operation answers to, which
+is the case `unsupported` is about and the one worth seeing.
 
 `worker.undispatchable` is the exception to all of that, and the one line where the supervisor reads a
 request. The worker died between the fork and the dispatch write, so nothing has read the request and the

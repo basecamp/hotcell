@@ -431,6 +431,11 @@ module HotCell
       # Not bounded to a registered operation the way a worker's report is, and the difference is which side
       # the name came from. This is the request itself, from the trusted side, naming what a worker's own
       # `request` line would have named had one ever read it. The peek limit bounds its size.
+      # `recv_nonblock` and not a blocking `recv` with `MSG_DONTWAIT`: Ruby's blocking `recv` waits for
+      # the socket to become readable and retries whatever that flag says, so it parks on an empty socket,
+      # which is the one thing this must never do. It leaves the socket as it found it — measured on 3.3,
+      # 3.4 and 4.0, `recv_nonblock` does not touch O_NONBLOCK, which matters because that flag lives on
+      # the open file description and a worker holding this connection through SCM_RIGHTS shares it.
       def peeked_op(connection)
         peeked = connection.socket.recv_nonblock(MAX_REQUEST_BYTES, Socket::MSG_PEEK, exception: false)
         return nil unless peeked.is_a?(String) && peeked.include?("\n")

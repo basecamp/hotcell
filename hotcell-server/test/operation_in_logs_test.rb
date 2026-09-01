@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-# Which operation a line is about, on the four events that could not say.
+# Which operation a line is about, on the five events that could not say.
 #
 # A cell runs several operations at once and they do not share limits, so `killed cause=fsize` on a host
 # serving three PDF operations named none of them — and nothing else could, because the app-side response
@@ -106,6 +106,91 @@ class OperationInLogsTest < HotCellServerTest
     end
   ensure
     [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
+  end
+
+  # The same property in the topology it exists for. `dispatch` passes the connection to a worker over
+  # `SCM_RIGHTS`, and `send_message` can deliver that ancillary data and then fail on the rest of the line,
+  # so the supervisor peeks a connection whose duplicate a worker is already holding. Both halves have to
+  # survive: the request bytes, and the caller's own descriptors riding on it.
+  def test_the_peek_leaves_the_request_for_a_worker_holding_a_duplicate_of_the_connection
+    ours, theirs = UNIXSocket.pair(:STREAM)
+    to_worker, worker_side = UNIXSocket.pair(:STREAM)
+
+    with_file("input bytes") do |path|
+      reading(path) do |input|
+        HotCell::Connection.new(theirs).send_message HotCell::Request.new(op: "test.echo", inputs: 1).to_line,
+                                                     descriptors: [ input ]
+        HotCell::Connection.new(to_worker).send_message %({"queued_ms":0}\n), descriptors: [ ours ]
+
+        assert_equal "test.echo", supervisor.send(:peeked_op, HotCell::Connection.new(ours))
+
+        _, passed = HotCell::Connection.new(worker_side).receive_message(limit: HotCell::Worker::DISPATCH_BYTES)
+        duplicate = passed.first
+        assert duplicate, "the connection never reached the worker"
+
+        assert duplicate.wait_readable(1), "the peek took the request off the worker's copy"
+        line, descriptors = HotCell::Connection.new(duplicate).receive_message
+        assert_equal "test.echo", HotCell::Request.parse(line).op
+        assert_equal 1, descriptors.size, "the peek took the caller's descriptors off the worker's copy"
+        assert_equal "input bytes", descriptors.first.read
+
+        (descriptors + passed).each { |io| io.close unless io.closed? }
+      end
+    end
+  ensure
+    [ ours, theirs, to_worker, worker_side ].each { |socket| socket&.close unless socket&.closed? }
+  end
+
+  # The peek must answer without waiting, because it runs in the loop that enforces every request's
+  # deadline. Left to hang, the regression is a stuck cell rather than a slow one, so this bounds it
+  # rather than trusting the suite's own timeout to notice.
+  def test_the_peek_does_not_wait_on_a_caller_that_has_not_sent
+    ours, theirs = UNIXSocket.pair(:STREAM)
+    connection = HotCell::Connection.new(ours)
+    peeker = supervisor
+
+    took = elapsed { assert_nil peeker.send(:peeked_op, connection) }
+
+    assert_operator took, :<, 0.5, "the peek waited for a request that never came"
+  ensure
+    [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
+  end
+
+  # Peeking installs no descriptor, which a `recvmsg` in its place would. The count is the only thing that
+  # tells the two implementations apart from outside.
+  def test_the_peek_installs_no_descriptors_in_the_supervisor
+    ours, theirs = UNIXSocket.pair(:STREAM)
+
+    with_file("input bytes") do |path|
+      reading(path) do |input|
+        HotCell::Connection.new(theirs).send_message HotCell::Request.new(op: "test.echo", inputs: 1).to_line,
+                                                     descriptors: [ input ]
+        # Built before the count: each `supervisor` opens `File::NULL` for its null log, and three of
+        # those inside the loop read exactly like three installed descriptors.
+        peeker = supervisor
+        connection = HotCell::Connection.new(ours)
+        before = open_descriptors
+
+        3.times { peeker.send :peeked_op, connection }
+
+        assert_equal before, open_descriptors, "the peek installed the caller's descriptors"
+      end
+    end
+  ensure
+    [ ours, theirs ].each { |socket| socket&.close unless socket&.closed? }
+  end
+
+  # The end-to-end form of `Child#dispatched` clearing the name. This worker reported `test.echo`, then
+  # took a request whose boot hook hangs before the operation is reported, and was killed there. The kill
+  # belongs to an operation the supervisor never learned, and the line has to say so rather than name the
+  # request the slot served before it.
+  def test_a_kill_before_the_worker_reports_names_no_operation
+    TestCell.boot(deadline: 0.3, concurrency: 1, max_requests_per_worker: 3) do |cell|
+      assert_ok cell.call("test.echo")
+      assert_failed "killed", cell.call("test.slow_boot", timeout: 20), cause: "deadline"
+
+      assert_nil wait_for_event(cell, "worker.killed").first.dig(:hotcell, :op)
+    end
   end
 
   private
