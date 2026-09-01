@@ -10,9 +10,12 @@ require "test_helper"
 # available in the logs or in the metrics.
 #
 # The two sides learn the name differently. A worker parses it out of the request it is serving. The
-# supervisor never reads a request — that is what lets it dispatch a connection whose descriptors are still
-# queued on it — so it learns the name from the worker's own report, and holds it because a killed worker
-# cannot report its own death.
+# supervisor never reads a request a worker is going to serve — that is what lets it dispatch a connection
+# whose descriptors are still queued on it — so it learns the name from the worker's own report, and holds
+# it because a killed worker cannot report its own death.
+#
+# `worker.undispatchable` is where those two meet and neither answers. The worker died before the dispatch
+# write, so no worker will ever read that request, and the supervisor peeks it rather than reading it.
 class OperationInLogsTest < HotCellServerTest
   def test_a_request_line_names_the_operation
     TestCell.boot do |cell|
