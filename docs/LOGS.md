@@ -149,9 +149,10 @@ operation this cell registered before it is written down. That bound is on the w
 else: a `request` line names whatever the caller asked for, including a name no operation answers to, which
 is the case `unsupported` is about and the one worth seeing.
 
-An operation name over 256 bytes is not reported at all, so the line is unattributed rather than the
-narrowed deadline riding with it being lost. The two share one control line and the supervisor drops an
-oversized report whole.
+A name whose report would not fit one control line is not sent to the supervisor at all, so
+`worker.killed` goes unattributed rather than the narrowed deadline riding with it being lost. This bounds
+what crosses the control socket and nothing else: the worker writes its own lines, so `request`,
+`request.abandoned` and `worker.crashed` still name an operation of any length.
 
 `worker.undispatchable` is the exception to all of that, and the one line where the supervisor reads a
 request. The worker died between the fork and the dispatch write, so nothing has read the request and the

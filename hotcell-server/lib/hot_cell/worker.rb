@@ -14,11 +14,6 @@ module HotCell
   class Worker
     DISPATCH_BYTES = 1024
 
-    # Room for any operation name a cell would really carry — `active_storage.transform_image` is 31 bytes
-    # — and far enough under DISPATCH_BYTES that the name can never crowd out what it travels with. See
-    # `report_deadline`.
-    REPORTED_OP_BYTES = 256
-
     def initialize(slot:, configuration:, control:, log:)
       @slot = slot
       @configuration = configuration
@@ -283,19 +278,29 @@ module HotCell
       # write its own `worker.killed`, so the supervisor writes it — and this report, sent before the
       # untrusted byte, is the only chance it has to learn what the worker was about to run.
       def report_deadline(operation)
-        tell deadline: effective(operation).deadline, op: reportable_op
+        named = { deadline: effective(operation).deadline, op: @op }
+
+        tell(**(fits?(named) ? named : named.merge(op: nil)))
       end
 
       # The name and the deadline share one control line, and the supervisor drops a report over
       # DISPATCH_BYTES whole rather than truncating it — so a long enough name took the narrowed deadline
       # with it and left the request held to the cell's maximum instead. Of the two the deadline is the
-      # one that is load-bearing, so an oversized name is dropped rather than the line.
+      # one that is load-bearing, so the name is what goes.
       #
-      # Dropped rather than truncated, because a name cut at a byte boundary can end mid-character, and
-      # JSON.generate raises on the invalid UTF-8 that produces — out of `tell`, which is not looking for
-      # it, and into a request that would then answer `failed`.
-      def reportable_op
-        @op if @op && @op.bytesize <= REPORTED_OP_BYTES
+      # Measured on the encoded line and not on the name's own length, because escaping is what decides
+      # how long the line gets: JSON writes a NUL as six bytes, so a 167-byte name clears any budget set
+      # on the name itself and still overruns the report.
+      #
+      # Dropped rather than truncated. A name cut at a byte boundary can end mid-character, and
+      # JSON.generate raises on the invalid UTF-8 that produces, out of a `tell` that is not looking for
+      # it and into a request that would then answer `failed`. Cutting at a character boundary is worse:
+      # the supervisor checks the name against the registry, so a truncated one is either rejected or,
+      # if the prefix is itself an operation, attributes the kill to the wrong one.
+      def fits?(message)
+        (JSON.generate(message) << "\n").bytesize <= DISPATCH_BYTES
+      rescue StandardError
+        false
       end
 
       # The cause travels with the code so the supervisor can still count a kill by cause. It used to read

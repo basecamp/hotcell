@@ -73,12 +73,28 @@ class WorkerReportSizeTest < RegistryIsolatedTest
       limits deadline: 1
     end
 
-    @worker.instance_variable_set :@op, operation.operation_name
-    @worker.send :report_deadline, operation
-
-    line = @control.first.gets
-    assert_operator line.bytesize, :<=, HotCell::Worker::DISPATCH_BYTES,
-                    "the supervisor drops a report this size whole, narrowed deadline and all"
-    assert_equal 1, JSON.parse(line, symbolize_names: true)[:deadline]
+    assert_reports_the_deadline operation
   end
+
+  # A short name that encodes long. JSON writes a NUL as `\u0000`, so 167 of them are 167 bytes of name
+  # and 1002 bytes of report: a budget set on the name itself passes this and the report is still dropped.
+  def test_a_name_that_escapes_long_does_not_displace_the_narrowed_deadline_either
+    operation = Class.new(HotCell::Operation) do
+      operation "\x00" * 167
+      limits deadline: 1
+    end
+
+    assert_reports_the_deadline operation
+  end
+
+  private
+    def assert_reports_the_deadline(operation)
+      @worker.instance_variable_set :@op, operation.operation_name
+      @worker.send :report_deadline, operation
+
+      line = @control.first.gets
+      assert_operator line.bytesize, :<=, HotCell::Worker::DISPATCH_BYTES,
+                      "the supervisor drops a report this size whole, narrowed deadline and all"
+      assert_equal 1, JSON.parse(line, symbolize_names: true)[:deadline]
+    end
 end
