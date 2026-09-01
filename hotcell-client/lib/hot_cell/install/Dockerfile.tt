@@ -12,6 +12,13 @@
 ARG RUBY_VERSION=3.4
 FROM ruby:${RUBY_VERSION}-slim
 
+# Apply Debian's pending security patches. `--pull` takes the newest base tag, and the tag can still be
+# behind an advisory that is already in `trixie-security`, because only a rebuild by docker-library/ruby
+# moves it. Upgrading here makes the image's patch level its own rather than upstream's release cadence,
+# and it is what keeps the image scan in CI passing on a fixable vulnerability the base has not picked up
+# yet. It costs a layer and a little build time on every build.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+
 # Install the tools and libraries your operations run — and nothing else. For example:
 #
 # RUN apt-get update && \
