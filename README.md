@@ -182,8 +182,10 @@ sequenceDiagram
 4. The worker narrows to the operation's limits, clamped to the cell's, before reading any untrusted byte,
    and re-runs `before_worker_boot` when the operation differs from the last one it served.
 5. `perform` runs on a fresh operation instance. An `Input` copies itself onto the slot's scratch the first
-   time the operation asks for its `path`; an operation that reads the descriptor directly never pays for
-   the copy. Outputs are posted back through their descriptors and flushed before success is reported.
+   time the operation asks for its `path`, and on darwin also for its `fd_path`, where `/dev/fd/N` is a dup
+   of the descriptor rather than a reopen of the file; an operation that reads the descriptor directly never
+   pays for the copy. Outputs are posted back through their descriptors and flushed before success is
+   reported.
 6. One JSON line answers: `ok` with the result and the timing, or a failure with its code.
 7. The supervisor enforces the deadline from outside, because a thread inside a C extension cannot be
    interrupted from within. A worker past its deadline is killed as a process group, and the supervisor --
@@ -468,9 +470,11 @@ class TransformImageOperation < HotCell::Operation
     source, = inputs
     destination, = outputs
 
-    # fd_path reads the caller's file in place, with no copy onto scratch, so an input of any size
-    # costs nothing against file_size. Reach for source.path only when a tool needs a distinct on-disk
-    # copy; that stages the bytes, and the kernel charges the write.
+    # fd_path reads the caller's file in place on Linux, with no copy onto scratch, so an input of any
+    # size costs nothing against file_size. On darwin it stages, because /dev/fd/N is a dup there rather
+    # than a reopen, so an input larger than file_size is refused as `fsize` on a development mac and
+    # analyzed in production. Reach for source.path only when a tool needs a distinct on-disk copy; that
+    # stages the bytes on both, and the kernel charges the write.
     MyImageProcessor.source(source.fd_path)
                     .apply(format:, operations)
                     .write_to(destination.fd_path)
