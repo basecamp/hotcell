@@ -124,14 +124,24 @@ module HotCell
     end
 
     private
-      # From byte zero rather than from wherever the descriptor is sitting, and without moving it. The
+      # From byte zero rather than from wherever the descriptor is sitting, and left where it was found. The
       # descriptor arrives over SCM_RIGHTS, so it carries the caller's own file offset: an application that
       # handed over an IO it had already read from would otherwise be staged a copy with its prefix
       # missing, where `/dev/fd/N` on a reopening platform reads the file whole. What a tool is given must
       # not depend on which of the two routes it came by.
+      #
+      # Seek and restore rather than `IO.copy_stream`'s own `src_offset`, which darwin ignores: there it
+      # copies with `fcopyfile` and the offset argument does not reach it, so a positional copy silently
+      # became a copy from the caller's position — on the one platform that now stages for every operation.
+      # Nothing else reads this descriptor while the copy runs: the client is blocked on the response and
+      # the worker serves one request.
       def copied_to(path)
-        File.open(path, "wb") { |file| IO.copy_stream(io, file, nil, 0) }
+        position = io.pos
+        io.pos = 0
+        File.open(path, "wb") { |file| IO.copy_stream(io, file) }
         path
+      ensure
+        io.pos = position
       end
   end
 
