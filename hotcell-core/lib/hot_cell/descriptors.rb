@@ -99,8 +99,9 @@ module HotCell
 
     # Copies the bytes onto the worker's own scratch on the first call and returns the filename. This is the
     # fallback, for an operation that genuinely needs a real file. Prefer `fd_path`, which reads the
-    # descriptor in place: staging is a write, so RLIMIT_FSIZE bounds it, and an input larger than the
-    # operation's file_size dies here as a permanent `fsize` verdict — a ceiling Rails does not have. The
+    # descriptor in place wherever `/dev/fd` reopens — Linux, and so production; see below for darwin, which
+    # stages and pays this same cost. Staging is a write, so RLIMIT_FSIZE bounds it, and an input larger than
+    # the operation's file_size dies here as a permanent `fsize` verdict — a ceiling Rails does not have. The
     # Active Storage operations all read `fd_path` for exactly that reason; nothing should reach for `path`
     # without a specific need for a distinct on-disk copy.
     #
