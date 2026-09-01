@@ -67,14 +67,12 @@ module HotCell
       #
       # A short count would be a torn line, which a write at or under PIPE_BUF cannot produce. Torn is worse
       # than dropped: the stub ends without a newline, nothing retries the rest, and the next line any
-      # process writes is glued to it — so a reader splitting on newlines gets one unparseable record where
-      # there were two, and loses an innocent line along with the one that tore.
+      # process writes is glued to it, so a reader splitting on newlines loses that line as well as this one.
       #
-      # Two lines can exceed it. cell.boot's inventory is written once before the loop enforces anything and
-      # against an empty pipe. worker.killed is the other, and it is the one to watch: 512 bytes of a
-      # worker's stderr become 3072 if every one of them is a control character, which leaves a few hundred
-      # bytes of headroom that the operation name and the envelope spend. Reachable only by an operation
-      # whose name runs to hundreds of bytes, so it is measured rather than seen — but it is measured
+      # Two lines can reach PIPE_BUF. cell.boot's inventory is written once against an empty pipe, before
+      # the loop enforces anything. worker.killed is the other: 512 bytes of a worker's stderr become 3072
+      # when every one is a control character, and the operation name and envelope spend most of what is
+      # left. Only a name running to hundreds of bytes closes the gap, so this is measured rather than seen,
       # against a bound nothing enforces.
       def emit(line)
         @io.write_nonblock line, exception: false

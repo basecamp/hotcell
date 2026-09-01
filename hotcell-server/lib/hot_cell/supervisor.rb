@@ -15,7 +15,7 @@ module HotCell
   # request is what lets it dispatch a connection whose descriptors are still queued on it.
   #
   # `peeked_op` is the one place it looks at a request, on the one path where no worker ever will, and it
-  # peeks rather than reads so that even there nothing leaves the connection.
+  # peeks so that even there nothing leaves the connection.
   #
   # Dispatching rather than letting workers accept is what makes the rest work. The supervisor needs to own
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
@@ -54,9 +54,8 @@ module HotCell
         self.dispatched_at = at
         self.deadline = deadline
         self.killed_for = nil
-        # Cleared here and set from the worker's own report, which arrives once it has parsed the request.
-        # A worker that dies before it reports has no operation to name, and naming the last one this slot
-        # served would read as attribution rather than as the guess it is.
+        # Set from the worker's own report, which arrives once it has parsed the request. A worker that
+        # dies first has no operation to name, and the last one this slot served would read as attribution.
         self.op = nil
         self.served += 1
       end
@@ -409,33 +408,25 @@ module HotCell
         false
       end
 
-      # The one request line the supervisor ever reads, and it reads it because this request is already
-      # over: the dispatch failed, no worker will serve it, and this is the side that answers it a line
-      # below. Every other request stays unread here, which is what lets `dispatch` hand a worker a
-      # connection whose bytes and descriptors are still queued on it.
+      # Safe only because this request is already over: the dispatch failed, no worker will serve it, and
+      # this is the side that answers it a line below.
       #
-      # A peek, and a bytes-only `recv` rather than `recvmsg`, so it takes neither. Two reasons, and the
-      # first is the one that decides it: `send_message` can send the ancillary data and then fail on the
-      # rest of the line, so this path can be reached with a worker already holding a copy of this
-      # connection — and a supervisor that had consumed the request would have taken it from that worker.
-      # The second is that a `recvmsg` would install the caller's descriptors here, in the process that
-      # holds every other connection and the listener.
+      # A peek, and a bytes-only `recv` rather than `recvmsg`, so it takes neither the bytes nor the
+      # descriptors. `send_message` can send the ancillary data and then fail on the rest of the line, so a
+      # worker may already hold a copy of this connection, and a consuming read would take the request from
+      # it. A `recvmsg` would also install the caller's descriptors in the process that holds every other
+      # connection and the listener.
       #
-      # Non-blocking, because a caller that has connected and not sent yet must never park the loop that
-      # enforces every other request's deadline. There is deliberately no retry: a line that has not all
-      # arrived leaves the operation unnamed, the same as one that never came.
+      # `recv_nonblock` rather than a blocking `recv` with `MSG_DONTWAIT`, which parks on an empty socket
+      # because Ruby waits for readability whatever the flag says. Nothing here may wait: a caller that has
+      # not sent yet would park the loop enforcing every other request's deadline. On 3.3, 3.4 and 4.0
+      # it leaves O_NONBLOCK alone, which matters because a worker's SCM_RIGHTS duplicate shares that flag.
       #
-      # It answers nil for anything that goes wrong, including a socket error and a line that will not
-      # parse. A log field is never worth the cell, and this runs inside that same loop.
+      # No retry, so a half-arrived line goes unnamed like one that never came, and nil for anything else
+      # that goes wrong: a log field is never worth the cell, and this runs in that same loop.
       #
-      # Not bounded to a registered operation the way a worker's report is, and the difference is which side
-      # the name came from. This is the request itself, from the trusted side, naming what a worker's own
-      # `request` line would have named had one ever read it. The peek limit bounds its size.
-      # `recv_nonblock` and not a blocking `recv` with `MSG_DONTWAIT`: Ruby's blocking `recv` waits for
-      # the socket to become readable and retries whatever that flag says, so it parks on an empty socket,
-      # which is the one thing this must never do. It leaves the socket as it found it — measured on 3.3,
-      # 3.4 and 4.0, `recv_nonblock` does not touch O_NONBLOCK, which matters because that flag lives on
-      # the open file description and a worker holding this connection through SCM_RIGHTS shares it.
+      # Not bounded to the registry the way a worker's report is. This is the request itself, from the
+      # trusted side, naming what the worker's own `request` line would have named had one read it.
       def peeked_op(connection)
         peeked = connection.socket.recv_nonblock(MAX_REQUEST_BYTES, Socket::MSG_PEEK, exception: false)
         return nil unless peeked.is_a?(String) && peeked.include?("\n")
@@ -716,10 +707,10 @@ module HotCell
           Codes::PERMANENT_BY_CAUSE.key?(cause)
       end
 
-      # The operation name rides the same untrusted report as the deadline and goes straight into a log
-      # line, so it is bounded to a name this cell registered rather than passed through. Unbounded, a
-      # compromised worker writes the better part of a `DISPATCH_BYTES` line of its own choosing into the
-      # cell's log on every request, and `worker.killed` is a line an operator reads to decide something.
+      # The name rides the same untrusted report as the deadline and goes straight into a log line, so it
+      # is bounded to one this cell registered. Unbounded, a compromised worker puts the better part of a
+      # `DISPATCH_BYTES` line of its own choosing into `worker.killed`, which an operator reads when
+      # deciding what to do about a kill.
       def reported_op(reported)
         reported if reported.is_a?(String) && Registry.lookup(reported)
       end

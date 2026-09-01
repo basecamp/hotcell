@@ -128,37 +128,32 @@ A crash:
 ## Which operation a line is about
 
 `hotcell.op` is what makes a cell's own logs answer "which operation did this?". A cell runs several
-operations at once and they do not share limits, so a `worker.killed` naming none of them cannot be
-acted on — and nothing else can supply the name either: the app-side response carries no operation, and
-`hotcell_killed` is tagged `cell` and `cause` only.
+operations at once and they do not share limits, so an unattributed `worker.killed` cannot be acted on, and
+nothing else supplies the name: the response carries no operation, and `hotcell_killed` is tagged `cell`
+and `cause` only.
 
 The two sides learn it differently, which is why it can be absent.
 
-A **worker** parses the name out of the request it is serving, so `request`, `request.abandoned` and
+A **worker** parses it out of the request it is serving, so `request`, `request.abandoned` and
 `worker.crashed` carry it from the moment the request parses until the worker goes back to waiting. A
-request that never parsed has no name, and a crash between requests has none either.
+request that never parsed has no name, and neither does a crash between requests.
 
-The **supervisor** never reads a request — staying out of it is what lets it dispatch a connection whose
-descriptors are still queued on it — so it learns the name from the worker's own report, sent once the
-worker has parsed the request and before it touches an untrusted byte. That is why `worker.killed` can
-name the operation at all: the worker is dead by the time that line is written. A worker that died before
-reporting leaves `hotcell.op` null rather than borrowing the name of the request the slot served last.
+The **supervisor** never reads a request a worker is going to serve, since staying out of it is what lets
+it dispatch a connection whose descriptors are still queued on it. It learns the name from the worker's
+report, sent once the request has parsed and before the worker touches an untrusted byte. That is what lets
+`worker.killed` name an operation the dead worker cannot report, and a worker that died first leaves the
+field null rather than borrowing the last request's name.
 
-Because it arrives from the one process here that runs untrusted code, a reported name is bounded to an
-operation this cell registered before it is written down. That bound is on the worker's report and nowhere
-else: a `request` line names whatever the caller asked for, including a name no operation answers to, which
-is the case `unsupported` is about and the one worth seeing.
+That report comes from the one process here that runs untrusted code, so the name is bounded to an
+operation this cell registered. The bound is on the report and nowhere else: a `request` line names
+whatever the caller asked for, including a name no operation answers to, which is what `unsupported` is
+about and worth seeing. A name whose report would not fit one control line is not sent at all, so
+`worker.killed` goes unattributed rather than losing the narrowed deadline that shares the line.
 
-A name whose report would not fit one control line is not sent to the supervisor at all, so
-`worker.killed` goes unattributed rather than the narrowed deadline riding with it being lost. This bounds
-what crosses the control socket and nothing else: the worker writes its own lines, so `request`,
-`request.abandoned` and `worker.crashed` still name an operation of any length.
-
-`worker.undispatchable` is the exception to all of that, and the one line where the supervisor reads a
-request. The worker died between the fork and the dispatch write, so nothing has read the request and the
-supervisor is the side that answers it. It peeks the line rather than reading it, so neither the bytes nor
-the caller's descriptors leave the connection, and it never waits: a caller that has not sent yet, or a
-line still arriving, leaves the field null.
+`worker.undispatchable` is the exception, and the one line where the supervisor reads a request: the worker
+died between the fork and the dispatch write, so nothing else has read it. It peeks rather than reads, so
+neither the bytes nor the caller's descriptors leave the connection, and it never waits, so a request that
+has not arrived leaves the field null.
 
 ## The contract with the collector
 
