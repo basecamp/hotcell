@@ -15,19 +15,24 @@ module HotCell
   class Failure
     MAX_MESSAGE_BYTES = 512
 
-    attr_reader :code, :message, :error_class, :cause, :signal
+    attr_reader :code, :message, :error_class, :cause, :signal, :stderr
 
-    # Every field is sanitized, not only the message. All five arrive from the wire on the client side, so
-    # all five carry whatever the peer put there — and they travel further than the message does, into
+    # Every field is sanitized, not only the message. All of them arrive from the wire on the client side,
+    # so all of them carry whatever the peer put there — and they travel further than the message does, into
     # `to_s`, into the `perform.hot_cell` event, and into whatever a subscriber writes down. `code` in
-    # particular is the field applications store. Scrubbing one and not the other four left the same
-    # poisoned row the scrub exists to prevent, reachable through a different key.
-    def initialize(code:, permanent: nil, message: nil, error_class: nil, cause: nil, signal: nil)
+    # particular is the field applications store. Scrubbing one and not the rest left the same poisoned row
+    # the scrub exists to prevent, reachable through a different key.
+    def initialize(code:, permanent: nil, message: nil, error_class: nil, cause: nil, signal: nil,
+                   stderr: nil)
       @code = self.class.sanitize(code).to_s
       @cause = self.class.sanitize(cause)
       @signal = self.class.sanitize(signal)
       @error_class = self.class.sanitize(error_class)
       @message = self.class.sanitize(message)
+
+      # The tail, because this is a transcript and its last line is the one that ended the request. Every
+      # other field is one message, where the head is what matters.
+      @stderr = self.class.sanitize(stderr, keep: :tail)
       @permanent = permanent.nil? ? Codes.permanent?(@code, cause: @cause) : permanent
     end
 
@@ -40,11 +45,15 @@ module HotCell
     # `permanent` is the exception and survives, because compact drops only nil.
     def to_h
       { code: code, permanent: permanent? }
-        .merge(cause: cause, signal: signal, class: error_class, message: message).compact
+        .merge(cause: cause, signal: signal, class: error_class, message: message, stderr: stderr).compact
     end
 
+    # `one_line` rather than raw interpolation: `to_s` becomes the exception message an application logs, and
+    # a transcript ends in a newline — so a peer that put newlines in one writes extra lines into that log.
+    # The attribute keeps the raw text.
     def to_s
-      [ code, cause, error_class, message ].compact.join(": ")
+      text = [ code, cause, error_class, message ].compact.join(": ")
+      stderr ? "#{text} (#{self.class.one_line(stderr)})" : text
     end
 
     class << self
@@ -73,7 +82,7 @@ module HotCell
         end
 
         new code: wire[:code], permanent: permanent, cause: wire[:cause], signal: wire[:signal],
-            error_class: wire[:class], message: wire[:message]
+            error_class: wire[:class], message: wire[:message], stderr: wire[:stderr]
       end
 
       # For a message that is about to be written as one line of a log. `sanitize` leaves CR and LF alone,
@@ -84,11 +93,20 @@ module HotCell
         sanitize(text)&.gsub(/[[:cntrl:]]/) { |character| character.dump[1..-2] }
       end
 
-      def sanitize(message)
+      # `keep: :tail` is for a captured stream rather than a message, and it is load-bearing on `from_wire`:
+      # a cell this client does not trust can fill that field to the response limit, and head-truncating
+      # there hands the caller the noise a decoder printed first instead of the fatal that ended it.
+      def sanitize(message, keep: :head)
         return nil if message.nil?
 
-        String(message).dup.force_encoding(Encoding::UTF_8)
-          .scrub("").byteslice(0, MAX_MESSAGE_BYTES).scrub("")
+        text = String(message).dup.force_encoding(Encoding::UTF_8).scrub("")
+        text = if keep == :tail && text.bytesize > MAX_MESSAGE_BYTES
+          text.byteslice(text.bytesize - MAX_MESSAGE_BYTES, MAX_MESSAGE_BYTES)
+        else
+          text.byteslice(0, MAX_MESSAGE_BYTES)
+        end
+
+        text.scrub("")
       end
     end
   end

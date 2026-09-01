@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "fcntl"
 require "fileutils"
 
 # Fixture operations, so the whole surface can be exercised in milliseconds, with no tool installed and no
@@ -459,6 +460,58 @@ module HotCell
         sleep seconds
 
         { slept: seconds, pid: Process.pid }
+      end
+    end
+
+    # Writes to fd 2 and then either dies the way a C library does — `exit()` with no Ruby exception, so
+    # there is no `worker.crashed` line and nothing on the connection — or returns normally, which is the
+    # warning a cell deliberately does not report. `noise:` goes out before `text:`, so a test can ask which
+    # end of an oversized transcript was kept.
+    class StderrWriter < HotCell::Operation
+      operation "test.stderr_writer"
+
+      def perform(_inputs, _outputs, text:, noise: 0, fatal: false)
+        $stderr.write "noise\n" * noise
+        $stderr.write text
+        $stderr.flush
+        exit! 1 if fatal
+
+        { wrote: text.bytesize }
+      end
+    end
+
+    # Bytes that are not valid UTF-8, which a payload cannot carry — so this is a fixture rather than an
+    # argument to StderrWriter. A decoder writing a filename out of a hostile file is where these come from.
+    class GarbledStderr < HotCell::Operation
+      operation "test.garbled_stderr"
+
+      def perform(_inputs, _outputs)
+        $stderr.write "libgomp: \xFF\xFE failed\n".b
+        $stderr.flush
+        exit! 1
+      end
+    end
+
+    # Reports whether fd 2 is non-blocking, which is the load-bearing decision behind the capture: a
+    # blocking fd 2 would put the supervisor's scheduling in the middle of a libvips `write(2)`.
+    class StderrFlags < HotCell::Operation
+      operation "test.stderr_flags"
+
+      def perform(_inputs, _outputs)
+        { nonblock: ($stderr.fcntl(Fcntl::F_GETFL) & Fcntl::O_NONBLOCK).positive? }
+      end
+    end
+
+    # A tool that keeps writing to fd 2 after the worker itself is gone. fd 2 is never close-on-exec, so
+    # everything a worker spawned holds the write end, and the pipe reports no end of stream until the
+    # reap's group sweep kills them.
+    class StderrDescendant < HotCell::Operation
+      operation "test.stderr_descendant"
+
+      def perform(_inputs, _outputs)
+        spawn "sh", "-c", "while :; do echo from the descendant >&2; done"
+        sleep 0.5
+        exit! 1
       end
     end
   end

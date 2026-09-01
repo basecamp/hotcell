@@ -112,6 +112,29 @@ class ResponseTest < HotCellTest
     assert_predicate failure.to_s, :valid_encoding?
   end
 
+  # `to_s` becomes the exception message an application logs, and a captured transcript ends in a newline.
+  # Interpolated raw, a peer writes extra lines into that log — formatted and indented like the real ones.
+  def test_to_s_is_one_physical_line_even_with_a_captured_transcript
+    failure = HotCell::Failure.new(code: "killed", cause: "crashed",
+                                   stderr: "\nlibgomp: Thread creation failed\n")
+
+    assert_equal 1, failure.to_s.lines.size
+    assert_equal %(killed: crashed (\\nlibgomp: Thread creation failed\\n)), failure.to_s
+    assert_equal "\nlibgomp: Thread creation failed\n", failure.stderr
+  end
+
+  # The cell trims to the tail before it sends, but this is the call site where that cannot be assumed: the
+  # field arrives from a cell the client does not trust, on a line that may carry up to MAX_RESPONSE_BYTES.
+  # Head-truncating here hands the caller the noise a decoder printed first instead of the fatal that ended
+  # the request.
+  def test_from_wire_keeps_the_tail_of_an_oversized_stderr
+    fatal = "libgomp: Thread creation failed\n"
+    failure = HotCell::Failure.from_wire(code: "killed", stderr: ("noise\n" * 5000) + fatal)
+
+    assert_equal HotCell::Failure::MAX_MESSAGE_BYTES, failure.stderr.bytesize
+    assert failure.stderr.end_with?(fatal), "expected the tail and got #{failure.stderr.inspect}"
+  end
+
   def test_a_response_that_is_not_an_object
     assert_raises(HotCell::MessageError) { HotCell::Response.parse("[]\n") }
   end
