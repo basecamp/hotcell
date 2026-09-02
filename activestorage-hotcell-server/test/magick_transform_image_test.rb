@@ -49,6 +49,24 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # The production shape that surfaced this: a multi-layer source, its frames kept by
+  # `loader: { page: nil }`, into a single-layer destination. ImageProcessing refuses the
+  # combination, which is a verdict on the input — unclassified it was a transient `failed`
+  # that never marked the blob, so the same file spent a full conversion on every request.
+  def test_a_multi_layer_source_into_a_single_layer_format_is_unreadable
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.transformers.image.magick",
+                                                        inputs: [ fixture("animated.gif") ], outputs: [ destination ],
+                                                        payload: { format: "jpg",
+                                                                   operations: { loader: { page: nil }, resize_to_limit: [ 20, 20 ] } })
+
+        assert_predicate failure, :permanent?
+        assert_match "multi-layer", failure.message
+      end
+    end
+  end
+
   def test_combine_options_is_refused
     Cell.boot do |cell|
       with_output do |destination|
