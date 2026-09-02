@@ -11,19 +11,19 @@ This changelog covers five gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
-## next / unreleased
+## v0.3.1 / 2026-09-02
 
 ### HotCell::Core
 
 #### Fixed
 
-* `Descriptor#fd_path` answers with the filename behind the descriptor on macOS rather than `/dev/fd/N`. Opening `/dev/fd/N` is a real open on Linux and a `dup(2)` on macOS, where `/dev/fd` has no procfs behind it, so every opener shared one offset: libvips, which opens the path once per candidate loader while it sniffs a format, read past a HEIC file's magic bytes and reported a readable file as `unreadable`. macOS is a development platform for a cell and nothing else — uncontainerized, running as the caller — so this trades away the property that no path the cold side chose is visible to a tool, on the one platform where that path was already within reach. Linux is untouched.
+* `Descriptor#fd_path` answers with the filename behind the descriptor on macOS rather than `/dev/fd/N`, where every opener shared one offset and libvips reported a readable HEIC file as `unreadable`. Linux is untouched. (#50)
 
 ### ActiveStorage::HotCell::Server
 
 #### Fixed
 
-* `MagickOperation` and `VipsOperation` classify `ImageProcessing::Error` as `unreadable`, beside the backend errors it belongs with. It is the pipeline's own verdict on an input against the requested transform — a multi-layer source into a single-layer destination, in the shape that surfaced this. Unclassified it answered `failed`: transient, so the blob was never marked, the application rendered a placeholder against no record, and the same file spent another full conversion on every future request. In production that was a 20.9MB multi-layer image requested with `loader: { page: nil }` into a jpeg, refused after 17 seconds of decode. The in-process path these operations replaced treated `ImageProcessing::Error` as permanent, so this restores prior behaviour rather than adding a verdict that was not there before. The declaration is wider than the multi-layer case and deliberately so: `ImageProcessing::Error` is a bare `StandardError` subclass with no subtypes, and narrowing would mean matching a message string. The two caller-bug shapes reachable through `Transforming#pipeline` — a `loader:` or `saver:` option whose name collides with a Ruby core method on magick, `resize_to_limit` or `resize_to_fit` with both dimensions nil on vips — now answer `unreadable` and permanent along with it.
+* `MagickOperation` and `VipsOperation` classify `ImageProcessing::Error` as `unreadable` and permanent. Before, it answered `failed`, which is transient, so a file the pipeline had already refused was reconverted on every future request. (#42)
 
 
 ## v0.3.0 / 2026-09-01
