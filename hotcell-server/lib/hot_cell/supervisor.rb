@@ -1033,7 +1033,7 @@ module HotCell
         scratch_entries(scratch).each do |name|
           path = File.join(scratch, name)
           next unless File.lstat(path).uid == Process.uid
-          next if Slot.remove_tree(path)
+          next if Filesystem.remove_tree(path)
 
           log.write "scratch.unswept", path: path
         end
@@ -1042,7 +1042,7 @@ module HotCell
       end
 
       # The root's mode is the one a tool can set that the walk itself trips on, and the root is this uid's
-      # on the documented layouts. Put it back only once listing has failed, as `Slot.remove_tree` does.
+      # on the documented layouts. Put it back only once listing has failed, as `Filesystem.remove_tree` does.
       def scratch_entries(scratch)
         Dir.children scratch
       rescue Errno::EACCES
