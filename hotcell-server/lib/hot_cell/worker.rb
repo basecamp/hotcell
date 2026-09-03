@@ -116,6 +116,9 @@ module HotCell
           # `run`, which exits the worker — after this ensure had already reported idle `"ok"`, counting a
           # success for a request that never ran.
           ENV["HOME"] = slot.make_home
+          # The home is removed however the request ends, and `/tmp` is swept by nobody. A library's scratch
+          # goes where `TMPDIR` says, so it goes here too — whatever the library, and whatever kills the worker.
+          ENV["TMPDIR"] = ENV["HOME"]
 
           line, received = connection.receive_message
           response = if line.nil?

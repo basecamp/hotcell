@@ -59,7 +59,7 @@ SECURE = {
   cap_bound: 0,
   no_new_privs: true,
   uid: 10001,
-  tool_env: %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH ],
+  tool_env: %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH TMPDIR ],
   tool_omp: %w[ OMP_NUM_THREADS=2 OMP_THREAD_LIMIT=8 ],
 }.freeze
 

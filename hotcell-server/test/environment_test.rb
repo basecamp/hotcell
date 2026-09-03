@@ -42,6 +42,20 @@ class EnvironmentTest < HotCellServerTest
     end
   end
 
+  # A tool's scratch goes where `TMPDIR` says, and the request's home is the one directory removed however
+  # the request ends.
+  def test_a_tool_writes_its_temp_files_in_the_requests_home
+    with_canary do
+      TestCell.boot do |cell|
+        seen = assert_ok(cell.call("test.environment", payload: { canary: CANARY })).result[:seen]
+
+        home = seen.grep(/\AHOME=/).first.delete_prefix("HOME=")
+
+        assert_includes seen, "TMPDIR=#{home}"
+      end
+    end
+  end
+
   def test_a_tool_gets_a_predictable_locale_so_its_output_does_not_shift_under_it
     with_canary do
       TestCell.boot do |cell|

@@ -190,7 +190,7 @@ module Examples
         assert result[:uid].to_i.positive?, "the cell runs as root or could not report its uid: #{result[:uid].inspect}"
 
         assert result[:tool_env], "the env tool could not run inside the cell"
-        extra = result[:tool_env] - %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH ]
+        extra = result[:tool_env] - %w[ HOME LANG LC_ALL OMP_NUM_THREADS OMP_THREAD_LIMIT PATH TMPDIR ]
         assert_equal [], extra, "an exec'd tool sees more than the written environment"
 
         # The one check here about the image rather than the runtime. An unbounded OpenMP pool takes one
