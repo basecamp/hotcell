@@ -33,16 +33,15 @@ class ScratchTest < RegistryIsolatedTest
     assert_equal [ "hotcell-workspace" ], Dir.children(@elsewhere)
   end
 
-  def test_boot_leaves_lost_and_found_alone
+  # The real lost+found is the filesystem's and root's, so ownership is what spares it. A directory of that
+  # name this uid owns is a worker's, and a name that was spared was a name a worker could fill.
+  def test_boot_removes_a_lost_and_found_the_cell_owns
     FileUtils.mkdir File.join(@elsewhere, "lost+found")
-    File.write File.join(@elsewhere, "lost+found", "#1234"), "recovered"
-    File.chmod 0o500, File.join(@elsewhere, "lost+found")
-    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+    File.write File.join(@elsewhere, "lost+found", "magick-abc123"), "pixel cache"
 
     boot TestCell.new, workspace: File.join(@elsewhere, "hotcell-workspace")
 
-    refute File.exist?(File.join(@elsewhere, "magick-abc123"))
-    assert File.exist?(File.join(@elsewhere, "lost+found", "#1234"))
+    refute Dir.exist?(File.join(@elsewhere, "lost+found"))
   end
 
   def test_boot_unlinks_a_symlink_without_following_it
@@ -57,36 +56,72 @@ class ScratchTest < RegistryIsolatedTest
     end
   end
 
-  def test_a_removal_that_fails_is_logged_and_boot_carries_on
+  def test_boot_puts_back_the_modes_a_tool_changed_and_removes_the_tree
     locked = File.join(@elsewhere, "locked")
-    FileUtils.mkdir locked
-    File.write File.join(locked, "inside"), "x"
+    FileUtils.mkdir_p File.join(locked, "inside")
+    File.write File.join(locked, "inside", "tile"), "x"
+    File.chmod 0o500, File.join(locked, "inside")
     File.chmod 0o500, locked
-    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
 
-    boot TestCell.new, workspace: File.join(@elsewhere, "hotcell-workspace") do |cell|
-      assert_ok cell.call("test.echo")
-      cell.stop
+    boot TestCell.new, workspace: File.join(@elsewhere, "hotcell-workspace")
 
-      uncleaned = cell.log_events("scratch.uncleaned")
-
-      assert_equal 1, uncleaned.size
-      assert_equal locked, uncleaned.first.dig(:hotcell, :path)
-    end
-
-    assert_equal [ "hotcell-workspace", "locked" ], Dir.children(@elsewhere).sort
+    refute Dir.exist?(locked)
   end
 
-  def test_boot_leaves_the_socket_directory_when_it_lives_in_the_scratch
+  def test_boot_puts_back_the_mode_of_a_scratch_root_it_cannot_list
+    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+    File.chmod 0o300, @elsewhere
+
+    boot TestCell.new, workspace: File.join(@elsewhere, "hotcell-workspace")
+
+    refute File.exist?(File.join(@elsewhere, "magick-abc123"))
+  end
+
+  def test_a_removal_that_still_fails_is_logged_and_boot_carries_on
+    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+
+    cell = TestCell.new
+    cell.instance_variable_get(:@supervisor_options)[:workspace] = File.join(@elsewhere, "hotcell-workspace")
+    stub_remove_entry_to_fail { cell.start }
+
+    assert_ok cell.call("test.echo")
+    cell.stop
+    unswept = cell.log_events("scratch.unswept")
+
+    assert_equal [ File.join(@elsewhere, "magick-abc123") ], unswept.map { |event| event.dig(:hotcell, :path) }
+    assert_equal [ "WARN" ], unswept.map { |event| event.dig(:log, :level) }
+  ensure
+    cell&.stop
+    cell&.cleanup
+  end
+
+  def test_a_socket_directory_inside_the_scratch_refuses_to_boot
     cell = TestCell.new
     FileUtils.mkdir_p cell.tmpdir
-    socket_directory = File.join(cell.tmpdir, "sockets")
-    cell.instance_variable_set(:@directory, socket_directory)
+    cell.instance_variable_set(:@directory, File.join(cell.tmpdir, "sockets"))
 
-    boot cell, workspace: cell.workspace do
-      assert_ok cell.call("test.echo")
-      assert File.socket?(File.join(socket_directory, "work.sock"))
+    error = assert_raises(RuntimeError) { boot cell, workspace: cell.workspace }
+
+    assert_match "is inside the scratch", error.message
+  end
+
+  def test_a_scratch_root_that_is_a_symlink_refuses_to_boot
+    Dir.mktmpdir "hotcell-target" do |target|
+      File.symlink target, File.join(@elsewhere, "link")
+
+      error = assert_raises(RuntimeError) do
+        boot TestCell.new, workspace: File.join(@elsewhere, "link", "hotcell-workspace")
+      end
+
+      assert_match "is a symlink", error.message
+      assert_empty Dir.children(target)
     end
+  end
+
+  def test_a_relative_workspace_refuses_to_boot
+    error = assert_raises(RuntimeError) { boot TestCell.new, workspace: "hotcell-workspace" }
+
+    assert_match "is not an absolute path", error.message
   end
 
   private
@@ -97,5 +132,14 @@ class ScratchTest < RegistryIsolatedTest
     ensure
       cell.stop
       cell.cleanup
+    end
+
+    # The cell forks from this process, so a stub installed here is inherited by the supervisor.
+    def stub_remove_entry_to_fail
+      original = FileUtils.method(:remove_entry)
+      FileUtils.define_singleton_method(:remove_entry) { |*| raise Errno::ENOTEMPTY, "induced" }
+      yield
+    ensure
+      FileUtils.define_singleton_method(:remove_entry, original)
     end
 end
