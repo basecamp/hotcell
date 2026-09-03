@@ -83,6 +83,19 @@ class InstallTest < HotCellClientTest
     end
   end
 
+  # ImageMagick's default disk limit is unbounded, and one layered PSD is enough to fill the scratch every
+  # worker shares. The failure only appears in a running cell, so the scaffold's own text is what holds it.
+  def test_install_bounds_imagemagicks_spill_to_a_workers_share_of_scratch
+    Dir.mktmpdir do |root|
+      HotCell::Install.call(root, out: StringIO.new)
+      dockerfile = File.read(File.join(root, "hotcell", "Dockerfile"))
+
+      disk, map = %w[ DISK MAP ].map { |name| dockerfile[/^\s*MAGICK_#{name}_LIMIT=(\d+)MiB\s*\\?$/, 1] }
+      assert disk, "no MAGICK_DISK_LIMIT"
+      assert_operator Integer(map), :<=, Integer(disk)
+    end
+  end
+
   # `--pull` takes the newest base tag, but that tag itself can sit behind a Debian advisory until
   # docker-library/ruby rebuilds it, and the image scan gate blocks on a fixable High no rebuild of this
   # repository can clear. Applying the pending security patches during the build makes the gate's claim the

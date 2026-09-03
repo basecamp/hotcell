@@ -223,6 +223,9 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |
 | `OMP_THREAD_LIMIT` | `8` | The ceiling on that pool, including a library that raises the count itself. |
+| `MAGICK_MEMORY_LIMIT` | `256MiB` | Heap for ImageMagick's pixel caches, all frames together; a cache that does not fit goes to scratch whole. `(memory − tmpfs) ÷ concurrency`, less the worker's own footprint. See "Size ImageMagick's pixel cache limits". |
+| `MAGICK_DISK_LIMIT` | `16MiB` | Scratch for the caches that missed memory, all frames together; past it the file is `unreadable`. `min(file_size, (scratch − reserve) ÷ concurrency − staged files × file_size)`. |
+| `MAGICK_MAP_LIMIT` | `16MiB` | How much of that spill is memory-mapped rather than read with plain I/O. Same files, same scratch: set it equal to `MAGICK_DISK_LIMIT`. |
 
 ### Bound the OpenMP thread pools
 
@@ -264,6 +267,109 @@ own.
 To verify a built image, write a GIF inside it and count `/proc/self/task` during the write. GIF is the
 cheapest probe: it is the only common output format that quantizes, and quantization is where the threads
 appear. Unbounded, the count tracks the visible cores; bounded, it stays at the limit.
+
+### Size ImageMagick's pixel cache limits
+
+**Set `MAGICK_MEMORY_LIMIT`, `MAGICK_DISK_LIMIT` and `MAGICK_MAP_LIMIT` in the image.** The installed
+`Dockerfile` sets all three, sized for the worked example below. `hotcell:install` leaves an existing
+`Dockerfile` untouched, so add them by hand to a cell installed before this and rebuild its image. The
+scaffold installs no ImageMagick; the numbers are for whichever build your operations bring, and this
+section is how to recompute them for your accessory.
+
+**What ImageMagick does with them.** ImageMagick decodes every frame of an image into a *pixel cache*: an
+uncompressed copy, `width × height × bytes per pixel`. Bytes per pixel comes from the build: ImageMagick 6
+Q16, which Basecamp's cell image carries, stores four 16-bit channels, so 8, or 10 when the image also
+carries a black or colormap-index channel (CMYK, palette). ImageMagick 7 stores 2 bytes a channel, or 4 in
+an HDRI build, for the channels the image has. So a 4096 × 4096 RGB image is 128MiB at 8 bytes a pixel before
+anything is done to it, and a layered PSD holds one cache per layer, all at once. A transform holds the
+source and the result at the same time, and some operations hold intermediates as well. `-debug cache`
+prints the size of each cache as it opens. Where a cache goes is decided by three limits
+([resources](https://imagemagick.org/script/resources.php)), and all three count the process's caches
+together, not one at a time:
+
+1. `MAGICK_MEMORY_LIMIT` — heap. A new cache goes here while the caches already open plus this one fit.
+2. When it does not fit, the whole cache goes to a file under `MAGICK_TMPDIR` instead — the request's
+   directory on scratch — and counts against `MAGICK_DISK_LIMIT`. `MAGICK_MAP_LIMIT` decides whether that
+   file is memory-mapped or read with plain I/O; it is the same file on the same scratch either way, so
+   there is no reason to set it above `MAGICK_DISK_LIMIT`.
+3. When a cache does not fit under `MAGICK_DISK_LIMIT` either, ImageMagick fails with
+   `cache resources exhausted`. The cell reports that as `unreadable`: a permanent verdict on the file.
+
+A cache never straddles a limit: it goes into memory whole or to disk whole. Two consequences worth
+stating plainly. One frame is readable only if it fits under `MAGICK_MEMORY_LIMIT` or under
+`MAGICK_DISK_LIMIT` on its own, so the larger of the two is the largest single frame the cell decodes.
+A multi-frame file is readable only if all its frames together fit under both added together.
+
+ImageMagick's own defaults are most of the host's RAM and an unbounded disk, and `policy.xml` in the
+image is a ceiling the environment can lower and never raise; `identify -list resource` shows what a
+build ends up with. Check `identify -list policy` too: a `temporary-path` policy overrides `MAGICK_TMPDIR`
+and would put the spill outside the request's directory. Basecamp's current image has it commented out.
+`MAGICK_AREA_LIMIT` is not set: an image over `area` is sent to disk rather than memory, not refused, so it
+only moves step 1's line, and the memory limit already draws it.
+
+**Why the disk limit exists.** Without it, step 2 has no ceiling: a layered PSD writes one cache file per
+layer until the scratch is full. `file_size` is `RLIMIT_FSIZE`, a limit on each file, and cannot bound
+the sum. A full scratch fails every image that arrives while it is full, which is what happened to
+Basecamp on 2026-09-01 — see "Making the numbers agree".
+
+**The arithmetic, on the worked example.** Container `memory: 2g`, tmpfs `size=512m`, `concurrency: 4`,
+and the image operations' `file_size: 48MB`. Every "MB" here is `1024²` bytes, as `config.rb` writes it.
+
+*Scratch.* The disk limit counts ImageMagick's cache files and nothing else, and they are not the only
+files on the tmpfs: each request's directory holds its staged input and its output, and libvips writes
+its own temporary files under `TMPDIR` for an image above its disc threshold. So keep a reserve out of
+the tmpfs first, then split the rest four ways. The `transformers.image.magick` operation stages its input
+(mini_magick cannot take a descriptor) and writes its output, each up to `file_size`, so 96MiB of a
+worker's share is spoken for before ImageMagick spills anything. What is left is the disk limit. It must
+also stay at or under `file_size`: `RLIMIT_FSIZE` bounds each cache file, and a disk limit above it would
+let the kernel's per-file limit fire before ImageMagick's own check does, so the refusal would come from a
+different place with a different error. The 64MiB reserve is an illustrative margin; size yours from the
+peak of everything else on the tmpfs with every worker busy, not counting the staged files the formula
+already subtracts:
+
+    available         = (scratch − reserve) ÷ concurrency − staged files × file_size
+                      = (512MiB − 64MiB) ÷ 4 − 2 × 48MiB = 112MiB − 96MiB = 16MiB
+    MAGICK_DISK_LIMIT = min(file_size, available) = min(48MiB, 16MiB) = 16MiB
+    MAGICK_MAP_LIMIT  = MAGICK_DISK_LIMIT = 16MiB
+
+`available` must come out at zero or more. Below zero the staged files alone do not fit the share, so
+enlarge scratch or lower `file_size` or `concurrency`; do not write a negative number, which ImageMagick
+reads as a huge one. Four workers each at that peak at once take `4 × (96 + 16) = 448MiB`, and the 64MiB
+reserve is what everything else on the tmpfs has.
+
+*Memory.* The container's `memory` is a cgroup limit, and on the default accessory the tmpfs is charged to
+it byte for byte — see "Where scratch lives" — so the processes get what the scratch cannot take:
+
+    for processes         = memory − tmpfs = 2048MiB − 512MiB = 1536MiB
+    per worker            = 1536MiB ÷ 4 = 384MiB
+    a worker's own cost   ≈ 70MiB resident with libvips and mini_magick loaded, plus about 12MiB for the
+                            `magick` it spawns (measured with the gems loaded and in Basecamp's cell image;
+                            measure yours as `VmRSS` in `/proc/<pid>/status` of a worker that has served a
+                            request)
+    ceiling               = 384MiB − 82MiB = 302MiB
+    MAGICK_MEMORY_LIMIT   = 256MiB
+
+256MiB is the round number under that ceiling. The 46MiB a worker it leaves is for the supervisor and
+for what the tools allocate outside the pixel cache, which the limit does not count: libvips' own
+buffers, coder scratch, and any algorithm ImageMagick documents as not honouring its limits. Four workers
+at the limit and a full tmpfs are 4 × 338 + 512 = 1864MiB against the 2048MiB cgroup. Past the cgroup the
+kernel picks a victim in the cell and sends `SIGKILL` with no diagnostic. The cell's own `memory`
+(`RLIMIT_DATA`, 1280MB for the transformer) is inherited by the `magick` child and sits well above this,
+so it is not what stops a large image here.
+
+*What that buys.* At 8 bytes a pixel, 256MiB holds 33.5 million pixels of RGB(A) — 5792 × 5792, or 8192 ×
+4096 — or 26.8 million with an index channel. That is the sum of every cache open at once: a same-size
+transform needs two of them, a thumbnail little more than the source, an operation with intermediates
+more. 16MiB on disk adds nothing to a single frame, since a frame that misses memory needs to
+fit on disk on its own; the caches of a multi-frame file may total 272MiB. Anything larger is `unreadable`
+once ImageMagick reaches the cache, with an empty scratch, instead of a full scratch and a dead cell. The
+2026-09-01 PSD had a 10GiB disk limit against a 4G mount, so it was never refused.
+
+**Recompute all three** when `memory`, the tmpfs `size=`, `concurrency`, the reserve or the image
+operations' `file_size` move, and read the pixel counts again when the ImageMagick build's bytes per
+pixel differ. The limits are per ImageMagick process, not per worker: an operation that ran two at once
+would get two allowances. The formulas are repeated in the
+`Dockerfile` next to the values.
 
 ### Sizing the numbers
 
@@ -503,7 +609,7 @@ matching, storing or rendering are all places these values raise.
 
 ## Making the numbers agree
 
-Nothing checks these three for you.
+Nothing checks these for you.
 
 - The client's `timeout` must be more than the cell's `answer_within`, which is
   `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
@@ -513,6 +619,11 @@ Nothing checks these three for you.
 - `file_size × concurrency` must fit scratch. Above it, concurrent workers fill it and requests fail
   with `ENOSPC` instead of with a limit verdict. On the default accessory scratch is the tmpfs, and its
   `size=` is the number to fit.
+- `MAGICK_DISK_LIMIT` must fit a worker's share of scratch beside the files that worker stages there,
+  and `MAGICK_MEMORY_LIMIT` must fit a worker's share of the container's `memory` after the tmpfs is
+  taken out. Larger values eat the reserves, and once those are gone a busy cell gets `ENOSPC` across
+  every worker or a cgroup kill instead of one `unreadable`. The arithmetic is under "Size ImageMagick's
+  pixel cache limits".
 
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
