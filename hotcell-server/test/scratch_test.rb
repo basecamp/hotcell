@@ -77,6 +77,28 @@ class ScratchTest < RegistryIsolatedTest
     refute File.exist?(File.join(@elsewhere, "magick-abc123"))
   end
 
+  def test_boot_puts_back_the_mode_of_a_scratch_root_it_cannot_unlink_from
+    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+    File.chmod 0o500, @elsewhere
+
+    boot TestCell.new, workspace: File.join(@elsewhere, "hotcell-workspace")
+
+    refute File.exist?(File.join(@elsewhere, "magick-abc123"))
+  end
+
+  def test_boot_puts_back_the_mode_of_a_tmpdir_its_owner_cannot_write
+    cell = TestCell.new
+    FileUtils.mkdir_p cell.tmpdir
+    File.write File.join(cell.tmpdir, "magick-abc123"), "pixel cache"
+    File.chmod 0o500, cell.tmpdir
+
+    boot cell, workspace: cell.workspace do
+      assert_ok cell.call("test.echo")
+    end
+
+    refute File.exist?(File.join(cell.tmpdir, "magick-abc123"))
+  end
+
   def test_a_removal_that_still_fails_is_logged_and_boot_carries_on
     File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
 
@@ -113,8 +135,41 @@ class ScratchTest < RegistryIsolatedTest
         boot TestCell.new, workspace: File.join(@elsewhere, "link", "hotcell-workspace")
       end
 
-      assert_match "is a symlink", error.message
+      assert_match "is a symlink the cell's uid owns", error.message
       assert_empty Dir.children(target)
+    end
+  end
+
+  def test_a_scratch_root_that_is_a_file_refuses_to_boot
+    File.write File.join(@elsewhere, "cell"), "was a directory"
+
+    error = assert_raises(RuntimeError) do
+      boot TestCell.new, workspace: File.join(@elsewhere, "cell", "hotcell-workspace")
+    end
+
+    assert_match "is not a directory", error.message
+  end
+
+  def test_a_missing_scratch_root_refuses_to_boot
+    error = assert_raises(RuntimeError) do
+      boot TestCell.new, workspace: File.join(@elsewhere, "gone", "hotcell-workspace")
+    end
+
+    assert_match "the scratch is missing", error.message
+  end
+
+  def test_a_symlink_the_cell_owns_above_the_scratch_root_refuses_to_boot
+    Dir.mktmpdir "hotcell-target" do |target|
+      FileUtils.mkdir_p File.join(target, "cell")
+      File.write File.join(target, "cell", "keep"), "not the cell's"
+      File.symlink target, File.join(@elsewhere, "link")
+
+      error = assert_raises(RuntimeError) do
+        boot TestCell.new, workspace: File.join(@elsewhere, "link", "cell", "hotcell-workspace")
+      end
+
+      assert_match "is a symlink the cell's uid owns", error.message
+      assert File.exist?(File.join(target, "cell", "keep"))
     end
   end
 
