@@ -17,6 +17,9 @@ require "etc"
 # does not read it decodes normally. The cell is forked from this process, so the variable reaches the
 # worker.
 class MagickEnvironmentTest < ActiveStorageHotCellTest
+  UNSET = %w[ OMP_NUM_THREADS OMP_THREAD_LIMIT MAGICK_DISK_LIMIT MAGICK_MAP_LIMIT TMPDIR MAGICK_TMPDIR ]
+    .to_h { |name| [ name, nil ] }
+
   def test_magick_does_not_inherit_the_workers_environment
     with_refusing_policy_in_the_environment do
       Cell.boot do |cell|
@@ -46,6 +49,37 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
 
     assert_equal bound, magick_cli_env_under(bound)
     assert_empty magick_cli_env_under({}), "the cell invented a bound of its own"
+  end
+
+  # ImageMagick reads its resource ceilings out of its own environment, and the image is where they are set,
+  # so the restriction above would otherwise hand `magick` ImageMagick's defaults: the host's RAM and an
+  # unbounded disk.
+  def test_the_cli_env_carries_the_images_imagemagick_resource_limits
+    limits = { "MAGICK_DISK_LIMIT" => "768MiB", "MAGICK_MAP_LIMIT" => "768MiB" }
+
+    assert_equal limits, magick_cli_env_under(limits, *limits.keys)
+    assert_empty magick_cli_env_under({}, *limits.keys), "the cell invented a limit of its own"
+  end
+
+  def test_mini_magick_hands_the_resource_limits_to_magick
+    skip "ImageMagick is not installed" unless magick_installed?
+
+    assert_equal "768MiB", magick_resource_through_mini_magick("Disk", "MAGICK_DISK_LIMIT" => "768MiB")
+  end
+
+  # The worker sets TMPDIR to the request's home after the fork and `Operation#initialize` maps MAGICK_TMPDIR
+  # from it, so a hash built when the operation was required would send ImageMagick's spill to the
+  # supervisor's /tmp, where nothing sweeps it.
+  def test_the_cli_env_follows_the_requests_tmpdir
+    where = { "TMPDIR" => "/tmp/request-home", "MAGICK_TMPDIR" => "/tmp/request-home" }
+
+    assert_equal where, JSON.parse(in_a_child({}, <<~RUBY))
+      require "json"
+      require "active_storage/hot_cell/server/analyzers/image/magick"
+      ENV["TMPDIR"] = "/tmp/request-home"
+      ActiveStorage::HotCell::Server::Analyzers::Image::Magick.new
+      puts JSON.dump(MiniMagick.cli_env.slice("TMPDIR", "MAGICK_TMPDIR"))
+    RUBY
   end
 
   # mini_magick, rather than our hash: it is unbounded in the gemspec, and a version that stopped merging
@@ -85,11 +119,13 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
   end
 
   private
-    def magick_cli_env_under(environment)
+    def magick_cli_env_under(environment, *names)
+      names = %w[ OMP_NUM_THREADS OMP_THREAD_LIMIT ] if names.empty?
+
       JSON.parse in_a_child(environment, <<~RUBY)
         require "json"
         require "active_storage/hot_cell/server/magick_operation"
-        puts JSON.dump(MiniMagick.cli_env.slice("OMP_NUM_THREADS", "OMP_THREAD_LIMIT"))
+        puts JSON.dump(MiniMagick.cli_env.slice(*#{names.inspect}))
       RUBY
     end
 
@@ -97,18 +133,20 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     # merges into that child is what the assertion is about. Nothing here rescues, so a child that cannot
     # run fails the test rather than reading as a bound of zero.
     def magick_threads_through_mini_magick(environment)
-      output = in_a_child(environment, <<~'RUBY')
-        require "active_storage/hot_cell/server/magick_operation"
-        print MiniMagick.convert { |command| command.list "resource" }[/Thread: (\d+)/, 1]
-      RUBY
+      Integer(magick_resource_through_mini_magick("Thread", environment))
+    end
 
-      Integer(output)
+    def magick_resource_through_mini_magick(resource, environment)
+      in_a_child(environment, <<~RUBY)
+        require "active_storage/hot_cell/server/magick_operation"
+        print MiniMagick.convert { |command| command.list "resource" }[/#{resource}: (\\S+)/, 1]
+      RUBY
     end
 
     # The operation reads the variables at require time, so each case needs its own process. A developer's
-    # own shell may hold either, so the child starts from neither and takes only what the case gives it.
+    # own shell may hold any of them, so the child starts from none and takes only what the case gives it.
     def in_a_child(environment, script)
-      environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil, "MAGICK_TMPDIR" => nil }.merge(environment)
+      environment = UNSET.merge(environment)
       lib = File.expand_path("../lib", __dir__)
 
       IO.popen([ environment, RbConfig.ruby, "-I", lib, "-r", "bundler/setup", "-e", script ], &:read)
