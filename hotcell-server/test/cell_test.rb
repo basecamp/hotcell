@@ -565,7 +565,8 @@ class CellTest < HotCellServerTest
   def test_a_tools_temp_files_are_removed_with_the_home_of_a_request_that_is_killed
     with_cell_spilling_into_its_root(deadline: 1) do |cell, untouched|
       assert_failed "killed", cell.call("test.spills", payload: { seconds: 30 }, timeout: 30)
-      wait_for_event cell, "worker.killed"
+      # The verdict is written before the supervisor discards the home; `worker.reaped` follows the discard.
+      refute_empty wait_for_event(cell, "worker.reaped"), "the killed worker was never reaped"
 
       assert_empty Dir.children(cell.socket_root) - untouched - [ "workspace" ],
                    "the killed worker left something in the scratch root beside the workspace"
