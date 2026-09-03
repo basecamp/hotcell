@@ -30,6 +30,15 @@ module ActiveStorage
           "tiff" => "image/tiff",
         }.freeze
 
+        # The cell describes the request's scratch as `TMPDIR`, and knows nothing about the libraries that run
+        # here. ImageMagick reads `MAGICK_TMPDIR` first, so the mapping is this gem's — for the `magick` the
+        # magick operations exec and for the `magickload` libvips delegates to in-process. Per request rather
+        # than at load: `TMPDIR` is the request's home, which is fresh every time.
+        def initialize
+          super
+          ENV["MAGICK_TMPDIR"] = ENV["TMPDIR"] if ENV.key?("TMPDIR")
+        end
+
         private
           # A caller breaking the protocol is a caller bug, not a bad document. Raising MessageError is what
           # makes the cell answer `invalid`, which is permanent and which the client raises rather than

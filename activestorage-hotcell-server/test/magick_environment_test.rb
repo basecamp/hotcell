@@ -68,6 +68,22 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     assert_operator magick_thread_resource("OMP_NUM_THREADS" => "2"), :<, magick_thread_resource({})
   end
 
+  # The cell sets `TMPDIR` to the request's home and nothing else; ImageMagick reads `MAGICK_TMPDIR`. An
+  # operation maps one to the other when it is instantiated, which is once per request — a mapping made at
+  # load would name the cell's `/tmp`, since no request has a home yet.
+  def test_an_operation_points_imagemagick_at_the_requests_tmpdir
+    output = in_a_child({}, <<~'RUBY')
+      require "json"
+      require "active_storage/hot_cell/server"
+      at_load = ENV["MAGICK_TMPDIR"]
+      ENV["TMPDIR"] = "/scratch/home-for-this-request"
+      ActiveStorage::HotCell::Server::Analyzers::Image::Magick.new
+      puts JSON.dump([ at_load, ENV["MAGICK_TMPDIR"] ])
+    RUBY
+
+    assert_equal [ nil, "/scratch/home-for-this-request" ], JSON.parse(output)
+  end
+
   private
     def magick_cli_env_under(environment)
       JSON.parse in_a_child(environment, <<~RUBY)
@@ -92,7 +108,7 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     # The operation reads the variables at require time, so each case needs its own process. A developer's
     # own shell may hold either, so the child starts from neither and takes only what the case gives it.
     def in_a_child(environment, script)
-      environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil }.merge(environment)
+      environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil, "MAGICK_TMPDIR" => nil }.merge(environment)
       lib = File.expand_path("../lib", __dir__)
 
       IO.popen([ environment, RbConfig.ruby, "-I", lib, "-r", "bundler/setup", "-e", script ], &:read)

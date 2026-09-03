@@ -19,6 +19,12 @@ gem but are what an operator runs against their own image.
 
 * A worker sets `TMPDIR` to the request's home, and an exec'd tool inherits it. Before, nothing set it, so a library's scratch went to `/tmp` — outside the slot tree that is removed when a request ends — and a killed worker orphaned every file there until the scratch filled.
 
+### ActiveStorage::HotCell::Server
+
+#### Fixed
+
+* Every operation sets `MAGICK_TMPDIR` to the request's `TMPDIR`, so ImageMagick's pixel cache — from the `magick` the magick operations run and from the `magickload` libvips delegates to — is removed with the request, however it ends.
+
 ## v0.3.1 / 2026-09-02
 
 ### HotCell::Core
