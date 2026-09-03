@@ -257,9 +257,11 @@ is an agent trying to determine if the application needs any changes to accommod
 
 Add to the `next / unreleased` section, under the gem the change is in — or under `Tooling` for the
 checks and scripts in `bin/` and `examples/`, which ship in no gem — and under `Breaking`,
-`Security`, `Added`, `Fixed` or `Changed`. Keep it short, one sentence is preferred that explains
-what changed. If it's a breaking change, it can run longer to explain how to tell if an application
-will be impacted, and how to update the application in that case.
+`Security`, `Added`, `Fixed`, `Improved` or `Changed`. `Improved` is for a change that makes existing
+behavior better rather than fixing a defect — a performance win, or a limit that no longer applies.
+Keep it short, one sentence is preferred that explains what changed. If it's a breaking change, it can
+run longer to explain how to tell if an application will be impacted, and how to update the
+application in that case.
 
 Skip the entry only for a change no consumer can observe: a test, a refactor, a comment, a CI tweak. If you
 are unsure, write one.
