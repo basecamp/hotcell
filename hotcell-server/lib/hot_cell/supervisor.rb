@@ -990,25 +990,30 @@ module HotCell
       # sweeping. A root that is missing, or is not a directory, has been moved or replaced by something; a
       # symlink this uid owns anywhere on the path is a redirect a worker could have planted, and a sweep
       # through it would delete what the link points at; a relative path is whatever the working directory
-      # happens to be. Symlinks the OS owns stay legal, since `/tmp` is one on macOS. The socket directory
-      # cannot live inside the scratch, because the sweep would have to skip it, and a skipped name is one
-      # a worker can fill.
+      # happens to be, and a `..` after a symlink names one directory to the kernel and another to string
+      # comparison, so the paths have to be already normalized. Symlinks the OS owns stay legal, since `/tmp`
+      # is one on macOS. The socket directory cannot live inside the scratch, because the sweep would have
+      # to skip it, and a skipped name is one a worker can fill.
       #
       # What this cannot check is that the root's parent is unwritable, which is what would make the root
       # immovable. On the accessory `/tmp` is a mount; in development it is a directory under one the
       # developer owns, and refusing that would refuse every development layout.
       def verify_scratches!
-        raise ConfigurationError, "the workspace #{workspace} is not an absolute path" unless File.absolute_path?(workspace)
+        { "workspace" => workspace, "temporary directory" => tmpdir, "socket directory" => directory }.each do |name, path|
+          next if File.absolute_path?(path) && File.expand_path(path) == path
+
+          raise ConfigurationError, "the #{name} #{path} is not an absolute path without `.`, `..` or a trailing slash"
+        end
 
         scratches.each do |scratch|
           if (link = owned_symlink_on(scratch))
             raise ConfigurationError, "#{link} is a symlink the cell's uid owns, on the path to the scratch " \
                                       "#{scratch}, and a boot sweeps the scratch"
           end
-          unless File.lstat(scratch).directory?
+          unless File.stat(scratch).directory?
             raise ConfigurationError, "the scratch #{scratch} is not a directory, and a boot sweeps the scratch"
           end
-          if socket_directory == scratch || socket_directory.start_with?("#{scratch}/")
+          if directory == scratch || directory.start_with?("#{scratch}/")
             raise ConfigurationError, "the socket directory #{directory} is inside the scratch #{scratch}, " \
                                       "which a boot sweeps. Choose a directory outside it."
           end
@@ -1024,10 +1029,6 @@ module HotCell
         end
       end
 
-      def socket_directory
-        File.expand_path directory
-      end
-
       # `Dir.tmpdir` with its fallbacks removed: it answers `.` for a `/tmp` its owner cannot write, and a
       # worker can leave `/tmp` in that state. The sweep is what puts the mode back, so it has to see the
       # directory `Dir.tmpdir` will answer once it has.
@@ -1036,7 +1037,7 @@ module HotCell
       end
 
       def scratches
-        [ tmpdir, File.dirname(workspace) ].map { |path| File.expand_path path }.uniq
+        [ tmpdir, File.dirname(workspace) ].uniq
       end
 
       def prepare_directories

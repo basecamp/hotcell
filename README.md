@@ -304,7 +304,7 @@ cell: mkdir -p $PWD/tmp/hotcell-scratch && TMPDIR=$PWD/tmp/hotcell-scratch BUNDL
 
 Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. `TMPDIR` matters:
 the cell empties its temporary directory of everything it owns at boot, and without one that is your
-`/tmp`. The directory has to exist, because Ruby falls back to `/tmp` when it does not.
+`/tmp`. The directory has to exist; the cell refuses to boot without it.
 
 #### Configure the cell and operation limits
 
