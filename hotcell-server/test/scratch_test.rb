@@ -179,6 +179,22 @@ class ScratchTest < RegistryIsolatedTest
     assert_match "is not an absolute path", error.message
   end
 
+  # `link/../scratch` is `scratch` to a string comparison and `<link target>/../scratch` to the kernel, so a
+  # path with a `..` in it would let the sweep check one directory and the workers use another.
+  def test_a_workspace_with_dot_dot_in_it_refuses_to_boot
+    Dir.mktmpdir "hotcell-target" do |target|
+      File.symlink target, File.join(@elsewhere, "link")
+      File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+
+      error = assert_raises(RuntimeError) do
+        boot TestCell.new, workspace: File.join(@elsewhere, "link", "..", "hotcell-workspace")
+      end
+
+      assert_match "is not an absolute path without", error.message
+      assert File.exist?(File.join(@elsewhere, "magick-abc123")), "the sweep ran on a path it refused"
+    end
+  end
+
   private
     def boot(cell, workspace:)
       cell.instance_variable_get(:@supervisor_options)[:workspace] = workspace
