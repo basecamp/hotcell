@@ -25,6 +25,10 @@ gem but are what an operator runs against their own image.
 
 * Every operation sets `MAGICK_TMPDIR` to the request's `TMPDIR`, so ImageMagick's pixel cache — from the `magick` the magick operations run and from the `magickload` libvips delegates to — is removed with the request, however it ends.
 
+#### Improved
+
+* The two ImageMagick operations read their input through its descriptor instead of staging a copy of it, so the operation's `file_size` no longer bounds how large an input they can read. This needs mini_magick 5.4.0 and image_processing 2.1.0, which the gemspec now requires. (#7)
+
 ## v0.3.1 / 2026-09-02
 
 ### HotCell::Core

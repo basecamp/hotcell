@@ -67,6 +67,52 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # The input is read through its descriptor, not staged, so its size is not bounded by file_size — which
+  # bounds only what the operation writes. A large source downscaled to a small thumbnail succeeds under a
+  # file_size that the source alone would have blown while being copied onto scratch.
+  def test_a_large_source_downscaled_to_a_small_thumbnail_is_not_bounded_by_the_write_limit
+    Cell.boot(file_size: 64 * 1024) do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.transformers.image.magick",
+                             inputs: [ fixture("large.png") ], outputs: [ destination ],
+                             payload: { format: "png", operations: { resize_to_limit: [ 32, 32 ] } }
+
+        assert_ok response
+        assert_equal 32, identify(destination)[:width]
+      end
+    end
+  end
+
+  # A caller's own loader merges over the operation's, which is what Rails does — but not over how the input
+  # is read. Taking `inherit_fds` out of it would leave the source naming a descriptor the tool cannot open.
+  def test_a_caller_cannot_take_the_descriptor_out_of_the_loader
+    Cell.boot(file_size: 64 * 1024) do |cell|
+      with_output(".png") do |destination|
+        response = cell.call "active_storage.transformers.image.magick",
+                             inputs: [ fixture("large.png") ], outputs: [ destination ],
+                             payload: { format: "png", operations: { resize_to_limit: [ 32, 32 ],
+                                                                     loader: { inherit_fds: [] } } }
+
+        assert_ok response
+        assert_equal 32, identify(destination)[:width]
+      end
+    end
+  end
+
+  # `page: 0` reaches ImageProcessing alongside the descriptor rather than instead of it, and it is what stops
+  # a hundred-frame GIF being decoded in full to make one thumbnail.
+  def test_an_animated_source_is_flattened_to_its_first_frame_by_default
+    Cell.boot do |cell|
+      with_output(".gif") do |destination|
+        assert_ok cell.call("active_storage.transformers.image.magick",
+                            inputs: [ fixture("animated.gif") ], outputs: [ destination ],
+                            payload: { format: "gif" })
+
+        assert_equal 1, identify(destination)[:frames]
+      end
+    end
+  end
+
   def test_combine_options_is_refused
     Cell.boot do |cell|
       with_output do |destination|

@@ -451,8 +451,7 @@ And an operation that hands a tool a filename does not copy the input. It re-ope
 caller's. The two sides do not share a uid, so a mode `0600` file the application owns gives `EACCES`. An
 Active Storage tempfile is exactly that.
 
-Six of the eight shipped Active Storage operations hand a tool a filename. The two `magick` ones do not,
-because they stage first.
+Every shipped Active Storage operation hands a tool a filename, so this applies to all of them.
 
 **What the client does with it.** It puts each descriptor in the group and sets the mode on the way out:
 `0640` for an input, `0620` for an output. It does this through the open file rather than a path, so it

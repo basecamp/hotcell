@@ -41,11 +41,9 @@ module ActiveStorage
       # own output — dimensions from `identify`, an exit status — which is a number and a string, not a
       # decoder. The distinction is the same one probe_media draws for ffprobe.
       #
-      # Unlike the vips operations, the input is staged onto scratch: mini_magick spawns its own `magick` and
-      # does not inherit this worker's descriptors, so an input cannot be handed to it as /dev/fd. That
-      # returns the file_size ceiling to this path — an input larger than the operation's file_size dies
-      # being staged — which the vips operations shed. Removing it means driving `magick` directly rather
-      # than through mini_magick, and is a separate enhancement.
+      # Both operations hand mini_magick the input descriptor with `inherit_fds:` and name it by its
+      # Descriptor#fd_path, so neither stages its input and neither carries the file_size ceiling the vips
+      # operations never had.
       class MagickOperation < Operation
         abstract_operation
 
