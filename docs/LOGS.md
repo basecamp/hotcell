@@ -48,7 +48,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `hotcell.running` / `hotcell.queued` | integer | In-flight and queued requests, on `cell.stopping`. |
 | `hotcell.timing` | object | A request's phase timings: `queued_ms`, `perform_ms`, and any measured phases. |
 | `hotcell.deadline_s` / `hotcell.grace_s` / `hotcell.waited_s` | number | The limit that was hit, on the event that reports hitting it. |
-| `hotcell.path` | string | The file the cell could not verify, on `cell.ptrace_scope_unknown`. |
+| `hotcell.path` | string | The file the cell could not verify, on `cell.ptrace_scope_unknown`; the scratch entry, or the scratch itself, a boot could not remove, on `scratch.unswept`. |
 | `hotcell.stderr` | string | The tail of what a dying worker wrote to file descriptor 2, at most 512 bytes. On `worker.killed` only, and absent when it wrote nothing. See below. |
 
 ## Events
@@ -75,6 +75,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `slot.uncleaned` | WARN | `hotcell.slot`, `hotcell.home`, `message` (boot sweep only) |
 | `slot.undiscarded` | WARN | `hotcell.slot`, `hotcell.home` |
 | `slot.unswept` | WARN | `hotcell.slot`, `hotcell.home` |
+| `scratch.unswept` | WARN | `hotcell.path`; `error.type` and `error.message` when the scratch itself could not be listed |
 
 ## What a worker wrote to fd 2
 
