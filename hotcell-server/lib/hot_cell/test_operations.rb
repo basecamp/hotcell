@@ -3,6 +3,7 @@
 require "digest"
 require "fcntl"
 require "fileutils"
+require "tmpdir"
 
 # Fixture operations, so the whole surface can be exercised in milliseconds, with no tool installed and no
 # container running.
@@ -470,6 +471,21 @@ module HotCell
         else
           sleep 300
         end
+      end
+    end
+
+    # Writes a file where a library writes its scratch, `Dir.tmpdir`, and leaves it there — the way ImageMagick
+    # leaves its pixel cache behind on anything but a clean exit. With `seconds:` it then blocks, so the
+    # deadline kills it mid-request.
+    class Spills < HotCell::Operation
+      operation "test.spills"
+
+      def perform(_inputs, _outputs, seconds: 0)
+        spilled = File.join(Dir.tmpdir, "spill-#{Process.pid}")
+        File.write spilled, "x"
+        sleep seconds
+
+        { spilled: spilled, home: ENV["HOME"] }
       end
     end
 

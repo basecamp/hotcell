@@ -11,6 +11,14 @@ This changelog covers five gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
+### HotCell::Server
+
+#### Fixed
+
+* A worker sets `TMPDIR` to the request's home, and an exec'd tool inherits it. Before, nothing set it, so a library's scratch went to `/tmp` — outside the slot tree that is removed when a request ends — and a killed worker orphaned every file there until the scratch filled.
+
 ## v0.3.1 / 2026-09-02
 
 ### HotCell::Core

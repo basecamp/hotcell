@@ -546,6 +546,33 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # ImageMagick unlinks its pixel cache only on a clean exit, and writes it where `TMPDIR` says — which
+  # nothing set, so it landed in the shared `/tmp` beside the workspace, where no reap ever looked. A slot's
+  # home is removed when the request ends, however it ends; the environment only has to point there.
+  # `TMPDIR` for the test process is the cell's own root, so a worker that inherits it rather than getting
+  # its own puts the spill exactly where production did.
+  def test_a_tools_temp_files_are_removed_with_the_home_of_a_request_that_answers
+    with_cell_spilling_into_its_root do |cell, untouched|
+      result = assert_ok(cell.call("test.spills")).result
+
+      assert_equal result[:home], File.dirname(result[:spilled]), "Dir.tmpdir is not the request's home"
+      refute_path_exists result[:spilled]
+      assert_empty Dir.children(cell.socket_root) - untouched - [ "workspace" ],
+                   "the request left something in the scratch root beside the workspace"
+    end
+  end
+
+  def test_a_tools_temp_files_are_removed_with_the_home_of_a_request_that_is_killed
+    with_cell_spilling_into_its_root(deadline: 1) do |cell, untouched|
+      assert_failed "killed", cell.call("test.spills", payload: { seconds: 30 }, timeout: 30)
+      wait_for_event cell, "worker.killed"
+
+      assert_empty Dir.children(cell.socket_root) - untouched - [ "workspace" ],
+                   "the killed worker left something in the scratch root beside the workspace"
+      assert_empty Dir.glob(File.join(cell.workspace, "0", "home-*")), "the killed request's home was not taken away"
+    end
+  end
+
   # The whole fast path, thirty times over: fork, dispatch, both of the worker's reports, the response, the
   # reap, and the slot coming back. Anything that leaves a finished worker marked in flight shows up here as a
   # spurious kill once its deadline passes.
@@ -569,4 +596,22 @@ class CellTest < HotCellServerTest
       assert_equal [ "ok", "failed" ], codes
     end
   end
+
+  private
+    # Boots a cell whose workers inherit the cell's root as their `TMPDIR`, and yields what the root holds
+    # before any request — the workspace is made by the first one — so a test can assert a request added
+    # nothing beside it.
+    def with_cell_spilling_into_its_root(**options)
+      cell = TestCell.new(concurrency: 1, **options)
+      inherited = ENV["TMPDIR"]
+      ENV["TMPDIR"] = cell.socket_root
+      cell.start
+      ENV["TMPDIR"] = inherited
+
+      yield cell, Dir.children(cell.socket_root).sort
+    ensure
+      ENV["TMPDIR"] = inherited
+      cell&.stop
+      cell&.cleanup
+    end
 end
