@@ -15,6 +15,11 @@ gem but are what an operator runs against their own image.
 
 ### HotCell::Server
 
+#### Added
+
+* The supervisor empties the scratch at boot: every top-level entry of `Dir.tmpdir` and of the workspace's parent that the cell's uid owns, so rebooting the accessory clears a scratch a killed tool filled. Set `TMPDIR` when running `exe/hotcell` outside a container, or the boot empties your own `/tmp` of what you own.
+* The cell refuses to boot when `HOTCELL_DIR` is inside the scratch, when the scratch is missing or reached through a symlink the cell's uid owns, or when `HOTCELL_WORKSPACE`, `TMPDIR` or `HOTCELL_DIR` is not an absolute, normalized path.
+
 #### Fixed
 
 * A worker sets `TMPDIR` to the request's home, and an exec'd tool inherits it. Before, nothing set it, so a library's scratch went to `/tmp` — outside the slot tree that is removed when a request ends — and a killed worker orphaned every file there until the scratch filled.

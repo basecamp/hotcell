@@ -29,7 +29,7 @@ module HotCell
   class TestCell
     READY = "up"
 
-    attr_reader :name, :directory, :workspace, :log_path
+    attr_reader :name, :directory, :workspace, :tmpdir, :log_path
 
     def self.boot(**options)
       new(**options).start.tap do |cell|
@@ -52,7 +52,10 @@ module HotCell
       @options = options
       @root = Dir.mktmpdir "hotcell-test"
       @directory = File.join(@root, name)
-      @workspace = File.join(@root, "workspace")
+      # Boot empties `Dir.tmpdir` and the workspace's parent of what this uid owns. Inside the cell both are
+      # this directory, so the sweep reaches neither the developer's `/tmp` nor the log and sockets beside it.
+      @tmpdir = File.join(@root, "tmp")
+      @workspace = File.join(@tmpdir, "workspace")
       @log_path = File.join(@root, "cell.log")
     end
 
@@ -74,6 +77,9 @@ module HotCell
         $stderr.reopen log_path, "a"
 
         HotCell.limits(**@options) unless @options.empty?
+
+        FileUtils.mkdir_p @tmpdir
+        ENV["TMPDIR"] = @tmpdir
 
         supervisor = Supervisor.new(directory: directory, workspace: workspace,
                                     log: Log.new(File.open(log_path, "w")), **@supervisor_options)

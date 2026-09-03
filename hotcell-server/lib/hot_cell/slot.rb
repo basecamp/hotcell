@@ -80,7 +80,7 @@ module HotCell
     # rescues anything and a raise stops the cell with every request it holds.
     def remove_home
       return true if home.nil?
-      return false unless remove_tree(home)
+      return false unless Filesystem.remove_tree(home)
 
       self.home = nil
       true
@@ -127,45 +127,18 @@ module HotCell
     # entry a tool left in the slot's place is exactly what this has to remove, and it used to survive the
     # sweep and raise from every later `make_home`.
     def prepare
-      remove_tree directory
+      Filesystem.remove_tree directory
     end
 
     # Unlinks whatever discard_home renamed out of the way. Partial progress is fine: a sweep killed
     # part-way leaves fewer entries for the next one, so this converges rather than repeating.
     def sweep
-      Dir.glob(File.join(directory, "discarded-*")).map { |path| remove_tree(path) }.all?
+      Dir.glob(File.join(directory, "discarded-*")).map { |path| Filesystem.remove_tree(path) }.all?
     rescue SystemCallError
       # The glob itself can fail, because the slot directory is a name a tool can replace — a symlink loop
       # in its place answers ELOOP here rather than for any one entry. This runs from the worker's ensure,
       # where a raise would replace the caller's response with a crash.
       false
     end
-
-    private
-      # **A mode is the only thing a tool needs to make its own tree unremovable, and a mode on a tree this
-      # uid owns is ours to put back.** `chmod 0500` on a directory a conversion wrote is enough to fail the
-      # recursive delete underneath it, and the delete failing used to be the end of it: one tree per
-      # request stayed on the tmpfs until the container ended. The repair is not a permission the process
-      # gains, it is one it never lost.
-      #
-      # Repair only after a failure, never before, so the common request pays for a walk of its own tree
-      # once rather than twice. `force:` on the chmod because a partial repair that removes most of the tree
-      # is better than none, and the remove that follows is what reports the outcome either way.
-      def remove_tree(path)
-        return true unless File.exist?(path) || File.symlink?(path)
-
-        FileUtils.remove_entry path
-        true
-      rescue SystemCallError
-        repair_and_remove path
-      end
-
-      def repair_and_remove(path)
-        FileUtils.chmod_R 0o700, path, force: true
-        FileUtils.remove_entry path
-        true
-      rescue SystemCallError
-        false
-      end
   end
 end
