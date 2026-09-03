@@ -174,6 +174,12 @@ jobs:
       # with no released fix would only be able to fail every unrelated PR until upstream ships one, so they
       # are reported by the SBOM below rather than blocking here. This is a fixable-vuln gate, not a claim of
       # zero Highs.
+      #
+      # `.trivyignore.yaml` is the same admission in the other direction: a vulnerability Trivy calls fixable
+      # that nothing this repository builds can actually fix. Every entry carries a reason and an
+      # `expired_at`, and Trivy reports the finding again once that date passes, so an entry buys a review
+      # cycle rather than silence. Read that file before trusting a green run here. The SBOM step below is
+      # deliberately left without it, so the bill of materials records the image as it is.
       - name: Scan the image for fixable High and Critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -183,6 +189,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           format: table
+          trivyignores: .trivyignore.yaml
       - name: Generate a CycloneDX SBOM of the image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

@@ -1,0 +1,29 @@
+# Findings the image scan gate accepts, each with a reason and a date it comes back.
+#
+# Trivy drops an entry once `expired_at` passes and reports the finding again, so an entry here
+# suppresses a vulnerability for one review cycle rather than forever. Re-check the reasoning on that
+# date; do not extend one without doing so. Nothing in this file is a claim that the vulnerability is
+# absent from the image, only that the gate should not block on it yet — the same framing the scan job
+# already carries: a fixable-vuln gate, not a claim of zero Highs.
+
+vulnerabilities:
+  - id: CVE-2026-80212
+    # `resolv`, a denial of service through uncontrolled memory growth from crafted DNS responses,
+    # fixed in 0.7.2. `ruby:3.4-slim` ships 0.7.1 as a Ruby *default* gem, and the gate reads gemspec
+    # files on disk, so nothing this repository builds can clear it:
+    #
+    #   - A bundle-level `gem "resolv", ">= 0.7.2"` in the cell's Gemfile does not displace it. The
+    #     default spec stays at /usr/local/lib/ruby/gems/3.4.0/specifications/default/resolv-0.7.1.gemspec
+    #     and Trivy still reports that file. It also breaks the build outright: 0.7.2 declares
+    #     ext/win32/resolv/extconf.rb as an extension on the plain `ruby` platform, with no precompiled
+    #     variant, and the cell image carries no compiler.
+    #   - `apt-get upgrade` in the Dockerfile cannot reach it either. That line answers Debian advisories
+    #     and this is a Ruby gem.
+    #   - No published `ruby` tag carries 0.7.2 yet: 3.4-slim has 0.7.1, 4.0-slim has 0.7.0. Only a
+    #     docker-library/ruby rebuild moves it, which is what the expiry below waits for.
+    #
+    # A cell runs with `network: none` and resolves no names, so the vulnerable path is unreachable in
+    # the configuration this image is built for. That is why waiting is acceptable rather than merely
+    # convenient.
+    statement: "resolv is a default gem in ruby:3.4-slim that no bundle pin can displace, and a cell resolves no names under network: none. Revisit when docker-library/ruby rebuilds onto a Ruby carrying resolv >= 0.7.2."
+    expired_at: 2026-12-02
