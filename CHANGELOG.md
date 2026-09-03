@@ -24,6 +24,7 @@ gem but are what an operator runs against their own image.
 #### Fixed
 
 * Every operation sets `MAGICK_TMPDIR` to the request's `TMPDIR`, so ImageMagick's pixel cache — from the `magick` the magick operations run and from the `magickload` libvips delegates to — is removed with the request, however it ends.
+* `MagickOperation` forwards the worker's `MAGICK_*_LIMIT`, `TMPDIR` and `MAGICK_TMPDIR` to the `magick` it spawns, read per request. `MiniMagick.restricted_env` had dropped them along with the rest of the environment, so an image's `MAGICK_DISK_LIMIT` bounded ImageMagick inside libvips and not the `magick` behind `analyzers.image.magick` and `transformers.image.magick`, which ran under ImageMagick's defaults — the host's RAM and an unbounded disk — and the request's `TMPDIR` above never reached it.
 
 ## v0.3.1 / 2026-09-02
 
