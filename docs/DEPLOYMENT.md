@@ -218,7 +218,7 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOTCELL_DIR` | `/run/hotcell/cell` | Where the cell creates `work.sock` and `control.sock`. The app must use the same directory. |
 | `HOTCELL_OPERATIONS` | `/hotcell/operations` | The directory the cell loads at boot, in sorted order. |
 | `HOTCELL_CONFIG` | `/hotcell/config.rb` | Loaded before the operations, if the file exists. |
-| `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. |
+| `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. At boot the cell empties `Dir.tmpdir` and the workspace's parent of every entry its uid owns, `lost+found` excepted, so rebooting the accessory clears a scratch a killed tool filled. Set `TMPDIR` when running `exe/hotcell` outside a container. |
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |

@@ -134,6 +134,10 @@ module HotCell
     STDERR_READ_BYTES = 16 * 1024
     STDERR_FINAL_READS = 8
 
+    # A boot never removes this from the scratch. It is the filesystem's, and on a scratch that is its own
+    # mount it is owned by root anyway; the name is here for a scratch that is a plain directory.
+    KEPT_IN_SCRATCH = %w[ lost+found ].freeze
+
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
     def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
@@ -984,6 +988,7 @@ module HotCell
       end
 
       def prepare_directories
+        [ Dir.tmpdir, File.dirname(workspace) ].uniq.each { |scratch| clear_scratch scratch }
         FileUtils.mkdir_p directory
 
         configuration.concurrency.times do |number|
@@ -993,6 +998,28 @@ module HotCell
           log.write "slot.uncleaned", slot: number, home: slot.directory,
                                       message: "an earlier boot's files are still here"
         end
+      end
+
+      # The scratch outlives the container when it is a host mount, so what a killed tool left at its top is
+      # still there at the next boot, and rebooting the accessory has to be the one command that clears it.
+      # `Dir.tmpdir` is where a tool with no `TMPDIR` writes, and the workspace's parent is the scratch when
+      # `HOTCELL_WORKSPACE` points elsewhere. Only what this uid owns goes: `lstat` so a symlink is a link
+      # to unlink and never a tree to walk, and a failure is a line in the log rather than a cell that will
+      # not boot.
+      def clear_scratch(scratch)
+        return unless Dir.exist?(scratch)
+
+        Dir.children(scratch).each do |name|
+          path = File.join(scratch, name)
+          next if KEPT_IN_SCRATCH.include?(name) || directory.start_with?("#{path}/") || directory == path
+          next unless File.lstat(path).uid == Process.uid
+
+          FileUtils.remove_entry path
+        rescue SystemCallError => error
+          log.write "scratch.uncleaned", path: path, error: error.class.name, message: error.message
+        end
+      rescue SystemCallError => error
+        log.write "scratch.uncleaned", path: scratch, error: error.class.name, message: error.message
       end
 
       def preload

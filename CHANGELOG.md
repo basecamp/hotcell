@@ -15,6 +15,10 @@ gem but are what an operator runs against their own image.
 
 ### HotCell::Server
 
+#### Added
+
+* The supervisor empties the scratch at boot: every top-level entry of `Dir.tmpdir` and of `HOTCELL_WORKSPACE`'s parent that the cell's uid owns, except `lost+found`, with a symlink unlinked rather than followed and a removal that fails written to the log as `scratch.uncleaned` rather than stopping the boot. On the reference accessory `bin/kamal accessory reboot hotcell` now clears a scratch that ImageMagick filled and the host mount kept across the restart. Set `TMPDIR` when you run `exe/hotcell` outside a container, or the boot empties your own `/tmp` of what you own.
+
 #### Fixed
 
 * A worker sets `TMPDIR` to the request's home, and an exec'd tool inherits it. Before, nothing set it, so a library's scratch went to `/tmp` — outside the slot tree that is removed when a request ends — and a killed worker orphaned every file there until the scratch filled.
