@@ -134,10 +134,6 @@ module HotCell
     STDERR_READ_BYTES = 16 * 1024
     STDERR_FINAL_READS = 8
 
-    # A boot never removes this from the scratch. It is the filesystem's, and on a scratch that is its own
-    # mount it is owned by root anyway; the name is here for a scratch that is a plain directory.
-    KEPT_IN_SCRATCH = %w[ lost+found ].freeze
-
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
     def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
@@ -158,6 +154,7 @@ module HotCell
       verify_socket_paths!
       verify_limits!
       verify_ptrace_scope!
+      verify_scratches!
       prepare_directories
       preload
       @work = listen "work.sock"
@@ -987,8 +984,31 @@ module HotCell
         end
       end
 
+      # The scratch is where a killed tool's files outlive it, so its root has to be one nothing a worker
+      # did can move: a mount, or a directory whose parent this uid cannot write. A root that is a symlink
+      # has already been moved, and a sweep through it would delete what the link points at; a relative
+      # path is whatever the working directory happens to be. The socket directory cannot live inside it,
+      # because the sweep would have to skip it, and a skipped name is one a worker can fill.
+      def verify_scratches!
+        raise ConfigurationError, "the workspace #{workspace} is not an absolute path" unless File.absolute_path?(workspace)
+
+        scratches.each do |scratch|
+          if File.symlink?(scratch)
+            raise ConfigurationError, "the scratch #{scratch} is a symlink, and a boot sweeps the scratch"
+          end
+          if directory == scratch || directory.start_with?("#{scratch}/")
+            raise ConfigurationError, "the socket directory #{directory} is inside the scratch #{scratch}, " \
+                                      "which a boot sweeps. Choose a directory outside it."
+          end
+        end
+      end
+
+      def scratches
+        [ Dir.tmpdir, File.dirname(workspace) ].uniq
+      end
+
       def prepare_directories
-        [ Dir.tmpdir, File.dirname(workspace) ].uniq.each { |scratch| clear_scratch scratch }
+        scratches.each { |scratch| sweep_scratch scratch }
         FileUtils.mkdir_p directory
 
         configuration.concurrency.times do |number|
@@ -1003,23 +1023,31 @@ module HotCell
       # The scratch outlives the container when it is a host mount, so what a killed tool left at its top is
       # still there at the next boot, and rebooting the accessory has to be the one command that clears it.
       # `Dir.tmpdir` is where a tool with no `TMPDIR` writes, and the workspace's parent is the scratch when
-      # `HOTCELL_WORKSPACE` points elsewhere. Only what this uid owns goes: `lstat` so a symlink is a link
-      # to unlink and never a tree to walk, and a failure is a line in the log rather than a cell that will
+      # `HOTCELL_WORKSPACE` points elsewhere. Only what this uid owns goes, and it goes by the slot's rule:
+      # remove, and put back the modes a tool changed if that fails. `lstat` so a symlink is a link to
+      # unlink and never a tree to walk, and a failure is a line in the log rather than a cell that will
       # not boot.
-      def clear_scratch(scratch)
+      def sweep_scratch(scratch)
         return unless Dir.exist?(scratch)
 
-        Dir.children(scratch).each do |name|
+        scratch_entries(scratch).each do |name|
           path = File.join(scratch, name)
-          next if KEPT_IN_SCRATCH.include?(name) || directory.start_with?("#{path}/") || directory == path
           next unless File.lstat(path).uid == Process.uid
+          next if Slot.remove_tree(path)
 
-          FileUtils.remove_entry path
-        rescue SystemCallError => error
-          log.write "scratch.uncleaned", path: path, error: error.class.name, message: error.message
+          log.write "scratch.unswept", path: path
         end
       rescue SystemCallError => error
-        log.write "scratch.uncleaned", path: scratch, error: error.class.name, message: error.message
+        log.write "scratch.unswept", path: scratch, error: error.class.name, message: error.message
+      end
+
+      # The root's mode is the one a tool can set that the walk itself trips on, and the root is this uid's
+      # on the documented layouts. Put it back only once listing has failed, as `Slot.remove_tree` does.
+      def scratch_entries(scratch)
+        Dir.children scratch
+      rescue Errno::EACCES
+        FileUtils.chmod 0o700, scratch
+        Dir.children scratch
       end
 
       def preload

@@ -38,6 +38,7 @@ module HotCell
       "control.abandoned" => "WARN",
       "control.unanswerable" => "WARN",
       "slot.uncleaned" => "WARN",
+      "scratch.unswept" => "WARN",
       "slot.undiscarded" => "WARN",
     }.freeze
 

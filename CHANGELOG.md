@@ -17,7 +17,8 @@ gem but are what an operator runs against their own image.
 
 #### Added
 
-* The supervisor empties the scratch at boot: every top-level entry of `Dir.tmpdir` and of `HOTCELL_WORKSPACE`'s parent that the cell's uid owns, except `lost+found`, with a symlink unlinked rather than followed and a removal that fails written to the log as `scratch.uncleaned` rather than stopping the boot. On the reference accessory `bin/kamal accessory reboot hotcell` now clears a scratch that ImageMagick filled and the host mount kept across the restart. Set `TMPDIR` when you run `exe/hotcell` outside a container, or the boot empties your own `/tmp` of what you own.
+* The supervisor empties the scratch at boot: every top-level entry of `Dir.tmpdir` and of `HOTCELL_WORKSPACE`'s parent that the cell's uid owns, with a symlink unlinked rather than followed, a mode a tool changed put back when the removal fails, and a removal that still fails written to the log as `scratch.unswept` rather than stopping the boot. On the reference accessory `bin/kamal accessory reboot hotcell` now clears a scratch that ImageMagick filled and the host mount kept across the restart. Set `TMPDIR` when you run `exe/hotcell` outside a container, or the boot empties your own `/tmp` of what you own.
+* A cell refuses to boot when `HOTCELL_DIR` is inside the scratch, when a scratch root is a symlink, or when `HOTCELL_WORKSPACE` is relative: the boot sweep would have to skip the socket directory, and a skipped name is one a worker can fill; a symlinked root has already been moved by something, and the sweep would follow it.
 
 #### Fixed
 
