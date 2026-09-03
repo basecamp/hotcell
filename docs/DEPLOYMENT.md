@@ -223,6 +223,10 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |
 | `OMP_THREAD_LIMIT` | `8` | The ceiling on that pool, including a library that raises the count itself. |
+| `MAGICK_MEMORY_LIMIT` | `512MiB` | The pixel cache ImageMagick holds in RAM before spilling the rest to scratch. It counts against the worker's `memory`. |
+| `MAGICK_DISK_LIMIT` | `64MiB` | What ImageMagick may spill to scratch: one worker's share, less the output `file_size` allows. See "Making the numbers agree". |
+| `MAGICK_MAP_LIMIT` | `64MiB` | The memory-mapped part of that spill. It lives on the same scratch, so never above `MAGICK_DISK_LIMIT`. |
+| `MAGICK_AREA_LIMIT` | `75497472` | Pixels a frame may hold before ImageMagick refuses it: memory plus disk at 8 bytes a pixel. |
 
 ### Bound the OpenMP thread pools
 
@@ -503,7 +507,7 @@ matching, storing or rendering are all places these values raise.
 
 ## Making the numbers agree
 
-Nothing checks these three for you.
+Nothing checks these four for you.
 
 - The client's `timeout` must be more than the cell's `answer_within`, which is
   `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
@@ -513,6 +517,11 @@ Nothing checks these three for you.
 - `file_size × concurrency` must fit scratch. Above it, concurrent workers fill it and requests fail
   with `ENOSPC` instead of with a limit verdict. On the default accessory scratch is the tmpfs, and its
   `size=` is the number to fit.
+- `MAGICK_DISK_LIMIT` must be a worker's share of scratch, and `MAGICK_MAP_LIMIT` no more than it.
+  ImageMagick spills a pixel cache over `MAGICK_MEMORY_LIMIT` to scratch as one file per frame, which
+  `file_size` bounds one at a time and never in sum, and its default disk limit is unbounded. The
+  installed Dockerfile sets the four `MAGICK_*_LIMIT` variables with the arithmetic beside them; they reach
+  ImageMagick in-process through libvips' `magickload` and in the `magick` the cell spawns.
 
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.

@@ -51,6 +51,26 @@ ENV HOME=/tmp \
     HOTCELL_OPERATIONS=/hotcell/operations \
     HOTCELL_DIR=/run/hotcell/cell
 
+# ImageMagick's resource ceilings, which it reads from its environment as it loads and which reach it here
+# both in-process, when libvips delegates a format to `magickload`, and in a `magick` the cell spawns.
+# Its defaults are the host's RAM and an unbounded disk. A pixel cache over MEMORY_LIMIT spills to scratch as
+# `magick-*` files, one per frame, and `file_size` bounds each of those files and never their sum — so on
+# its own a layered PSD writes until the mount is full, and a full scratch convicts every file that arrives
+# while it is full, not the one that filled it.
+#
+# Size DISK_LIMIT as one worker's share of the scratch: the accessory's 512m tmpfs over `concurrency: 4` is
+# 128MiB a worker, and the worker's own output takes up to `file_size` (64MB) of that, so 64MiB is what
+# ImageMagick may spill. MAP_LIMIT is the memory-mapped part of the same spill on the same scratch, so it is
+# never above DISK_LIMIT. AREA_LIMIT is the largest single frame whose cache fits memory plus disk at Q16
+# RGBA's 8 bytes a pixel: (512MiB + 64MiB) / 8 = 75497472 pixels. An image over a limit is a
+# `ResourceLimitError`, which reaches the caller as `unreadable` — a permanent verdict on the file against
+# these limits, the same class as an fsize kill. Recompute all four when scratch, concurrency or file_size
+# move.
+ENV MAGICK_MEMORY_LIMIT=512MiB \
+    MAGICK_DISK_LIMIT=64MiB \
+    MAGICK_MAP_LIMIT=64MiB \
+    MAGICK_AREA_LIMIT=75497472
+
 WORKDIR /hotcell
 
 # For a reproducible dependency graph, commit a Gemfile.lock next to the Gemfile so a clean build resolves
