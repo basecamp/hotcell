@@ -8,29 +8,6 @@ require "active_storage/hot_cell/server/operation"
 # toolchains' loads in the same place is what makes a single cell carrying both legible.
 require "image_processing/mini_magick"
 
-# Invariant 9: a tool sees only the environment its operation wrote for it. `Operation#run_tool` holds it
-# with `unsetenv_others: true`, and these operations do not use it — mini_magick spawns `magick` itself.
-# `MiniMagick.restricted_env` is `false` by default, and with it false mini_magick calls
-# `Open3.popen3({}, *command, unsetenv_others: false)`, so `magick` inherited this worker's whole
-# environment. `bin/conformance` did not catch it, because its environment check drives an operation that
-# goes through `run_tool`.
-#
-# `cli_env` names the locale for the reason `tool_environment` does: a tool's output must not shift under
-# it. mini_magick passes `HOME`, `PATH` and `LANG` and does not pass `LC_ALL`, so both go here.
-#
-# Set at require time rather than in `before_worker_boot`, so that the binary lookup this require performs
-# is covered too. Note what this is: mini_magick filters the environment it was given, where `run_tool`
-# writes a fresh one. Driving `magick` directly would make it ours, and that is the separate enhancement
-# this class already names.
-#
-# The OpenMP variables come from the cell's environment rather than being named here: the number belongs
-# to the image, which is configured to match the container's CPU quota. Without them the restriction would
-# hand `magick` the pool the image's bound was meant to take away. `run_tool` carries the same pair.
-MiniMagick.restricted_env = true
-MiniMagick.cli_env = { "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8",
-                       "OMP_NUM_THREADS" => ENV["OMP_NUM_THREADS"],
-                       "OMP_THREAD_LIMIT" => ENV["OMP_THREAD_LIMIT"] }.compact
-
 module ActiveStorage
   module HotCell
     module Server
@@ -48,6 +25,40 @@ module ActiveStorage
       # than through mini_magick, and is a separate enhancement.
       class MagickOperation < Operation
         abstract_operation
+
+        # Invariant 9: a tool sees only the environment its operation wrote for it. `Operation#run_tool` holds
+        # it with `unsetenv_others: true`, and these operations do not use it — mini_magick spawns `magick`
+        # itself. `MiniMagick.restricted_env` is `false` by default, and with it false mini_magick calls
+        # `Open3.popen3({}, *command, unsetenv_others: false)`, so `magick` inherited this worker's whole
+        # environment. `bin/conformance` did not catch it, because its environment check drives an operation
+        # that goes through `run_tool`. Note what this is: mini_magick filters the environment it was given,
+        # where `run_tool` writes a fresh one. Driving `magick` directly would make it ours, and that is the
+        # separate enhancement this class already names.
+        #
+        # The locale is named for the reason `tool_environment` names it: a tool's output must not shift under
+        # it. mini_magick passes `HOME`, `PATH` and `LANG` and does not pass `LC_ALL`, so both go here.
+        #
+        # Everything else comes from the worker's environment rather than being named here. The OpenMP pair
+        # belongs to the image, which is configured to match the container's CPU quota. ImageMagick's own
+        # resource ceilings, `MAGICK_DISK_LIMIT` and its siblings, are read from its environment as it loads
+        # and the image sets them to a worker's share of the scratch; without them `magick` runs under
+        # ImageMagick's defaults, the host's RAM and an unbounded disk. `TMPDIR` and `MAGICK_TMPDIR` are where
+        # it spills that cache: the worker sets the first to the request's home after the fork and
+        # `Operation#initialize` maps the second from it — which is why this is read per request, after
+        # `super`, and not once at require: a hash built then hands `magick` the supervisor's `/tmp`, where
+        # nothing sweeps what a killed worker leaves.
+        def self.cli_env
+          { "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8",
+            "OMP_NUM_THREADS" => ENV["OMP_NUM_THREADS"], "OMP_THREAD_LIMIT" => ENV["OMP_THREAD_LIMIT"],
+            "TMPDIR" => ENV["TMPDIR"], "MAGICK_TMPDIR" => ENV["MAGICK_TMPDIR"] }
+            .merge(ENV.select { |name, _| name.match?(/\AMAGICK_\w+_LIMIT\z/) })
+            .compact
+        end
+
+        def initialize
+          super
+          MiniMagick.cli_env = self.class.cli_env
+        end
 
         # MiniMagick::Error is how mini_magick reports a `magick` that exited non-zero — the common shape of an
         # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright.
@@ -71,3 +82,7 @@ module ActiveStorage
     end
   end
 end
+
+# Also at require time, so that the binary lookup the require above performs is covered too.
+MiniMagick.restricted_env = true
+MiniMagick.cli_env = ActiveStorage::HotCell::Server::MagickOperation.cli_env

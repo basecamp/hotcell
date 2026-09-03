@@ -51,6 +51,25 @@ ENV HOME=/tmp \
     HOTCELL_OPERATIONS=/hotcell/operations \
     HOTCELL_DIR=/run/hotcell/cell
 
+# ImageMagick's pixel cache limits. A decoded frame is `width x height x bytes per pixel` (8 for RGB(A) in
+# ImageMagick 6 Q16), held in heap up to MEMORY_LIMIT, otherwise written whole to a file on scratch up to DISK_LIMIT,
+# otherwise refused (`cache resources exhausted`, which the cell reports as `unreadable`). All three count
+# every frame of the process together. Without DISK_LIMIT one layered PSD fills the scratch every worker
+# shares. The variables reach ImageMagick in-process, through libvips' `magickload`, and in the `magick`
+# the cell spawns. docs/DEPLOYMENT.md "Size ImageMagick's pixel cache limits" derives the numbers; these
+# are for the worked example there (memory 2g, tmpfs 512m, concurrency 4, image operations' file_size 48MB):
+#
+#     MEMORY_LIMIT = (memory - tmpfs) / concurrency - worker footprint
+#                  = 384MiB - ~82MiB = 302MiB ceiling, rounded down to 256MiB
+#     DISK_LIMIT   = min(file_size, (scratch - reserve) / concurrency - staged files x file_size), never negative
+#                  = min(48MiB, (512MiB - 64MiB) / 4 - 2 x 48MiB) = 16MiB
+#     MAP_LIMIT    = DISK_LIMIT (it only decides whether the spill file is memory-mapped)
+#
+# Recompute when memory, the tmpfs size, concurrency, the reserve or file_size move.
+ENV MAGICK_MEMORY_LIMIT=256MiB \
+    MAGICK_DISK_LIMIT=16MiB \
+    MAGICK_MAP_LIMIT=16MiB
+
 WORKDIR /hotcell
 
 # For a reproducible dependency graph, commit a Gemfile.lock next to the Gemfile so a clean build resolves
