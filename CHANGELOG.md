@@ -18,7 +18,7 @@ gem but are what an operator runs against their own image.
 #### Added
 
 * The supervisor empties the scratch at boot: every top-level entry of `Dir.tmpdir` and of the workspace's parent that the cell's uid owns, so rebooting the accessory clears a scratch a killed tool filled. Set `TMPDIR` when running `exe/hotcell` outside a container, or the boot empties your own `/tmp` of what you own.
-* The cell refuses to boot when `HOTCELL_DIR` is inside the scratch, when the scratch is a symlink, or when `HOTCELL_WORKSPACE` is relative.
+* The cell refuses to boot when `HOTCELL_DIR` is inside the scratch, when the scratch is missing or reached through a symlink the cell's uid owns, or when `HOTCELL_WORKSPACE`, `TMPDIR` or `HOTCELL_DIR` is not an absolute, normalized path.
 
 #### Fixed
 
