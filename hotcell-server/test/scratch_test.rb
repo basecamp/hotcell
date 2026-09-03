@@ -117,10 +117,12 @@ class ScratchTest < RegistryIsolatedTest
     cell&.cleanup
   end
 
+  # The socket directory is the scratch itself rather than a directory inside it, because a macOS runner's
+  # `Dir.tmpdir` leaves a name that deep no room under the platform's socket path limit.
   def test_a_socket_directory_inside_the_scratch_refuses_to_boot
     cell = TestCell.new
     FileUtils.mkdir_p cell.tmpdir
-    cell.instance_variable_set(:@directory, File.join(cell.tmpdir, "sockets"))
+    cell.instance_variable_set(:@directory, cell.tmpdir)
 
     error = assert_raises(RuntimeError) { boot cell, workspace: cell.workspace }
 
