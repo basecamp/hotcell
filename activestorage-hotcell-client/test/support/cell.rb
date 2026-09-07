@@ -39,10 +39,11 @@ class Cell
     @directory = File.join(@root, name)
     @operations = File.join(@root, "operations")
     @log_path = File.join(@root, "cell.log")
+    @tmpdir = File.join(@root, "tmp")
   end
 
   def start
-    FileUtils.mkdir_p [ @directory, @operations ]
+    FileUtils.mkdir_p [ @directory, @operations, @tmpdir ]
     File.write File.join(@operations, "00_boot.rb"), BOOT
 
     @pid = Process.spawn(environment, RbConfig.ruby, *LIBS.flat_map { |lib| [ "-I", lib ] }, EXE,
@@ -75,7 +76,7 @@ class Cell
   private
     def environment
       { "HOTCELL_DIR" => @directory, "HOTCELL_OPERATIONS" => @operations,
-        "HOTCELL_WORKSPACE" => File.join(@root, "workspace") }
+        "HOTCELL_WORKSPACE" => File.join(@tmpdir, "workspace"), "TMPDIR" => @tmpdir }
     end
 
     def wait_for_socket(within: 20)

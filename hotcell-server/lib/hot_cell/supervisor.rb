@@ -4,6 +4,8 @@ require "socket"
 require "fcntl"
 require "fileutils"
 require "tmpdir"
+require "pathname"
+require "etc"
 
 module HotCell
   # Accepts, queues, dispatches, times, kills, reaps, and cleans up. It never evaluates image data.
@@ -139,7 +141,7 @@ module HotCell
     def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
                    ptrace_scope_path: PTRACE_SCOPE)
       @directory = directory
-      @workspace = workspace || File.join(Dir.tmpdir, "hotcell-workspace")
+      @workspace = workspace || File.join(tmpdir, "hotcell-workspace")
       @configuration = configuration
       @log = log
       @ptrace_scope_path = ptrace_scope_path
@@ -154,6 +156,7 @@ module HotCell
       verify_socket_paths!
       verify_limits!
       verify_ptrace_scope!
+      verify_scratches!
       prepare_directories
       preload
       @work = listen "work.sock"
@@ -983,7 +986,62 @@ module HotCell
         end
       end
 
+      # The scratch is where a killed tool's files outlive it, so the sweep has to be sure of what it is
+      # sweeping. A root that is missing, or is not a directory, has been moved or replaced by something; a
+      # symlink this uid owns anywhere on the path is a redirect a worker could have planted, and a sweep
+      # through it would delete what the link points at; a relative path is whatever the working directory
+      # happens to be, and a `..` after a symlink names one directory to the kernel and another to string
+      # comparison, so the paths have to be already normalized. Symlinks the OS owns stay legal, since `/tmp`
+      # is one on macOS. The socket directory cannot live inside the scratch, because the sweep would have
+      # to skip it, and a skipped name is one a worker can fill.
+      #
+      # What this cannot check is that the root's parent is unwritable, which is what would make the root
+      # immovable. On the accessory `/tmp` is a mount; in development it is a directory under one the
+      # developer owns, and refusing that would refuse every development layout.
+      def verify_scratches!
+        { "workspace" => workspace, "temporary directory" => tmpdir, "socket directory" => directory }.each do |name, path|
+          next if File.absolute_path?(path) && File.expand_path(path) == path
+
+          raise ConfigurationError, "the #{name} #{path} is not an absolute path without `.`, `..` or a trailing slash"
+        end
+
+        scratches.each do |scratch|
+          if (link = owned_symlink_on(scratch))
+            raise ConfigurationError, "#{link} is a symlink the cell's uid owns, on the path to the scratch " \
+                                      "#{scratch}, and a boot sweeps the scratch"
+          end
+          unless File.stat(scratch).directory?
+            raise ConfigurationError, "the scratch #{scratch} is not a directory, and a boot sweeps the scratch"
+          end
+          if directory == scratch || directory.start_with?("#{scratch}/")
+            raise ConfigurationError, "the socket directory #{directory} is inside the scratch #{scratch}, " \
+                                      "which a boot sweeps. Choose a directory outside it."
+          end
+        end
+      rescue Errno::ENOENT => error
+        raise ConfigurationError, "the scratch is missing: #{error.message}"
+      end
+
+      def owned_symlink_on(path)
+        Pathname.new(path).descend.map(&:to_s).find do |ancestor|
+          stat = File.lstat(ancestor)
+          stat.symlink? && stat.uid == Process.uid
+        end
+      end
+
+      # `Dir.tmpdir` with its fallbacks removed: it answers `.` for a `/tmp` its owner cannot write, and a
+      # worker can leave `/tmp` in that state. The sweep is what puts the mode back, so it has to see the
+      # directory `Dir.tmpdir` will answer once it has.
+      def tmpdir
+        ENV.values_at("TMPDIR", "TMP", "TEMP").compact.reject(&:empty?).first || Etc.systmpdir
+      end
+
+      def scratches
+        [ tmpdir, File.dirname(workspace) ].uniq
+      end
+
       def prepare_directories
+        scratches.each { |scratch| sweep_scratch scratch }
         FileUtils.mkdir_p directory
 
         configuration.concurrency.times do |number|
@@ -993,6 +1051,36 @@ module HotCell
           log.write "slot.uncleaned", slot: number, home: slot.directory,
                                       message: "an earlier boot's files are still here"
         end
+      end
+
+      # The scratch outlives the container when it is a host mount, so what a killed tool left at its top is
+      # still there at the next boot, and rebooting the accessory has to be the one command that clears it.
+      # `Dir.tmpdir` is where a tool with no `TMPDIR` writes, and the workspace's parent is the scratch when
+      # `HOTCELL_WORKSPACE` points elsewhere. Only what this uid owns goes, and it goes by the slot's rule:
+      # remove, and put back the modes a tool changed if that fails. `lstat` so a symlink is a link to
+      # unlink and never a tree to walk, and a failure is a line in the log rather than a cell that will
+      # not boot.
+      def sweep_scratch(scratch)
+        repair_root scratch
+        Dir.children(scratch).each do |name|
+          path = File.join(scratch, name)
+          next unless File.lstat(path).uid == Process.uid
+          next if Filesystem.remove_tree(path)
+
+          log.write "scratch.unswept", path: path
+        end
+      rescue SystemCallError => error
+        log.write "scratch.unswept", path: scratch, error: error.class.name, message: error.message
+      end
+
+      # The root's mode is the one a tool can set that the sweep itself trips on: `0300` fails the listing
+      # and `0500` fails every unlink beneath it. It is repaired only when it is wrong, and only when this
+      # uid owns it.
+      def repair_root(scratch)
+        stat = File.stat(scratch)
+        return unless stat.uid == Process.uid && stat.mode & 0o700 != 0o700
+
+        FileUtils.chmod stat.mode | 0o700, scratch
       end
 
       def preload

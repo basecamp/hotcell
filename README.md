@@ -302,7 +302,8 @@ web: HOTCELL_ROOT=$PWD/tmp/hotcell-sockets bin/rails server
 cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell
 ```
 
-Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`.
+Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. At boot the cell
+empties `Dir.tmpdir` of every entry its uid owns.
 
 #### Configure the cell and operation limits
 

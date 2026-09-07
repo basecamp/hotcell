@@ -55,13 +55,14 @@ def stop(pid, within: 15)
 end
 
 FileUtils.rm_rf ROOT
-FileUtils.mkdir_p ROOT
+FileUtils.mkdir_p File.join(ROOT, "tmp")
 
 environment = {
   "BUNDLE_GEMFILE" => File.join(REPO, "Gemfile"),
   "RUBYOPT" => "-rbundler/setup",
   "HOTCELL_DIR" => DIRECTORY,
-  "HOTCELL_WORKSPACE" => File.join(ROOT, "workspace"),
+  "HOTCELL_WORKSPACE" => File.join(ROOT, "tmp", "workspace"),
+  "TMPDIR" => File.join(ROOT, "tmp"),
   "HOTCELL_OPERATIONS" => File.join(REPO, "examples", "operations"),
 }
 
