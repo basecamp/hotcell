@@ -136,27 +136,40 @@ module Examples
         assert gone, "the grandchild (pid #{pid}) outlived its worker"
       end
 
-      # Fills every worker and every queue place with sleeps, then offers one more. The blockers' own
-      # outcomes are deliberately not asserted: the queued ones may run or may wait, and either way the
-      # cell is full when the last request arrives.
+      # Fills every worker and every queue place with sleeps, then offers one more. The offer waits until
+      # metrics count every place taken rather than for a fixed interval: on a slow runner a blocker can
+      # take longer than that to arrive, and the offer then takes its place and succeeds. The blockers'
+      # own outcomes are not asserted: the queued ones may run or may wait, and either way the cell is full
+      # when the last request arrives. They are reported when the cell never fills, so a blocker that
+      # failed says why.
       def overload
         places = @described.fetch(:concurrency) + @described.fetch(:queue_size)
         blockers = places.times.map do
           Thread.new do
             Sleep.perform_in_hotcell [], [], { seconds: 2 }
-          rescue StandardError
-            nil
+          rescue StandardError => error
+            error
           end
         end
 
         begin
-          sleep 0.5
+          unless within(5) { occupied == places }
+            failures = blockers.map(&:value).grep(StandardError).map(&:message)
+            raise Failed, "#{occupied} of #{places} places filled; blockers failed with #{failures.inspect}"
+          end
+
           expect_failure @cell.transient, /\Acapacity/ do
             Sleep.perform_in_hotcell [], [], { seconds: 2 }
           end
         ensure
           blockers.each(&:join)
         end
+      end
+
+      def occupied
+        response = @cell.metrics
+        assert response&.ok?, "the control socket did not answer metrics: #{response&.failure}"
+        response.result.fetch(:running) + response.result.fetch(:queued)
       end
 
       def still_serving
