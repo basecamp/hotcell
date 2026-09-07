@@ -13,6 +13,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Core
+
+#### Fixed
+
+* json 3.0.0 support.
+
 ### HotCell::Server
 
 #### Fixed

@@ -22,27 +22,21 @@ module HotCell
         JSON.generate object
       end
 
-      # Keys are deep-symbolized here rather than in an operation, so an operation never has to know
-      # whether to reach for payload[:format] or payload["format"], and a nested hash can be splatted
-      # straight into a library's keyword arguments. Only keys: a Symbol value would not survive the
-      # round trip, which the JSON-native rule already forbids.
+      # Keys are symbolized so operations read payload[:format] and can splat a nested hash into keyword
+      # arguments. Values are not: a Symbol would not survive the round trip, which the JSON-native rule
+      # already forbids.
       #
-      # JSON.parse only. Never JSON.load, and never create_additions, both of which instantiate
-      # arbitrary classes named by a json_class key in the document.
+      # One rescue for the whole JSON layer. Naming what JSON.parse raises has been wrong twice: a report
+      # that was not an object raised TypeError past a rescue for JSON::ParserError, and a key holding
+      # invalid UTF-8 raised EncodingError past both. The supervisor parses worker reports inside its
+      # deadline loop with nothing above it rescuing, so each miss denies service to every request in the
+      # cell.
       #
-      # Every way this can fail becomes one named failure, and the catch-all is the point rather than
-      # laziness. Callers used to name what JSON.parse raises, and naming it has now been wrong twice: a
-      # report that was not an object raised TypeError past a rescue for JSON::ParserError, and a key
-      # holding bytes that are not valid UTF-8 raises EncodingError past both. The supervisor reads worker
-      # reports through here inside the loop that enforces every request's deadline, and nothing above it
-      # rescues anything, so each miss is a one-line denial of service against every request in the cell.
-      #
-      # The body is a single JSON.parse call, so this is scoped to "the JSON layer failed" and cannot
-      # swallow a bug in our own code. NoMemoryError is deliberately not caught: it is not a StandardError,
-      # and a document large enough to raise it is the worker's own memory verdict rather than a bad line.
+      # The body is one JSON.parse call, so the rescue cannot hide a bug of our own. NoMemoryError is not
+      # a StandardError and stays uncaught: a document that large is the worker's memory verdict, not a
+      # bad line.
       def parse(json)
-        JSON.parse json, symbolize_names: true, max_nesting: MAX_NESTING, allow_nan: false,
-                         create_additions: false
+        JSON.parse json, symbolize_names: true, max_nesting: MAX_NESTING, allow_nan: false
       rescue StandardError => error
         raise MessageError, "#{error.class}: #{Failure.sanitize(error.message)}"
       end
