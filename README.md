@@ -299,12 +299,11 @@ Add an entry for your cell to `Procfile.dev`:
 
 ```procfile
 web: HOTCELL_ROOT=$PWD/tmp/hotcell-sockets bin/rails server
-cell: mkdir -p $PWD/tmp/hotcell-scratch && TMPDIR=$PWD/tmp/hotcell-scratch BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell
+cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell
 ```
 
-Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. `TMPDIR` matters:
-the cell empties its temporary directory of everything it owns at boot, and without one that is your
-`/tmp`. The directory has to exist; the cell refuses to boot without it.
+Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. At boot the cell
+empties `Dir.tmpdir` of every entry its uid owns.
 
 #### Configure the cell and operation limits
 
