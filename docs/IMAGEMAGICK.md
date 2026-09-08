@@ -180,10 +180,10 @@ peak of 256MiB per worker:
 
 It equals the transformer's `file_size` because that was sized by the same arithmetic, the
 application's test holds it, and the cell ceiling allows it. Four workers spilling 768MiB and writing
-256MiB beside it fill 4096MiB exactly, so the arithmetic assumes the whole 4G is usable: a filesystem made
-with `mkfs.ext4 -m 0`, or an image larger than 4G. On a 4G ext4 with the default 5% root reserve, `df`
-shows about 3891MiB usable and the same arithmetic gives 716MiB. Check `df` on a cell host before taking
-the number. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill
+256MiB beside it fill 4096MiB exactly, so the arithmetic assumes `df --output=avail` on the empty mount
+reports at least 4096MiB, which a 4G image cannot: ext4's metadata takes some of it, and the default 5%
+root reserve takes more, leaving under 3891MiB, for which the same arithmetic gives 716MiB. Check `df` on
+a cell host before taking the number. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill
 first.
 
 **Memory.**
