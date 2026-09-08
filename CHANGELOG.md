@@ -13,6 +13,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Client
+
+#### Added
+
+* The `perform.hot_cell` event carries `stderr`, the failure's captured stream, beside `signal`. A subscriber can log the diagnosis of a crash — `libgomp: Thread creation failed` — on the same line as its cause. Before, that text survived only in the exception's message, so a failure that was discarded rather than retried lost it. The field is already bounded by `Failure.sanitize`; it is text a tool wrote while processing a hostile file, so write it to a log field and interpolate it nowhere else.
+
 ### HotCell::Core
 
 #### Fixed

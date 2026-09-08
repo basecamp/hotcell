@@ -160,6 +160,11 @@ module HotCell
       # the code filed every fsize kill as transient. `permanent` is the Failure's own answer, so no
       # subscriber re-derives it.
       #
+      # `stderr` is the diagnosis of a crash — `libgomp: Thread creation failed` — and the event is the only
+      # place a subscriber can log it: the exception's message carries it too, but only a retry logs that,
+      # and a discarded failure loses it. It is text a tool wrote while processing a hostile file, bounded
+      # by `Failure.sanitize` on the way in, and a subscriber should write it to a log field and nowhere else.
+      #
       # A subscriber's own duration minus perform_ms is transport plus queueing, and those want separate
       # metrics: a rising perform_ms means the work got more expensive, and a rising difference means the
       # cell is saturated.
@@ -171,6 +176,7 @@ module HotCell
         event[:code] = failure&.code
         event[:cause] = failure&.cause
         event[:signal] = failure&.signal
+        event[:stderr] = failure&.stderr
         event[:permanent] = failure&.permanent?
         event[:bytes_in] = byte_count(inputs)
         event[:bytes_out] = byte_count(outputs)
