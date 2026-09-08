@@ -134,6 +134,19 @@ class ClassificationTest < HotCellClientTest
     assert_equal true, event[:permanent]
   end
 
+  # A crash's diagnosis is the tool's stderr — `libgomp: Thread creation failed` — and the event is the
+  # only place a subscriber can log it, since a discarded failure never reaches the retry line.
+  def test_the_event_carries_the_stderr_so_a_subscriber_can_log_the_diagnosis_of_a_crash
+    register_with failed(code: "killed", cause: "crashed", stderr: "libgomp: Thread creation failed\n")
+
+    event = events_for do
+      assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+    end.first.payload
+
+    assert_equal "crashed", event[:cause]
+    assert_equal "libgomp: Thread creation failed\n", event[:stderr]
+  end
+
   def test_the_event_carries_a_transient_verdict_for_a_deadline_kill
     register_with failed(code: "killed", cause: "deadline")
 
@@ -154,6 +167,7 @@ class ClassificationTest < HotCellClientTest
     assert_nil event[:code]
     assert_nil event[:cause]
     assert_nil event[:signal]
+    assert_nil event[:stderr]
     assert_nil event[:permanent]
     assert_equal 12, event[:perform_ms]
     assert_equal({ perform_ms: 12, operation_ms: 9 }, event[:timing])
@@ -245,9 +259,9 @@ class ClassificationTest < HotCellClientTest
       end
     end
 
-    def failed(code:, cause: nil, signal: nil, error_class: nil, message: nil)
+    def failed(code:, cause: nil, signal: nil, error_class: nil, message: nil, stderr: nil)
       HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, signal: signal,
-                                                    error_class: error_class, message: message),
+                                                    error_class: error_class, message: message, stderr: stderr),
                                timing: { perform_ms: 1 }
     end
 end
