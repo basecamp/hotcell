@@ -417,6 +417,8 @@ removed too early turns that processing off without an error.
 
 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers all of this in detail: every container flag, how to
 size the numbers, the shared group, bringing your own container, and where scratch lives.
+[docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md) covers ImageMagick's own resource limits, which an image that
+installs it must size from the same numbers.
 
 ### Using custom operations
 

@@ -211,7 +211,8 @@ serves requests exactly as before.
 
 ### General
 
-Environment variables. The image sets all of them, so set one only to override it.
+Environment variables. The image sets all of them unless the table says otherwise, so set one only to
+override it.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
@@ -223,6 +224,7 @@ Environment variables. The image sets all of them, so set one only to override i
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |
 | `OMP_THREAD_LIMIT` | `8` | The ceiling on that pool, including a library that raises the count itself. |
+| `MAGICK_MEMORY_LIMIT`, `MAGICK_MAP_LIMIT`, `MAGICK_DISK_LIMIT` | unset | ImageMagick's pixel cache limits. The scaffold installs no ImageMagick; an image that does sets these from the container's `memory`, the scratch and `concurrency`. See [docs/IMAGEMAGICK.md](IMAGEMAGICK.md). |
 
 ### Bound the OpenMP thread pools
 
@@ -502,16 +504,20 @@ matching, storing or rendering are all places these values raise.
 
 ## Making the numbers agree
 
-Nothing checks these three for you.
+Nothing checks these for you.
 
 - The client's `timeout` must be more than the cell's `answer_within`, which is
   `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
   instead of as `capacity` or `killed`. The client warns at boot, and `describe` reports the number.
-- The cell's `memory` must stay below the container's `memory`. At equal values the cgroup fires first,
-  and a cgroup kill is a `SIGKILL` with no diagnostic.
-- `file_size × concurrency` must fit scratch. Above it, concurrent workers fill it and requests fail
-  with `ENOSPC` instead of with a limit verdict. On the default accessory scratch is the tmpfs, and its
-  `size=` is the number to fit.
+- The cell's `memory` must be less than the container's `memory`. At equal values the cgroup fires
+  first, and a cgroup kill is a `SIGKILL` with no diagnostic.
+- `file_size × concurrency` must be no more than the scratch. Above it, concurrent workers fill the
+  scratch and requests fail with `ENOSPC` instead of with a limit verdict. On the default accessory the
+  scratch is the tmpfs, and its `size=` is the number to fit.
+- `concurrency × (MAGICK_DISK_LIMIT + everything else one worker writes on scratch)` must be no more
+  than the scratch. Above it, concurrent ImageMagick processes fill the scratch before any of them
+  refuses a frame, and `file_size` cannot prevent that, because it bounds each cache file and not their
+  sum. See [docs/IMAGEMAGICK.md](IMAGEMAGICK.md).
 
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
