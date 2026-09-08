@@ -134,7 +134,8 @@ the footprint against each reaching operation's `memory`.
 
 A production cell serving image transforms and analysis for a Rails application.
 
-**The volume mount.** `/tmp` is a bind mount of a 4G loopback ext4 file on the host, mounted
+**The volume mount.** `/tmp` is a bind mount of a loopback ext4 image on the host, sized so that `df`
+reports 4096MiB available when the mount is empty, mounted
 `nosuid,nodev,noexec` and chowned to the cell's uid by the host's configuration management:
 
 ```yaml
@@ -158,7 +159,7 @@ can set neither on a bind mount. [docs/DEPLOYMENT.md](DEPLOYMENT.md#a-host-mount
 
 | Input | Value | From |
 | --- | --- | --- |
-| scratch | 4096MiB | the loopback filesystem, taken as fully usable; see the note under "Disk" |
+| scratch | 4096MiB | `df --output=avail` on the empty loopback filesystem |
 | container `memory` | 2048MiB | `memory: 2g`, no tmpfs term |
 | `concurrency` | 4 | `config.rb`, twice `cpus` |
 | cell ceiling | `memory: 1536MB`, `file_size: 768MB` | `config.rb`; an operation's own limits are clamped to these |
@@ -180,10 +181,10 @@ peak of 256MiB per worker:
 
 It equals the transformer's `file_size` because that was sized by the same arithmetic, the
 application's test holds it, and the cell ceiling allows it. Four workers spilling 768MiB and writing
-256MiB beside it fill 4096MiB exactly, so the arithmetic assumes `df --output=avail` on the empty mount
-reports at least 4096MiB, which a 4G image cannot: ext4's metadata takes some of it, and the default 5%
-root reserve takes more, leaving under 3891MiB, for which the same arithmetic gives 716MiB. Check `df` on
-a cell host before taking the number. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill
+256MiB beside it fill the 4096MiB exactly. That is why the scratch input is what `df` reports available
+and not the image's size: ext4's metadata and its default 5% root reserve take part of the image, so a
+4G image reports under 3891MiB, for which the same arithmetic gives 716MiB. Size the image over what the
+arithmetic needs, and take the number from `df` on a cell host. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill
 first.
 
 **Memory.**
