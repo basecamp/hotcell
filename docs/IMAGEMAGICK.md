@@ -34,17 +34,22 @@ array, and the limits decide where each cache lives. ImageMagick's
 | `MAGICK_THREAD_LIMIT` | threads | The OpenMP team ImageMagick asks for. |
 | `MAGICK_TMPDIR` | path | Where the cache files go. Read before `TMPDIR`. |
 
-Bytes per pixel come from the build: 8 on ImageMagick 6 Q16 (four 16-bit channels), 10 with an index or
-black channel. A 4096 × 4096 image is 128MiB before anything is done to it, a layered PSD holds one cache
+Bytes per pixel come from the build: 8 on ImageMagick 6 Q16 without HDRI, which is Ubuntu's
+`imagemagick-6.q16` (four 16-bit channels), 10 with an index or black channel; an HDRI build stores
+floats and doubles both. A 4096 × 4096 image is 128MiB before anything is done to it, a layered PSD holds one cache
 per layer at once, and a transform holds source and result at once.
 
 The three byte limits are a chain: heap, then mapped file, then plain file, and a cache takes one tier
 whole. Both file tiers count against `disk`. So a single frame is readable only if it fits `memory` or
-`disk` on its own, and a multi-frame file only if all its frames fit the two added together.
+`disk` on its own. A multi-frame file needs every frame placed in turn, each in the first tier with room
+left, so its frames can total at most `memory` plus `disk`, and less when they pack badly: a frame that
+misses the heap's remainder must fit the disk's remainder on its own.
 
-Each limit is the lowest of three sources: the build's default (most of the host's RAM, unbounded disk),
-`policy.xml`, which is a ceiling the environment can lower and never raise, and the environment, read
-once when the process starts. Limits are per process. `identify -list resource` prints the result.
+Each limit has three sources. The build's default (most of the host's RAM, unbounded disk) is replaced
+by the environment, upward or downward; `policy.xml` is a ceiling on both, which the environment can
+lower and never raise. They are read once: when the `magick` process starts, or at ImageMagick's first
+use inside a process that loaded the library. Limits are per process. `identify -list resource` prints
+the result.
 
 ### How they interact in a cell
 
@@ -102,7 +107,8 @@ separately and set the image to the smallest result.
 
     scratch ÷ concurrency − what else the operation writes on scratch
 
-Scratch is the tmpfs `size=` or the host filesystem's size; a named volume has no size to divide. The
+Scratch is the tmpfs `size=` or the host filesystem's usable size as `df` reports it, which on an ext4
+made with default options is 5% under the nominal size; a named volume has no size to divide. The
 subtraction is the operation's own files: its output, and its input if it stages one. The shipped image
 operations read their input through the descriptor and stage nothing; a transformer writes its output on
 scratch before copying it out. The result must be zero or more. Below zero, enlarge the scratch or lower
@@ -152,9 +158,10 @@ can set neither on a bind mount. [docs/DEPLOYMENT.md](DEPLOYMENT.md#a-host-mount
 
 | Input | Value | From |
 | --- | --- | --- |
-| scratch | 4096MiB | the loopback filesystem |
+| scratch | 4096MiB | the loopback filesystem's nominal size; the usable size is what `df` shows |
 | container `memory` | 2048MiB | `memory: 2g`, no tmpfs term |
 | `concurrency` | 4 | `config.rb`, twice `cpus` |
+| cell ceiling | `memory: 1536MB`, `file_size: 768MB` | `config.rb`; an operation's own limits are clamped to these |
 | `transformers.image.vips` | `memory: 1280MB`, `file_size: 768MB` | `file_size` raised in the application's operations file |
 | `analyzers.image.vips` | `memory: 1024MB`, `file_size: 48MB` | gem defaults |
 | `analyzers.image.magick` | `memory: 1024MB`, `file_size: 48MB` | gem defaults |
@@ -172,8 +179,9 @@ peak of 256MiB per worker:
     MAGICK_MAP_LIMIT  = 768MiB
 
 It equals the transformer's `file_size` because that was sized by the same arithmetic, and the
-application's test holds it. Four workers spilling 768MiB and writing 256MiB beside it fill the 4G
-exactly. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill first.
+application's test holds it, and the cell ceiling allows it. Four workers spilling 768MiB and writing
+256MiB beside it fill the nominal 4G exactly, so the usable size is the number to check with `df`. On the
+analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill first.
 
 **Memory.**
 
@@ -201,7 +209,7 @@ and `disk` at 768MiB in `policy.xml`.
 | --- | --- | --- |
 | 384MiB heap | 50.3 million | 8192 × 6144 |
 | 768MiB disk | 100.7 million | 16384 × 6144 |
-| both, multi-frame | 151 million | a 20-layer PSD at 2740 × 2740 |
+| both, multi-frame | up to 151 million | a 19-layer PSD at 2740 × 2740: 6 layers on the heap, 13 on disk |
 
 A same-size transform holds source and result, so it decodes half a tier. A larger file is `unreadable`
 on its first request, and the scratch is empty afterwards. The limits the image had inherited from the

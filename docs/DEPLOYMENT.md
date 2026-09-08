@@ -514,9 +514,10 @@ Nothing checks these for you.
 - `file_size × concurrency` must be no more than the scratch. Above it, concurrent workers fill the
   scratch and requests fail with `ENOSPC` instead of with a limit verdict. On the default accessory the
   scratch is the tmpfs, and its `size=` is the number to fit.
-- `MAGICK_DISK_LIMIT × concurrency` must be no more than the scratch. Above it, concurrent ImageMagick
-  processes fill the scratch before any of them refuses a frame, and `file_size` cannot prevent that,
-  because it bounds each cache file and not their sum. See [docs/IMAGEMAGICK.md](IMAGEMAGICK.md).
+- `concurrency × (MAGICK_DISK_LIMIT + everything else one worker writes on scratch)` must be no more
+  than the scratch. Above it, concurrent ImageMagick processes fill the scratch before any of them
+  refuses a frame, and `file_size` cannot prevent that, because it bounds each cache file and not their
+  sum. See [docs/IMAGEMAGICK.md](IMAGEMAGICK.md).
 
 Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
 the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.

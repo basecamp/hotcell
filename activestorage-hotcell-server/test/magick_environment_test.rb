@@ -17,8 +17,8 @@ require "etc"
 # does not read it decodes normally. The cell is forked from this process, so the variable reaches the
 # worker.
 class MagickEnvironmentTest < ActiveStorageHotCellTest
-  UNSET = %w[ OMP_NUM_THREADS OMP_THREAD_LIMIT MAGICK_DISK_LIMIT MAGICK_MAP_LIMIT TMPDIR MAGICK_TMPDIR ]
-    .to_h { |name| [ name, nil ] }
+  UNSET = %w[ OMP_NUM_THREADS OMP_THREAD_LIMIT MAGICK_MEMORY_LIMIT MAGICK_MAP_LIMIT MAGICK_DISK_LIMIT
+              MAGICK_AREA_LIMIT MAGICK_THREAD_LIMIT TMPDIR MAGICK_TMPDIR ].to_h { |name| [ name, nil ] }
 
   def test_magick_does_not_inherit_the_workers_environment
     with_refusing_policy_in_the_environment do
@@ -116,6 +116,27 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     RUBY
 
     assert_equal [ nil, "/scratch/home-for-this-request" ], JSON.parse(output)
+  end
+
+  # The premise of the mapping above, proved on the child rather than on our hash: `magick` given a memory
+  # limit its cache cannot fit writes that cache under `MAGICK_TMPDIR`, and `MAGICK_TMPDIR` is the request's
+  # `TMPDIR` at the time the operation was instantiated.
+  def test_magick_spills_its_cache_into_the_requests_tmpdir
+    skip "ImageMagick is not installed" unless magick_installed?
+
+    Dir.mktmpdir do |home|
+      cache_log = in_a_child({}, <<~RUBY)
+        require "active_storage/hot_cell/server/analyzers/image/magick"
+        ENV["TMPDIR"] = #{home.inspect}
+        ENV["MAGICK_MEMORY_LIMIT"] = ENV["MAGICK_MAP_LIMIT"] = "1MiB"
+        ActiveStorage::HotCell::Server::Analyzers::Image::Magick.new
+        convert = MiniMagick.convert.debug("cache").size("500x500")
+        convert << "xc:red" << "info:"
+        convert.call(errors: false) { |_stdout, stderr, _status| print stderr }
+      RUBY
+
+      assert_match %r{\(#{Regexp.escape(home)}/magick-\S+, disk}, cache_log
+    end
   end
 
   private
