@@ -2,6 +2,6 @@
 
 module HotCell
   module Server
-    VERSION = "0.5.0.dev"
+    VERSION = "0.4.1"
   end
 end
