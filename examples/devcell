@@ -68,7 +68,7 @@ environment = {
 
 puts "booting exe/hotcell on the example operations"
 pid = Process.spawn(environment, RbConfig.ruby, File.join(REPO, "hotcell-server", "exe", "hotcell"),
-                    out: LOG, err: LOG)
+                    "--development", out: LOG, err: LOG)
 
 begin
   wait_until("the cell's socket") { File.socket?(SOCKETS.first) }

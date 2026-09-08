@@ -197,7 +197,180 @@ class ScratchTest < RegistryIsolatedTest
     end
   end
 
+  # Without `--development` a cell told no `TMPDIR` sweeps the system's, which the accessory needs.
+  def test_a_cell_told_no_tmpdir_sweeps_the_system_tmpdir
+    File.write File.join(@elsewhere, "magick-abc123"), "pixel cache"
+
+    with_system_tmpdir @elsewhere do
+      boot TestCell.new(own_tmpdir: false), workspace: nil
+    end
+
+    refute File.exist?(File.join(@elsewhere, "magick-abc123"))
+  end
+
+  def test_a_development_cell_told_no_tmpdir_leaves_the_system_tmpdir_alone_and_works_in_a_directory_of_its_own
+    File.write File.join(@elsewhere, "keep"), "not the cell's"
+
+    with_system_tmpdir @elsewhere do
+      boot development_cell, workspace: nil do |cell|
+        assert_ok cell.call("test.echo")
+      end
+    end
+
+    assert File.exist?(File.join(@elsewhere, "keep"))
+    own = Dir.children(@elsewhere) - [ "keep" ]
+    assert_equal 1, own.size
+    assert Dir.exist?(File.join(@elsewhere, own.first, "hotcell-workspace"))
+  end
+
+  # A macOS shell hands every process a per-user `TMPDIR`, so a `TMPDIR` the cell is told is as shared as the
+  # system's.
+  def test_a_development_cell_told_a_tmpdir_leaves_it_alone_and_works_in_a_directory_of_its_own_under_it
+    cell = TestCell.new(supervisor: { development: true })
+    FileUtils.mkdir_p cell.tmpdir
+    File.write File.join(cell.tmpdir, "keep"), "not the cell's"
+
+    with_system_tmpdir @elsewhere do
+      boot cell, workspace: nil do
+        assert_ok cell.call("test.echo")
+        assert File.exist?(File.join(cell.tmpdir, "keep"))
+        own = Dir.children(cell.tmpdir) - [ "keep" ]
+        assert_equal 1, own.size
+        assert Dir.exist?(File.join(cell.tmpdir, own.first, "hotcell-workspace"))
+      end
+    end
+
+    assert_empty Dir.children(@elsewhere)
+  end
+
+  def test_the_directory_of_its_own_is_the_same_at_the_next_boot_and_is_swept
+    cell = development_cell
+    cell.instance_variable_get(:@supervisor_options)[:workspace] = nil
+
+    with_system_tmpdir @elsewhere do
+      cell.start
+      cell.stop
+      own = File.join(@elsewhere, Dir.children(@elsewhere).first)
+      File.write File.join(own, "magick-abc123"), "pixel cache"
+
+      cell.start
+      cell.stop
+
+      assert_equal [ own ], Dir.children(@elsewhere).map { |name| File.join(@elsewhere, name) }
+      refute File.exist?(File.join(own, "magick-abc123"))
+    end
+  ensure
+    cell&.stop
+    cell&.cleanup
+  end
+
+  # Two cells one uid runs must not sweep each other's slots, so the directory is the socket directory's.
+  def test_two_development_cells_told_no_tmpdir_get_directories_of_their_own
+    with_system_tmpdir @elsewhere do
+      boot development_cell, workspace: nil
+      boot development_cell, workspace: nil
+    end
+
+    assert_equal 2, Dir.children(@elsewhere).size
+  end
+
+  # The sticky parent stops another uid from replacing the directory, not from writing inside one a worker
+  # left world-writable.
+  def test_a_directory_of_its_own_left_open_is_closed_again
+    cell = development_cell
+    cell.instance_variable_get(:@supervisor_options)[:workspace] = nil
+
+    with_system_tmpdir @elsewhere do
+      cell.start
+      cell.stop
+      own = File.join(@elsewhere, Dir.children(@elsewhere).first)
+      File.chmod 0o777, own
+
+      cell.start
+      cell.stop
+
+      assert_equal 0o700, File.stat(own).mode & 0o777
+    end
+  ensure
+    cell&.stop
+    cell&.cleanup
+  end
+
+  def test_a_symlink_at_the_name_of_the_directory_of_its_own_refuses_to_boot
+    cell = development_cell
+    cell.instance_variable_get(:@supervisor_options)[:workspace] = nil
+
+    Dir.mktmpdir "hotcell-target" do |target|
+      File.write File.join(target, "keep"), "not the cell's"
+
+      with_system_tmpdir @elsewhere do
+        cell.start
+        cell.stop
+        own = File.join(@elsewhere, Dir.children(@elsewhere).first)
+        FileUtils.rm_rf own
+        File.symlink target, own
+
+        error = assert_raises(RuntimeError) { cell.start }
+
+        assert_match "is not a directory this uid owns", error.message
+      end
+
+      assert File.exist?(File.join(target, "keep"))
+    end
+  ensure
+    cell&.stop
+    cell&.cleanup
+  end
+
+  def test_a_system_tmpdir_reached_through_a_symlink_the_cell_owns_refuses_to_boot_before_touching_it
+    link = File.join(@elsewhere, "link")
+    Dir.mktmpdir "hotcell-target" do |target|
+      File.symlink target, link
+
+      error = with_system_tmpdir(link) { assert_raises(RuntimeError) { boot development_cell, workspace: nil } }
+
+      assert_match "is a symlink the cell's uid owns", error.message
+      assert_empty Dir.children(target)
+    end
+  end
+
+  def test_a_name_something_else_took_first_refuses_to_boot
+    cell = development_cell
+    cell.instance_variable_get(:@supervisor_options)[:workspace] = nil
+
+    with_system_tmpdir @elsewhere do
+      cell.start
+      cell.stop
+      own = File.join(@elsewhere, Dir.children(@elsewhere).first)
+      FileUtils.rm_rf own
+      File.write own, "was here first"
+
+      error = assert_raises(RuntimeError) { cell.start }
+
+      assert_match "is not a directory this uid owns", error.message
+    end
+  ensure
+    cell&.stop
+    cell&.cleanup
+  end
+
   private
+    def development_cell
+      TestCell.new(own_tmpdir: false, supervisor: { development: true })
+    end
+
+    # The cell forks from this process, so a stub installed here is inherited by the supervisor. The method
+    # is removed before it is redefined, since a redefinition is a warning under `-w`.
+    def with_system_tmpdir(path)
+      original = Etc.method(:systmpdir)
+      Etc.singleton_class.remove_method :systmpdir
+      Etc.define_singleton_method(:systmpdir) { path }
+      yield
+    ensure
+      Etc.singleton_class.remove_method :systmpdir
+      Etc.define_singleton_method(:systmpdir, original)
+    end
+
     def boot(cell, workspace:)
       cell.instance_variable_get(:@supervisor_options)[:workspace] = workspace
       cell.start
@@ -207,7 +380,6 @@ class ScratchTest < RegistryIsolatedTest
       cell.cleanup
     end
 
-    # The cell forks from this process, so a stub installed here is inherited by the supervisor.
     def stub_remove_entry_to_fail
       original = FileUtils.method(:remove_entry)
       FileUtils.define_singleton_method(:remove_entry) { |*| raise Errno::ENOTEMPTY, "induced" }

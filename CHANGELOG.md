@@ -13,6 +13,18 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+Some actions that application developers should consider taking when upgrading from an earlier version:
+
+* Add `--development` to the `hotcell` command in `Procfile.dev`, or wherever a cell boots as a plain process beside the application. Without it a cell told no `TMPDIR` sweeps `/tmp` at boot, deleting every file the developer owns there. See the README's "Run it in development".
+
+### HotCell::Server
+
+#### Added
+
+* `hotcell --development`, for a cell booted as a plain process beside the application. The cell never sweeps the directory it is given, `TMPDIR` or the system temporary directory, both shared with everything else a developer runs. Its scratch is `hotcell-<HOTCELL_DIR with slashes as dashes>` beneath it, and it refuses to boot when that name is taken by anything but a directory its uid owns. Before, it swept the developer's `/tmp`, or on macOS the per-user `TMPDIR` every shell sets. An explicit `HOTCELL_WORKSPACE` still has its parent swept. Without the flag nothing changes. `cell.boot` logs the `tmpdir` in use.
+
 ## v0.4.0 / 2026-09-08
 
 ### Upgrading

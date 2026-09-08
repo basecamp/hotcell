@@ -45,7 +45,8 @@ module HotCell
     end
 
     # Anything in `supervisor:` goes to Supervisor.new; everything else is the cell's own limits.
-    def initialize(name: "test", supervisor: {}, operations: nil, **options)
+    # `own_tmpdir: false` boots the cell with no `TMPDIR` at all, the way a Procfile that sets none does.
+    def initialize(name: "test", supervisor: {}, operations: nil, own_tmpdir: true, **options)
       @name = name
       @supervisor_options = supervisor
       @operations = operations
@@ -54,8 +55,8 @@ module HotCell
       @directory = File.join(@root, name)
       # Boot empties `Dir.tmpdir` and the workspace's parent of what this uid owns. Inside the cell both are
       # this directory, so the sweep reaches neither the developer's `/tmp` nor the log and sockets beside it.
-      @tmpdir = File.join(@root, "tmp")
-      @workspace = File.join(@tmpdir, "workspace")
+      @tmpdir = File.join(@root, "tmp") if own_tmpdir
+      @workspace = File.join(@tmpdir, "workspace") if own_tmpdir
       @log_path = File.join(@root, "cell.log")
     end
 
@@ -78,8 +79,12 @@ module HotCell
 
         HotCell.limits(**@options) unless @options.empty?
 
-        FileUtils.mkdir_p @tmpdir
-        ENV["TMPDIR"] = @tmpdir
+        if @tmpdir
+          FileUtils.mkdir_p @tmpdir
+          ENV["TMPDIR"] = @tmpdir
+        else
+          %w[ TMPDIR TMP TEMP ].each { |key| ENV.delete key }
+        end
 
         supervisor = Supervisor.new(directory: directory, workspace: workspace,
                                     log: Log.new(File.open(log_path, "w")), **@supervisor_options)

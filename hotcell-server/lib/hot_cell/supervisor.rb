@@ -138,9 +138,10 @@ module HotCell
 
     attr_reader :configuration, :counters, :log, :directory, :workspace
 
-    def initialize(directory:, workspace: nil, configuration: HotCell.configuration, log: Log.new,
-                   ptrace_scope_path: PTRACE_SCOPE)
+    def initialize(directory:, workspace: nil, development: false, configuration: HotCell.configuration,
+                   log: Log.new, ptrace_scope_path: PTRACE_SCOPE)
       @directory = directory
+      @development_tmpdir = own_tmpdir if development
       @workspace = workspace || File.join(tmpdir, "hotcell-workspace")
       @configuration = configuration
       @log = log
@@ -156,6 +157,7 @@ module HotCell
       verify_socket_paths!
       verify_limits!
       verify_ptrace_scope!
+      claim_tmpdir if @development_tmpdir
       verify_scratches!
       prepare_directories
       preload
@@ -164,7 +166,7 @@ module HotCell
       @control_handler = Control.new(configuration: configuration, counters: counters)
       trap_signals
 
-      log.write "cell.boot", pid: Process.pid, directory: directory, operations: Registry.names,
+      log.write "cell.boot", pid: Process.pid, directory: directory, tmpdir: tmpdir, operations: Registry.names,
                              configuration: configuration.to_h
       self
     end
@@ -1032,8 +1034,56 @@ module HotCell
       # `Dir.tmpdir` with its fallbacks removed: it answers `.` for a `/tmp` its owner cannot write, and a
       # worker can leave `/tmp` in that state. The sweep is what puts the mode back, so it has to see the
       # directory `Dir.tmpdir` will answer once it has.
+      #
+      # A cell told no `TMPDIR` sweeps the system's: right on the accessory, whose `/tmp` is its own mount, and
+      # wrong on a developer's machine, where `/tmp` and macOS's per-user `TMPDIR` are shared with everything
+      # else the developer runs. So `--development` never sweeps the directory it is given, unless an explicit
+      # workspace makes it the workspace's parent. Its scratch is a directory of its own beneath it, named for
+      # the socket directory so two cells one uid runs do not sweep each other's slots, and chosen once here so
+      # the default workspace and the boot agree.
       def tmpdir
-        ENV.values_at("TMPDIR", "TMP", "TEMP").compact.reject(&:empty?).first || Etc.systmpdir
+        @development_tmpdir || configured_tmpdir || Etc.systmpdir
+      end
+
+      def configured_tmpdir
+        ENV.values_at("TMPDIR", "TMP", "TEMP").compact.reject(&:empty?).first
+      end
+
+      def own_tmpdir
+        parent = configured_tmpdir || Etc.systmpdir
+        File.expand_path File.join(parent, "hotcell-#{directory.delete_prefix("/").tr("/", "-")}")
+      end
+
+      # The parent is world-writable, so the name is claimed with `mkdir` and, when it exists, read back with
+      # `lstat`: it has to be a plain directory this uid owns. Its mode goes back to `0700` because the sticky
+      # parent stops another uid from replacing the directory, not from writing inside one a worker opened up.
+      # The ancestors are checked before `mkdir` and `chmod` could act through an owned symlink;
+      # `verify_scratches!` checks them again. `ENV["TMPDIR"]` is left alone: the supervisor writes no temporary
+      # files, a worker sets its own per request, and a second supervisor in this process would nest its
+      # scratch inside this one.
+      #
+      # Accepted: an entry another uid plants inside, once a worker has opened the directory up, survives the
+      # sweep, which removes only what this uid owns, and a slot follows it. Opening it up needs code already
+      # running as this uid, which can reach the same files directly.
+      def claim_tmpdir
+        claimed = tmpdir
+        if (link = owned_symlink_on(File.dirname(claimed)))
+          raise ConfigurationError, "#{link} is a symlink the cell's uid owns, on the path to the scratch " \
+                                    "#{claimed}, and a boot sweeps the scratch"
+        end
+
+        begin
+          Dir.mkdir claimed, 0o700
+        rescue Errno::EEXIST
+          stat = File.lstat(claimed)
+          unless stat.directory? && stat.uid == Process.uid
+            raise ConfigurationError, "#{claimed} is not a directory this uid owns, and a boot sweeps it. Set " \
+                                      "TMPDIR to a directory of the cell's own."
+          end
+          File.chmod 0o700, claimed
+        end
+      rescue SystemCallError => error
+        raise ConfigurationError, "the scratch #{claimed} could not be claimed: #{error.message}"
       end
 
       def scratches

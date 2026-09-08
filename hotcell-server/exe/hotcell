@@ -3,9 +3,13 @@
 
 require "hot_cell/server"
 
+development = ARGV.delete("--development") ? true : false
+abort "usage: hotcell [--development]" unless ARGV.empty?
+
 HotCell.load!
 
 HotCell::Supervisor
-  .new(directory: ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell"), workspace: ENV["HOTCELL_WORKSPACE"])
+  .new(directory: ENV.fetch("HOTCELL_DIR", "/run/hotcell/cell"), workspace: ENV["HOTCELL_WORKSPACE"],
+       development: development)
   .boot
   .run
