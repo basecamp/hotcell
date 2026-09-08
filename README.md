@@ -299,11 +299,15 @@ Add an entry for your cell to `Procfile.dev`:
 
 ```procfile
 web: HOTCELL_ROOT=$PWD/tmp/hotcell-sockets bin/rails server
-cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell
+cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell --development
 ```
 
 Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. At boot the cell
-empties `Dir.tmpdir` of every entry its uid owns.
+empties its `TMPDIR` of every entry its uid owns, and told none it empties the system temporary directory.
+On a developer's machine that is `/tmp`, or on macOS the per-user `TMPDIR` every shell sets, both shared
+with everything else the developer runs. With `--development` the cell never sweeps the directory it is
+given: its scratch is `hotcell-<HOTCELL_DIR with slashes as dashes>` beneath it. `HOTCELL_WORKSPACE`
+defaults under the scratch; pointed elsewhere, its parent is swept too.
 
 #### Configure the cell and operation limits
 

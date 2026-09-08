@@ -219,7 +219,8 @@ override it.
 | `HOTCELL_DIR` | `/run/hotcell/cell` | Where the cell creates `work.sock` and `control.sock`. The app must use the same directory. |
 | `HOTCELL_OPERATIONS` | `/hotcell/operations` | The directory the cell loads at boot, in sorted order. |
 | `HOTCELL_CONFIG` | `/hotcell/config.rb` | Loaded before the operations, if the file exists. |
-| `HOTCELL_WORKSPACE` | a directory under `Dir.tmpdir` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. Must be absolute. Emptied at boot — see "Where scratch lives". |
+| `HOTCELL_WORKSPACE` | a directory under `TMPDIR` | Where each request's directory is made and removed. On the default accessory this is the tmpfs. Must be absolute. Emptied at boot — see "Where scratch lives". |
+| `TMPDIR` | unset, so `/tmp` | The scratch, emptied at boot of every entry the cell's uid owns. On the accessory `/tmp` is the cell's own mount. Under `hotcell --development` it is only the scratch's parent and is never swept — see "Where scratch lives". |
 | `HOTCELL_HEALTH_TIMEOUT` | `5` | Seconds `hotcell-health` waits for an answer before it reports unhealthy. |
 | `HOME` | `/tmp` | Bundler needs one, and the cell's user has no home directory. A worker replaces it with a directory made for the request and removed with it. |
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size libvips and ImageMagick use. Match it to `cpus`. See "Bound the OpenMP thread pools". |
@@ -550,10 +551,16 @@ Three layouts, trading the same three things:
 Both disk layouts give up speed, and that is rarely the bottleneck: on NVMe, for spool-and-process
 pipelines, the descriptor design already keeps the biggest bytes off scratch entirely. Both also outlive
 the container, so cleanup stops being the mount's job and becomes the cell's. At boot it empties
-`Dir.tmpdir` and the workspace's parent of every entry its uid owns, `lost+found` excepted, so rebooting
+`TMPDIR` and the workspace's parent of every entry its uid owns, `lost+found` excepted, so rebooting
 the accessory clears a scratch a killed tool filled. A removal that fails is logged as `scratch.unswept`
 and does not stop the boot. The cell refuses to boot if either directory is missing, is reached through a
 symlink its uid owns, or holds `HOTCELL_DIR`.
+
+The rule is the same in every layout, so a cell's `TMPDIR` must be a directory nothing else uses. In the
+container `/tmp` is the cell's own; on a developer's machine it is everyone's, so an uncontainerized cell
+is booted with `hotcell --development`, which never sweeps the directory it is given. Its scratch is a
+directory of its own beneath it, named for `HOTCELL_DIR`. An explicit `HOTCELL_WORKSPACE` has its parent
+swept wherever it points, flag or not.
 
 ### Keeping the tmpfs
 
