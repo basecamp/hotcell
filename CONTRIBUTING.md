@@ -268,6 +268,10 @@ are unsure, write one.
 
 This applies to agents. If you opened the pull request, the entry is part of it.
 
+When a change gives an application something to do — a field to log, a variable to set, a value to
+recompute — add it to an `Upgrading` section at the top of the release. Each item is two sentences. The
+first is the action, in the imperative. The second is the rationale, or a link to the doc that holds it.
+
 ## CI
 
 | Job | Runs |
