@@ -11,7 +11,14 @@ This changelog covers five gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
-## next / unreleased
+## v0.4.0 / 2026-09-08
+
+### Upgrading
+
+Some actions that application developers should consider taking when upgrading from an earlier version:
+
+* Log `stderr` from the `perform.hot_cell` event in the client Rails application. This improves observability and provides forensic evidence about cell crashes.
+* Set `MAGICK_MEMORY_LIMIT`, `MAGICK_MAP_LIMIT` and `MAGICK_DISK_LIMIT` in a cell image that installs ImageMagick. See [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md).
 
 ### HotCell::Client
 
