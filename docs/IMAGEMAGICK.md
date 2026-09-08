@@ -158,7 +158,7 @@ can set neither on a bind mount. [docs/DEPLOYMENT.md](DEPLOYMENT.md#a-host-mount
 
 | Input | Value | From |
 | --- | --- | --- |
-| scratch | 4096MiB | the loopback filesystem's nominal size; the usable size is what `df` shows |
+| scratch | 4096MiB | the loopback filesystem, taken as fully usable; see the note under "Disk" |
 | container `memory` | 2048MiB | `memory: 2g`, no tmpfs term |
 | `concurrency` | 4 | `config.rb`, twice `cpus` |
 | cell ceiling | `memory: 1536MB`, `file_size: 768MB` | `config.rb`; an operation's own limits are clamped to these |
@@ -178,10 +178,13 @@ peak of 256MiB per worker:
     MAGICK_DISK_LIMIT = 4096 ÷ 4 − 256 = 768MiB
     MAGICK_MAP_LIMIT  = 768MiB
 
-It equals the transformer's `file_size` because that was sized by the same arithmetic, and the
+It equals the transformer's `file_size` because that was sized by the same arithmetic, the
 application's test holds it, and the cell ceiling allows it. Four workers spilling 768MiB and writing
-256MiB beside it fill the nominal 4G exactly, so the usable size is the number to check with `df`. On the
-analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill first.
+256MiB beside it fill 4096MiB exactly, so the arithmetic assumes the whole 4G is usable: a filesystem made
+with `mkfs.ext4 -m 0`, or an image larger than 4G. On a 4G ext4 with the default 5% root reserve, `df`
+shows about 3891MiB usable and the same arithmetic gives 716MiB. Check `df` on a cell host before taking
+the number. On the analyzer, whose `file_size` is 48MB, a cache file over that takes the `fsize` kill
+first.
 
 **Memory.**
 
