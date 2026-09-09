@@ -111,6 +111,19 @@ module HotCell
       end
     end
 
+    # The one sweeper the supervisor runs at a time, and the deadline it is held to. `killed` is the same
+    # one-kill latch `Child#killed_for` is: a killed sweeper stays here until the reap, and without the latch
+    # it would be re-killed and re-logged on every pass until then.
+    Sweep = Struct.new(:pid, :started_at, :deadline, :killed, keyword_init: true) do
+      def overdue?(now)
+        !killed && now - started_at >= deadline
+      end
+
+      def expires_at
+        started_at + deadline unless killed
+      end
+    end
+
     # A path longer than this fails to bind with an error that does not say so. Darwin allows four fewer
     # bytes than Linux, and control.sock is the longer of the two names, so it overflows first.
     SUN_PATH_MAX = RUBY_PLATFORM.include?("darwin") ? 104 : 108
@@ -151,6 +164,8 @@ module HotCell
       @control_pending = []
       @counters = Counters.new
       @stopping = false
+      @sweep = nil
+      @next_sweep_at = Clock.now + configuration.sweep_interval
     end
 
     def boot
@@ -178,10 +193,12 @@ module HotCell
 
         enforce_deadlines
         enforce_retirements
+        enforce_sweep_deadline
         expire_queue
         expire_control
         retire_idle if @stopping
         pump
+        sweep_if_due
       end
     ensure
       shutdown
@@ -204,13 +221,16 @@ module HotCell
       end
 
       # The nearest thing that needs doing without anybody knocking: a deadline, a queued connection that
-      # has waited long enough to be told so, or a control client that never said what it wanted.
+      # has waited long enough to be told so, a control client that never said what it wanted, or the
+      # sweeper's next tick.
       def wait_for
         now = Clock.now
         nearest = [ *@children.each_value.filter_map(&:expires_at),
                     *@children.each_value.filter_map { |child| child.lingers_until(Configuration::KILL_GRACE) },
                     *@queue.map { |(_, queued_at)| queued_at + configuration.queue_wait },
-                    *@control_pending.map { |pending| pending.accepted_at + configuration.control_deadline } ].min
+                    *@control_pending.map { |pending| pending.accepted_at + configuration.control_deadline },
+                    @sweep&.expires_at,
+                    (@next_sweep_at unless @stopping) ].compact.min
         return nil if nearest.nil?
 
         [ nearest - now, 0 ].max
@@ -459,12 +479,12 @@ module HotCell
                                         deadline: configuration.limits.deadline, stderr: stderr_reader)
       end
 
-      # Everything the supervisor holds and the worker must not: the listener, the signal pipe, the other
-      # children's control sockets, and every connection the supervisor is still holding for somebody else.
       # The connection this worker is about to serve arrives over SCM_RIGHTS a moment from now, so closing
-      # the inherited copy here costs nothing and stops it lingering for the worker's whole life.
+      # the inherited copy in `leave_supervisor` costs nothing and stops it lingering for the worker's whole
+      # life.
       def become_worker(supervisor_side, stderr_reader, stderr_writer)
-        [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
+        leave_supervisor
+        supervisor_side.close
 
         # Its own process group, so the deadline reaches the tools this request started rather than only the
         # Ruby process that started them. A tool is a grandchild — the worker spawns it — and killing the
@@ -487,20 +507,6 @@ module HotCell
         # reasons that section records. Landlock is the candidate that fits, tracked at basecamp/hotcell#13.
         Process.setpgid 0, 0
 
-        supervisor_side.close
-        @signals.close
-        @signal_writer.close
-        @work.close
-        @control.close
-
-        @children.each_value do |child|
-          child.control.close
-          child.connection&.close
-          child.stderr&.close
-        end
-        @queue.each { |(connection, _)| connection.close }
-        @control_pending.each { |pending| pending.connection.close }
-
         # fd 2 becomes the pipe, and it stays non-blocking. `IO.pipe` already returns both ends O_NONBLOCK
         # and `reopen` is a dup2, which shares the file description — so the flag would ride along on its
         # own. It is set here anyway, because a decision this load-bearing should be in the code rather than
@@ -516,6 +522,74 @@ module HotCell
         stderr_writer.fcntl Fcntl::F_SETFL, stderr_writer.fcntl(Fcntl::F_GETFL) | Fcntl::O_NONBLOCK
         $stderr.reopen stderr_writer
         stderr_writer.close
+      end
+
+      # Everything the supervisor holds and a child of its must not: the listeners, the signal pipe, the
+      # children's control sockets, and every connection the supervisor is still holding for somebody else.
+      def leave_supervisor
+        [ "CHLD", "INT", "TERM" ].each { |signal| trap signal, "DEFAULT" }
+
+        @signals.close
+        @signal_writer.close
+        @work.close
+        @control.close
+
+        @children.each_value do |child|
+          child.control.close
+          child.connection&.close
+          child.stderr&.close
+        end
+        @queue.each { |(connection, _)| connection.close }
+        @control_pending.each { |pending| pending.connection.close }
+      end
+
+      # Ticks whether or not it forks, so a sweep that outlives an interval is left to its deadline rather
+      # than joined by a second one. Forking only when a slot holds a tree keeps an idle cell from paying
+      # for a child every interval; the glob it costs is the one `Slot#discard_home` already runs inline.
+      def sweep_if_due
+        return if @stopping || Clock.now < @next_sweep_at
+
+        @next_sweep_at = Clock.now + configuration.sweep_interval
+        spawn_sweeper if @sweep.nil? && discarded_anywhere?
+      end
+
+      # A glob that raises is a slot directory a tool replaced, and the sweeper is the process that reports
+      # that, so it is forked to find out.
+      def discarded_anywhere?
+        (0...configuration.concurrency).any? { |number| Slot.build(workspace, number).discarded.any? }
+      rescue SystemCallError
+        true
+      end
+
+      # Held to the cell's deadline: a tree that takes longer to unlink than a request is allowed to run is
+      # one an input built to, and the next tick sweeps what this one left. A fork that fails is the host
+      # under pressure, as in `spawn`; the trees wait for the next tick.
+      def spawn_sweeper
+        pid = fork do
+          leave_supervisor
+          Sweeper.new(workspace: workspace, configuration: configuration, log: log).run
+        end
+
+        log.write "sweeper.forked", pid: pid
+        @sweep = Sweep.new(pid: pid, started_at: Clock.now, deadline: configuration.limits.deadline)
+      rescue SystemCallError => error
+        log.write "sweeper.unforkable", error: error.class.name, message: error.message
+      end
+
+      # Kill first, log second, as `enforce_deadlines` does. The sweeper spawns nothing, so the bare pid is
+      # the whole group.
+      def enforce_sweep_deadline
+        return unless @sweep&.overdue?(Clock.now)
+
+        @sweep.killed = true
+        kill_sweeper
+        log.write "sweeper.deadline", pid: @sweep.pid, deadline_s: @sweep.deadline
+      end
+
+      def kill_sweeper
+        Process.kill :KILL, @sweep.pid
+      rescue Errno::ESRCH
+        nil
       end
 
       # One bounded read per pass, never a loop until the pipe is empty: this runs inside the loop that
@@ -809,6 +883,11 @@ module HotCell
         loop do
           pid, status = Process.wait2(-1, Process::WNOHANG)
           break if pid.nil?
+
+          if @sweep&.pid == pid
+            @sweep = nil
+            next
+          end
 
           child = @children.each_value.find { |candidate| candidate.pid == pid }
           next if child.nil?
@@ -1142,6 +1221,7 @@ module HotCell
         refuse_queue "the cell is stopping"
         @control_pending.each { |pending| pending.connection.close }
         @children.each_value { |child| child.control.close unless child.control.socket.closed? }
+        kill_sweeper if @sweep
         @work&.close
         @control&.close
         SOCKETS.each { |name| File.unlink socket_path(name) if File.socket?(socket_path(name)) }

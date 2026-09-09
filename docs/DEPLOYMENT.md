@@ -316,6 +316,7 @@ HotCell.limits concurrency: 4, queue_size: 8, queue_wait: 10, deadline: 30,
 | `queue_size` | `8` | Connections that may wait for a worker. When `running + queued` reaches `concurrency + queue_size`, the cell answers `capacity`. Use `0` to refuse instead of queueing. |
 | `queue_wait` | `10` | Seconds a queued connection may wait before the cell answers `capacity`. This makes a saturated cell answer with a verdict instead of holding the caller until its own timeout. |
 | `control_deadline` | `5` | Seconds a control connection may take to send its request. |
+| `sweep_interval` | `10` | Seconds between the supervisor's checks for a killed request's tree. One is renamed aside at the kill and unlinked by a sweeper the supervisor forks, held to `deadline`, so the unlinking runs in no request and never in the supervisor. |
 | `max_requests_per_worker` | `1` | Requests one worker serves before the cell discards it. `1` forks per request. `:unlimited` keeps a worker for the life of the cell. See "Settings that trade one for the other". |
 
 ### Security

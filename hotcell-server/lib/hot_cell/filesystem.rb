@@ -18,8 +18,12 @@ module HotCell
     #
     # `Dir.exist?` is not the guard, because it follows symlinks and answers false for a dangling one, and
     # an entry a tool left in a directory's place is exactly what this has to remove.
+    #
+    # A tree that is gone by the time the removal fails is the outcome this wants, however it went. Two
+    # sweepers can meet on one discarded tree — the worker that answered on the slot and the supervisor's
+    # own — and the loser's walk fails on an entry the winner unlinked first.
     def self.remove_tree(path)
-      return true unless File.exist?(path) || File.symlink?(path)
+      return true unless present?(path)
 
       FileUtils.remove_entry path
       true
@@ -27,12 +31,19 @@ module HotCell
       repair_and_remove path
     end
 
+    def self.present?(path)
+      File.exist?(path) || File.symlink?(path)
+    end
+    private_class_method :present?
+
     def self.repair_and_remove(path)
+      return true unless present?(path)
+
       FileUtils.chmod_R 0o700, path, force: true
       FileUtils.remove_entry path
       true
     rescue SystemCallError
-      false
+      !present?(path)
     end
     private_class_method :repair_and_remove
   end

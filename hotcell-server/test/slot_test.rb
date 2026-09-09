@@ -144,6 +144,18 @@ class SlotTest < HotCellServerTest
     end
   end
 
+  # Two sweepers can meet on one tree: the worker that answered on this slot and the supervisor's own. The
+  # loser's walk fails on an entry the winner already unlinked, and a tree that is gone by then is the
+  # outcome both wanted rather than a failure to report.
+  def test_a_sweep_that_lost_the_tree_to_another_sweeper_answers_true
+    @slot.make_home
+    @slot.discard_home
+
+    stub_remove_entry_to_remove_and_then_fail do
+      assert @slot.sweep, "a tree another sweeper removed was reported as unswept"
+    end
+  end
+
   def test_a_cleanup_that_ran_answers_true
     @slot.make_home
 
@@ -169,6 +181,17 @@ class SlotTest < HotCellServerTest
     def stub_remove_entry_to_fail
       original = FileUtils.method(:remove_entry)
       FileUtils.define_singleton_method(:remove_entry) { |*| raise Errno::ENOTEMPTY, "induced" }
+      yield
+    ensure
+      FileUtils.define_singleton_method(:remove_entry, original)
+    end
+
+    def stub_remove_entry_to_remove_and_then_fail
+      original = FileUtils.method(:remove_entry)
+      FileUtils.define_singleton_method(:remove_entry) do |path, *|
+        original.call path
+        raise Errno::ENOENT, "induced"
+      end
       yield
     ensure
       FileUtils.define_singleton_method(:remove_entry, original)

@@ -95,7 +95,8 @@ module HotCell
     #
     # A rename within one filesystem is O(1) and takes the tree out of the way. A worker sweeps it later,
     # after it has answered and before it reports itself idle — see Worker#serve, which is the one window
-    # where the unlinking costs nobody's latency.
+    # where the unlinking costs nobody's latency. A worker killed at its deadline never reaches that window,
+    # so the supervisor also forks a Sweeper on a timer, which unlinks in a process of its own.
     #
     # The destination carries a random suffix rather than a counter, because the tool that filled the
     # directory runs as this user and can write to the slot's directory. A predictable name lets it
@@ -133,12 +134,17 @@ module HotCell
     # Unlinks whatever discard_home renamed out of the way. Partial progress is fine: a sweep killed
     # part-way leaves fewer entries for the next one, so this converges rather than repeating.
     def sweep
-      Dir.glob(File.join(directory, "discarded-*")).map { |path| Filesystem.remove_tree(path) }.all?
+      discarded.map { |path| Filesystem.remove_tree(path) }.all?
     rescue SystemCallError
       # The glob itself can fail, because the slot directory is a name a tool can replace — a symlink loop
       # in its place answers ELOOP here rather than for any one entry. This runs from the worker's ensure,
       # where a raise would replace the caller's response with a crash.
       false
+    end
+
+    # What discard_home has renamed aside and nobody has unlinked yet.
+    def discarded
+      Dir.glob(File.join(directory, "discarded-*"))
     end
   end
 end

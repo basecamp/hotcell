@@ -15,6 +15,7 @@ require "hot_cell/timing"
 require "hot_cell/counters"
 require "hot_cell/control"
 require "hot_cell/worker"
+require "hot_cell/sweeper"
 require "hot_cell/supervisor"
 
 module HotCell
