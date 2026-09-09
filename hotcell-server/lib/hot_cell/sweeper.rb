@@ -17,7 +17,13 @@ module HotCell
     end
 
     # exit! for the reason Worker#run does: nothing inherited from the supervisor may run its teardown here.
+    #
+    # The cell's limits go on first, as a worker's do. `FileUtils.remove_entry` lists a directory before it
+    # unlinks anything in it, so a tree one directory wide enough allocates in proportion to its width — and
+    # under RLIMIT_DATA that is this process's NoMemoryError and a `sweeper.crashed` line, where without it
+    # the cgroup's OOM killer picks a process the cell needs.
     def run
+      configuration.limits.apply
       started = Clock.now
       swept = slots.sum { |slot| sweep slot }
 

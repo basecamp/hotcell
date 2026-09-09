@@ -156,6 +156,24 @@ class SlotTest < HotCellServerTest
     end
   end
 
+  # `File.exist?` answers false for a path it cannot stat as well as for one that is gone, and a tool that
+  # takes search permission off the slot directory produces the first. That is a tree still on the disk.
+  def test_a_sweep_that_cannot_reach_the_tree_does_not_report_it_gone
+    @slot.make_home
+    @slot.discard_home
+    File.chmod 0o600, @slot.directory
+
+    refute @slot.sweep, "a tree behind an unsearchable directory was reported as swept"
+  end
+
+  def test_a_slot_knows_whether_anything_is_discarded
+    @slot.make_home
+
+    refute_predicate @slot, :discarded?
+    @slot.discard_home
+    assert_predicate @slot, :discarded?
+  end
+
   def test_a_cleanup_that_ran_answers_true
     @slot.make_home
 

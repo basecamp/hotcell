@@ -556,7 +556,7 @@ module HotCell
       # A glob that raises is a slot directory a tool replaced, and the sweeper is the process that reports
       # that, so it is forked to find out.
       def discarded_anywhere?
-        (0...configuration.concurrency).any? { |number| Slot.build(workspace, number).discarded.any? }
+        (0...configuration.concurrency).any? { |number| Slot.build(workspace, number).discarded? }
       rescue SystemCallError
         true
       end
@@ -584,6 +584,17 @@ module HotCell
         @sweep.killed = true
         kill_sweeper
         log.write "sweeper.deadline", pid: @sweep.pid, deadline_s: @sweep.deadline
+      end
+
+      # A sweeper this supervisor killed already has its `sweeper.deadline` line. Any other abnormal end —
+      # the OOM killer, a sibling's signal, a crash `Sweeper#run` could not catch — would otherwise leave
+      # only `sweeper.forked` behind, and look exactly like a sweep that finished.
+      def reap_sweeper(status)
+        unless @sweep.killed || status.success?
+          log.write "sweeper.died", pid: @sweep.pid, signal: signal_name(status), exit_code: status.exitstatus
+        end
+
+        @sweep = nil
       end
 
       def kill_sweeper
@@ -885,7 +896,7 @@ module HotCell
           break if pid.nil?
 
           if @sweep&.pid == pid
-            @sweep = nil
+            reap_sweeper status
             next
           end
 

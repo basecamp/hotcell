@@ -42,6 +42,25 @@ class SweepTest < HotCellServerTest
       assert_equal 0.3, killed.first[:hotcell][:deadline_s]
 
       wait_until(within: 10, what: "a later sweeper to finish the job") { Dir.glob(discarded(cell)).empty? }
+      assert_operator cell.log_events("sweeper.forked").size, :>=, 2, "no second sweeper was forked"
+    end
+  end
+
+  # A sweeper the supervisor did not kill can still die by signal — the cgroup's OOM killer, or a sibling
+  # worker sharing its uid — and a death that left only `sweeper.forked` behind was indistinguishable from
+  # a sweep that finished.
+  def test_a_sweeper_that_dies_by_signal_is_reported_and_the_next_tick_tries_again
+    TestCell.boot(concurrency: 1, sweep_interval: 0.1) do |cell|
+      plant_large_tree cell
+
+      forked = wait_for_event(cell, "sweeper.forked")
+      refute_empty forked, "no sweeper was forked for the planted tree"
+      Process.kill :KILL, forked.first[:process][:pid]
+
+      died = wait_for_event(cell, "sweeper.died")
+      assert_equal "KILL", died.first[:hotcell][:signal]
+
+      wait_until(within: 10, what: "a later sweeper to finish the job") { Dir.glob(discarded(cell)).empty? }
     end
   end
 

@@ -31,8 +31,15 @@ module HotCell
       repair_and_remove path
     end
 
+    # `lstat` rather than `File.exist?`, which answers false for a path it cannot stat as well as for one that
+    # is gone. Only ENOENT is absence; a tree behind a directory a tool made unsearchable is still there.
     def self.present?(path)
-      File.exist?(path) || File.symlink?(path)
+      File.lstat path
+      true
+    rescue Errno::ENOENT
+      false
+    rescue SystemCallError
+      true
     end
     private_class_method :present?
 

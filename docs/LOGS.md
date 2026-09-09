@@ -41,7 +41,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `hotcell.cause` | string | Why a worker was killed (`"deadline"`, `"memory"`, `"fsize"`, ...). |
 | `hotcell.signal` | string | Signal name (`"SIGKILL"`, `"SIGSEGV"`, ...). ECS has no field for signals. |
 | `hotcell.served` | integer | Requests a worker served before it was reaped. |
-| `hotcell.swept` | integer | Discarded trees a sweeper unlinked, on `scratch.swept`. |
+| `hotcell.swept` | integer | Discarded trees a sweeper found cleared, on `scratch.swept`: unlinked by it, or already gone when it reached them. |
 | `hotcell.home` | string | The scratch directory a cleanup could not clear: a request's `$HOME` from a worker, the slot directory from the supervisor. |
 | `hotcell.directory` | string | The cell's working directory, on `cell.boot`. |
 | `hotcell.operations` | array | Registered operation names, on `cell.boot`. |
@@ -73,6 +73,7 @@ Everything else is ours and sits under `hotcell.*`:
 | `worker.unreadable_report` | ERROR | `message` |
 | `sweeper.forked` | INFO | — |
 | `sweeper.deadline` | WARN | `hotcell.deadline_s` |
+| `sweeper.died` | WARN | `hotcell.signal`, `process.exit_code`; a sweeper that ended abnormally by anything but the deadline kill |
 | `sweeper.unforkable` | ERROR | `error.type`, `error.message` |
 | `sweeper.crashed` | ERROR | `error.type`, `error.message` |
 | `scratch.swept` | INFO | `hotcell.swept`, `event.duration.ms` |

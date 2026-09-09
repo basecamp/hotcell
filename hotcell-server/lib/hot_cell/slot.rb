@@ -146,5 +146,13 @@ module HotCell
     def discarded
       Dir.glob(File.join(directory, "discarded-*"))
     end
+
+    # Streams the directory and stops at the first match, because the supervisor asks this in its loop and
+    # a tool can put as many entries beside the discarded ones as it likes; a glob would list and sort them all.
+    def discarded?
+      Dir.each_child(directory).any? { |name| name.start_with?("discarded-") }
+    rescue Errno::ENOENT
+      false
+    end
   end
 end

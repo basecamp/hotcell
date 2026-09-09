@@ -45,6 +45,8 @@ module HotCell
       "slot.uncleaned" => "WARN",
       "scratch.unswept" => "WARN",
       "slot.undiscarded" => "WARN",
+      "slot.unswept" => "WARN",
+      "sweeper.died" => "WARN",
     }.freeze
 
     def self.null
