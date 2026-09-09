@@ -24,6 +24,7 @@ class LogTest < HotCellServerTest
     assert_equal "ERROR", written("worker.crashed", slot: 0).dig(:log, :level)
     assert_equal "WARN", written("worker.killed", slot: 0).dig(:log, :level)
     assert_equal "INFO", written("request", slot: 0).dig(:log, :level)
+    assert_equal "WARN", written("slot.unswept", slot: 0).dig(:log, :level)
   end
 
   def test_an_unknown_event_is_info_rather_than_unloggable

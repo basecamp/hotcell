@@ -13,6 +13,16 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Server
+
+#### Added
+
+* The supervisor forks a sweeper every `sweep_interval` seconds (default 10) to delete the directories killed requests left behind. Before, only the next worker to answer on the same slot deleted them, so a slot whose every request was killed filled the scratch.
+
+#### Fixed
+
+* A worker no longer logs `slot.unswept` when the sweeper deleted the tree first.
+
 ## v0.4.1 / 2026-09-08
 
 ### Upgrading

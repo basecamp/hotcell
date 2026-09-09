@@ -23,6 +23,7 @@ module HotCell
       queue_wait:       10,  # seconds a queued connection may wait before it is answered `capacity`
       max_requests_per_worker:            1,   # requests a worker serves before it is discarded
       control_deadline: 5,   # seconds a control connection may take to send its request
+      sweep_interval:   10,  # seconds between the supervisor's checks for a killed request's tree to unlink
     }.freeze
 
     LIMITS = {
@@ -51,6 +52,7 @@ module HotCell
       # in describe's JSON, and they may arrive as Active Support durations.
       @queue_wait = @queue_wait.to_f
       @control_deadline = @control_deadline.to_f
+      @sweep_interval = @sweep_interval.to_f
 
       # A nil is not "use the default" here, it is a missing number. A cell whose deadline is nil accepts
       # every request and then dies on the first arithmetic the supervisor does with it, so an explicit nil
@@ -103,6 +105,7 @@ module HotCell
         positive! :concurrency, integer: true
         positive! :queue_wait
         positive! :control_deadline
+        positive! :sweep_interval
 
         unless queue_size.is_a?(Integer) && !queue_size.negative?
           raise ConfigurationError, "queue_size: #{queue_size} must not be negative"

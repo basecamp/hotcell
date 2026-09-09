@@ -144,6 +144,36 @@ class SlotTest < HotCellServerTest
     end
   end
 
+  # Two sweepers can meet on one tree: the worker that answered on this slot and the supervisor's own. The
+  # loser's walk fails on an entry the winner already unlinked, and a tree that is gone by then is the
+  # outcome both wanted rather than a failure to report.
+  def test_a_sweep_that_lost_the_tree_to_another_sweeper_answers_true
+    @slot.make_home
+    @slot.discard_home
+
+    stub_remove_entry_to_remove_and_then_fail do
+      assert @slot.sweep, "a tree another sweeper removed was reported as unswept"
+    end
+  end
+
+  # `File.exist?` answers false for a path it cannot stat as well as for one that is gone, and a tool that
+  # takes search permission off the slot directory produces the first. That is a tree still on the disk.
+  def test_a_sweep_that_cannot_reach_the_tree_does_not_report_it_gone
+    @slot.make_home
+    @slot.discard_home
+    File.chmod 0o600, @slot.directory
+
+    refute @slot.sweep, "a tree behind an unsearchable directory was reported as swept"
+  end
+
+  def test_a_slot_knows_whether_anything_is_discarded
+    @slot.make_home
+
+    refute_predicate @slot, :discarded?
+    @slot.discard_home
+    assert_predicate @slot, :discarded?
+  end
+
   def test_a_cleanup_that_ran_answers_true
     @slot.make_home
 
@@ -169,6 +199,17 @@ class SlotTest < HotCellServerTest
     def stub_remove_entry_to_fail
       original = FileUtils.method(:remove_entry)
       FileUtils.define_singleton_method(:remove_entry) { |*| raise Errno::ENOTEMPTY, "induced" }
+      yield
+    ensure
+      FileUtils.define_singleton_method(:remove_entry, original)
+    end
+
+    def stub_remove_entry_to_remove_and_then_fail
+      original = FileUtils.method(:remove_entry)
+      FileUtils.define_singleton_method(:remove_entry) do |path, *|
+        original.call path
+        raise Errno::ENOENT, "induced"
+      end
       yield
     ensure
       FileUtils.define_singleton_method(:remove_entry, original)

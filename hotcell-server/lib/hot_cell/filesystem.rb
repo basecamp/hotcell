@@ -18,8 +18,12 @@ module HotCell
     #
     # `Dir.exist?` is not the guard, because it follows symlinks and answers false for a dangling one, and
     # an entry a tool left in a directory's place is exactly what this has to remove.
+    #
+    # A tree that is gone by the time the removal fails is the outcome this wants, however it went. Two
+    # sweepers can meet on one discarded tree — the worker that answered on the slot and the supervisor's
+    # own — and the loser's walk fails on an entry the winner unlinked first.
     def self.remove_tree(path)
-      return true unless File.exist?(path) || File.symlink?(path)
+      return true if gone?(path)
 
       FileUtils.remove_entry path
       true
@@ -27,12 +31,26 @@ module HotCell
       repair_and_remove path
     end
 
+    # `lstat` rather than `File.exist?`, which answers false for a path it cannot stat as well as for one that
+    # is gone. Only ENOENT means gone; a tree behind a directory a tool made unsearchable is still there.
+    def self.gone?(path)
+      File.lstat path
+      false
+    rescue Errno::ENOENT
+      true
+    rescue SystemCallError
+      false
+    end
+    private_class_method :gone?
+
     def self.repair_and_remove(path)
+      return true if gone?(path)
+
       FileUtils.chmod_R 0o700, path, force: true
       FileUtils.remove_entry path
       true
     rescue SystemCallError
-      false
+      gone?(path)
     end
     private_class_method :repair_and_remove
   end

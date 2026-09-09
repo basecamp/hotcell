@@ -35,11 +35,18 @@ module HotCell
       "worker.unforkable" => "ERROR",
       "worker.undispatchable" => "ERROR",
       "worker.unreadable_report" => "ERROR",
+      "sweeper.forked" => "INFO",
+      "sweeper.deadline" => "WARN",
+      "sweeper.unforkable" => "ERROR",
+      "sweeper.crashed" => "ERROR",
+      "scratch.swept" => "INFO",
       "control.abandoned" => "WARN",
       "control.unanswerable" => "WARN",
       "slot.uncleaned" => "WARN",
       "scratch.unswept" => "WARN",
       "slot.undiscarded" => "WARN",
+      "slot.unswept" => "WARN",
+      "sweeper.died" => "WARN",
     }.freeze
 
     def self.null

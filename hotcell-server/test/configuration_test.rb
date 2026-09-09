@@ -9,6 +9,14 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_equal 4, configuration.concurrency
     assert_equal 1, configuration.max_requests_per_worker
     assert_equal 60, configuration.limits.deadline
+    assert_equal 10, configuration.sweep_interval
+  end
+
+  def test_the_sweep_interval_is_configured_directly_and_described
+    configuration = HotCell::Configuration.new(sweep_interval: 2.5)
+
+    assert_equal 2.5, configuration.sweep_interval
+    assert_equal 2.5, configuration.to_h[:sweep_interval]
   end
 
   def test_scheduling_and_limits_are_declared_in_one_call
@@ -61,6 +69,7 @@ class ConfigurationTest < RegistryIsolatedTest
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(concurrency: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_size: -1) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(queue_wait: 0) }
+    assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(sweep_interval: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: 0) }
     assert_raises(HotCell::ConfigurationError) { HotCell::Configuration.new(max_requests_per_worker: :forever) }
   end
