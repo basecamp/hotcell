@@ -61,12 +61,28 @@ class SweepTest < HotCellServerTest
       assert_equal "KILL", died.first[:hotcell][:signal]
 
       wait_until(within: 10, what: "a later sweeper to finish the job") { Dir.glob(discarded(cell)).empty? }
+      assert_operator cell.log_events("sweeper.forked").size, :>=, 2, "no second sweeper was forked"
+    end
+  end
+
+  # The sweeper writes nothing but log lines, and a log that is a regular file grows past any `file_size`
+  # a cell would set for its workers. A sweeper under that limit died on its first line, and a slot whose
+  # report came before the others was the last one ever swept.
+  def test_the_workers_file_size_limit_does_not_stop_the_sweeper_logging
+    TestCell.boot(concurrency: 1, sweep_interval: 0.1, file_size: 1024) do |cell|
+      plant_small_tree cell
+
+      refute_empty wait_for_event(cell, "scratch.swept"), "the sweeper never reported. Log:\n#{cell.log}"
     end
   end
 
   private
     def discarded(cell)
       File.join(cell.workspace, "0", "discarded-*")
+    end
+
+    def plant_small_tree(cell)
+      FileUtils.mkdir_p File.join(cell.workspace, "0", "discarded-planted")
     end
 
     def plant_large_tree(cell)

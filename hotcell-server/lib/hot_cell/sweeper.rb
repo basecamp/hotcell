@@ -18,12 +18,16 @@ module HotCell
 
     # exit! for the reason Worker#run does: nothing inherited from the supervisor may run its teardown here.
     #
-    # The cell's limits go on first, as a worker's do. `FileUtils.remove_entry` lists a directory before it
-    # unlinks anything in it, so a tree one directory wide enough allocates in proportion to its width — and
-    # under RLIMIT_DATA that is this process's NoMemoryError and a `sweeper.crashed` line, where without it
-    # the cgroup's OOM killer picks a process the cell needs.
+    # The cell's memory limit goes on first, and only that one. `FileUtils.remove_entry` lists a directory
+    # before it unlinks anything in it, so a tree one directory wide enough allocates in proportion to its
+    # width; RLIMIT_DATA makes that this process's NoMemoryError and a `sweeper.crashed` line. It is a bound
+    # on this process and not on the cell: the cgroup counts every worker and the tmpfs too, and can run out
+    # first. A sweep that dies this way makes no progress on that directory, and that is accepted here.
+    #
+    # Not `file_size`: this process writes nothing but log lines, and a log that is a regular file is past
+    # any worker's limit already, so the first line would have killed the sweeper with SIGXFSZ.
     def run
-      configuration.limits.apply
+      configuration.limits.merge(file_size: nil, open_files: nil).apply
       started = Clock.now
       swept = slots.sum { |slot| sweep slot }
 
