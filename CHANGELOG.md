@@ -17,11 +17,11 @@ gem but are what an operator runs against their own image.
 
 #### Added
 
-* The supervisor forks a sweeper every `sweep_interval` seconds (default 10) whenever a slot holds a tree a kill renamed aside, and holds it to the cell's `deadline`. One sweeper runs at a time; a killed one is logged as `sweeper.deadline` and the next tick forks another. Before, only the next worker to answer on the same slot unlinked those trees, and a worker killed at its deadline never did — so a slot whose every request was killed stacked one tree per kill until the scratch was full. `scratch.swept` reports each sweep's count and duration.
+* The supervisor forks a sweeper every `sweep_interval` seconds (default 10) to delete the directories killed requests left behind. Before, only the next worker to answer on the same slot deleted them, so a slot whose every request was killed filled the scratch.
 
 #### Fixed
 
-* A tree that is gone by the time a removal fails counts as removed. The worker's sweep and the supervisor's can meet on one discarded tree, and the loser used to log `slot.unswept` for a tree that was already gone.
+* A worker no longer logs `slot.unswept` when the sweeper deleted the tree first.
 
 ## v0.4.1 / 2026-09-08
 

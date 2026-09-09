@@ -8,6 +8,10 @@ require "test_helper"
 # do that unlinking off every hot path, under a deadline of its own so a tree that will not go cannot hold
 # the next sweep off forever.
 class SweepTest < HotCellServerTest
+  # Nothing here is a double. `TestCell` forks a real supervisor; the request pins a real worker, which the
+  # supervisor really SIGKILLs at the deadline and renames its home aside at the reap; the sweeper is a real
+  # forked process unlinking a real directory on disk. The test then asks the filesystem, not the log,
+  # whether the tree is gone — with no second request to do the sweeping, which is what 0.4.1 relied on.
   def test_a_killed_workers_tree_is_swept_with_no_request_to_do_it
     TestCell.boot(deadline: 0.2, concurrency: 1, sweep_interval: 0.1) do |cell|
       assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), cause: "deadline"

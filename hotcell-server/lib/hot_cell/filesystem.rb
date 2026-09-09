@@ -23,7 +23,7 @@ module HotCell
     # sweepers can meet on one discarded tree — the worker that answered on the slot and the supervisor's
     # own — and the loser's walk fails on an entry the winner unlinked first.
     def self.remove_tree(path)
-      return true unless present?(path)
+      return true if gone?(path)
 
       FileUtils.remove_entry path
       true
@@ -32,25 +32,25 @@ module HotCell
     end
 
     # `lstat` rather than `File.exist?`, which answers false for a path it cannot stat as well as for one that
-    # is gone. Only ENOENT is absence; a tree behind a directory a tool made unsearchable is still there.
-    def self.present?(path)
+    # is gone. Only ENOENT means gone; a tree behind a directory a tool made unsearchable is still there.
+    def self.gone?(path)
       File.lstat path
-      true
-    rescue Errno::ENOENT
       false
-    rescue SystemCallError
+    rescue Errno::ENOENT
       true
+    rescue SystemCallError
+      false
     end
-    private_class_method :present?
+    private_class_method :gone?
 
     def self.repair_and_remove(path)
-      return true unless present?(path)
+      return true if gone?(path)
 
       FileUtils.chmod_R 0o700, path, force: true
       FileUtils.remove_entry path
       true
     rescue SystemCallError
-      !present?(path)
+      gone?(path)
     end
     private_class_method :repair_and_remove
   end

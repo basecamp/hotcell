@@ -22,11 +22,27 @@ module HotCell
   # the accept anyway, for the queue, for queued_ms, and to answer `capacity`. It also means the supervisor
   # knows when every worker started its current request, which is what the deadline needs.
   class Supervisor
+    # The one deadline the supervisor enforces, on a worker and on the sweeper alike: from `started_at`,
+    # for `deadline` seconds, killed once. `killed_for` is the one-kill latch — a killed process stays here
+    # until the reap, and without the latch it would be re-killed and re-logged on every pass until then.
+    # See `Child#overdue?` for the measurement behind that.
+    module Timed
+      def overdue?(now)
+        timed? && now - started_at >= deadline
+      end
+
+      def expires_at
+        started_at + deadline if timed?
+      end
+    end
+
     # Owns "is this worker busy" and the two transitions that change the answer, because the supervisor asking
     # `busy?` and the supervisor assigning the four fields `busy?` is computed from are the same fact. Spread
     # across the caller, a new field is one the next transition forgets to clear.
     Child = Struct.new(:slot, :pid, :control, :connection, :dispatched_at, :deadline, :served, :killed_for,
                        :op, :retired_at, :buffer, :stderr, :captured, keyword_init: true) do
+      include Timed
+
       def self.build(slot:, pid:, control:, deadline:, stderr: nil)
         new slot: slot, pid: pid, control: control, deadline: deadline, served: 0, buffer: "".b,
             stderr: stderr, captured: "".b
@@ -87,12 +103,12 @@ module HotCell
       # SIGKILLs and 72 synchronous stdout writes for one breach. The window is longest exactly when the host
       # is already struggling — a worker in uninterruptible sleep, or one tearing down gigabytes of mappings —
       # and the loop it starves is the one enforcing every other request's deadline.
-      def overdue?(now)
-        busy? && killed_for.nil? && now - dispatched_at >= deadline
+      def timed?
+        busy? && killed_for.nil?
       end
 
-      def expires_at
-        dispatched_at + deadline if busy? && killed_for.nil?
+      def started_at
+        dispatched_at
       end
 
       # The retirement analogue of `overdue?`, and the only timer that can reach a worker whose idle
@@ -111,16 +127,15 @@ module HotCell
       end
     end
 
-    # The one sweeper the supervisor runs at a time, and the deadline it is held to. `killed` is the same
-    # one-kill latch `Child#killed_for` is: a killed sweeper stays here until the reap, and without the latch
-    # it would be re-killed and re-logged on every pass until then.
-    Sweep = Struct.new(:pid, :started_at, :deadline, :killed, keyword_init: true) do
-      def overdue?(now)
-        !killed && now - started_at >= deadline
-      end
+    # The one sweeper the supervisor runs at a time. Not a `Child`: it is dispatched no request, holds no
+    # slot and answers nobody, so none of `busy?`, retirement or the idle report applies to it. What it
+    # shares with a worker is the deadline, and that is `Timed` — the same measurement, the same latch, the
+    # same `deadline` value from the configuration, and the same kill.
+    Sweep = Struct.new(:pid, :started_at, :deadline, :killed_for, keyword_init: true) do
+      include Timed
 
-      def expires_at
-        started_at + deadline unless killed
+      def timed?
+        killed_for.nil?
       end
     end
 
@@ -576,13 +591,13 @@ module HotCell
         log.write "sweeper.unforkable", error: error.class.name, message: error.message
       end
 
-      # Kill first, log second, as `enforce_deadlines` does. The sweeper spawns nothing, so the bare pid is
-      # the whole group.
+      # Kill first, log second, as `enforce_deadlines` does. The sweeper spawns nothing and leads no group,
+      # so `kill_group` reaches it through its fallback to the bare pid.
       def enforce_sweep_deadline
         return unless @sweep&.overdue?(Clock.now)
 
-        @sweep.killed = true
-        kill_sweeper
+        @sweep.killed_for = Codes::DEADLINE
+        kill_group @sweep
         log.write "sweeper.deadline", pid: @sweep.pid, deadline_s: @sweep.deadline
       end
 
@@ -590,18 +605,13 @@ module HotCell
       # the OOM killer, a sibling's signal, a crash `Sweeper#run` could not catch — would otherwise leave
       # only `sweeper.forked` behind, and look exactly like a sweep that finished.
       def reap_sweeper(status)
-        unless @sweep.killed || status.success?
+        unless @sweep.killed_for || status.success?
           log.write "sweeper.died", pid: @sweep.pid, signal: signal_name(status), exit_code: status.exitstatus
         end
 
         @sweep = nil
       end
 
-      def kill_sweeper
-        Process.kill :KILL, @sweep.pid
-      rescue Errno::ESRCH
-        nil
-      end
 
       # One bounded read per pass, never a loop until the pipe is empty: this runs inside the loop that
       # enforces every request's deadline, and the peer is a worker that can print as fast as it likes.
@@ -1232,7 +1242,7 @@ module HotCell
         refuse_queue "the cell is stopping"
         @control_pending.each { |pending| pending.connection.close }
         @children.each_value { |child| child.control.close unless child.control.socket.closed? }
-        kill_sweeper if @sweep
+        kill_group @sweep if @sweep
         @work&.close
         @control&.close
         SOCKETS.each { |name| File.unlink socket_path(name) if File.socket?(socket_path(name)) }
