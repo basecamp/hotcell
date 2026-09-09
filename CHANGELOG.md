@@ -11,6 +11,8 @@ This changelog covers five gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
 ## v0.5.0 / 2026-09-09
 
 ### HotCell::Server
