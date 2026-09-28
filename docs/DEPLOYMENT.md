@@ -124,7 +124,7 @@ the check rather than passing it. It does not observe the tmpfs `nosuid` and `no
 or the resource limits. Those are yours to get right, and "Verifying your accessory" is how.
 
 **Your application's group membership.** Conformance does check the shared group, because it runs the cell
-as `10001` against files a different user owns: `example.reopen` proves a cell can open an input by name,
+as `10001` against files a different user owns: `health.reopen` proves a cell can open an input by name,
 and `example.tamper` proves it can do nothing else with either file. What it cannot reach is the
 application's own side — its driver owns the files as root, which needs no membership to set a group. That
 one fails as `EPERM` in the application rather than in the cell.

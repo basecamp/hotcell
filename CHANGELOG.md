@@ -13,6 +13,24 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+Some actions that application developers should consider taking when upgrading from an earlier version:
+
+* Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
+
+### HotCell::Server
+
+#### Added
+
+* `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
+
+### Tooling
+
+#### Changed
+
+* The example cell serves the gem's `health.echo` and `health.reopen` in place of its own `example.echo` and `example.reopen`.
+
 ## v0.5.0 / 2026-09-09
 
 ### HotCell::Server

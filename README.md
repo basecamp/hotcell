@@ -569,9 +569,10 @@ Poll `describe` and `metrics` from an unauthenticated endpoint like `/up/hotcell
 answers both on the control socket without forking, so polling costs nothing.
 
 A descriptor never crosses that socket, so both stay green on a cell whose work socket your application
-cannot use. Only a round trip sees that: copy `examples/operations/echo.rb` and `reopen.rb` into the
-cell, call both from a second authenticated endpoint, and check the bytes come back. A cell missing the
-shared group answers `echo` perfectly and fails `reopen` with `EACCES`.
+cannot use. Only a round trip sees that: add `require "hot_cell/health_operations"` to an operation file in
+the cell, call `health.echo` and `health.reopen` from a second authenticated endpoint, and check the bytes
+come back. A cell missing the shared group answers `health.echo` perfectly and fails `health.reopen` with
+`EACCES`.
 
 ## Development
 
