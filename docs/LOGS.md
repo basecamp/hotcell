@@ -101,10 +101,10 @@ libgomp: Thread creation failed: Resource temporarily unavailable
 **The text is not evidence — it establishes neither who wrote it nor which request it belongs to**, the
 caveat `hotcell.signal` and `hotcell.cause` already carry. It comes from the one process in a cell that
 runs untrusted code, over an unauthenticated channel: everything a worker spawned inherits fd 2, so a tool
-can write long after the request it belongs to finished, and a sibling worker can open `/proc/<pid>/fd/2`
-and write whatever it likes, since workers share a uid and `kernel.yama.ptrace_scope` protects memory
-rather than descriptors. The supervisor clears the buffer at each dispatch, which keeps an old warning off
-an unrelated death in the ordinary case. It is not a boundary.
+can write long after the request it belongs to finished, and a sibling worker can open a tool's
+`/proc/<pid>/fd/2` and write whatever it likes, since workers share a uid and an `exec`ed tool is
+dumpable. The supervisor clears the buffer at each dispatch, which keeps an old warning off an unrelated
+death in the ordinary case. It is not a boundary.
 
 **The capture is best effort, because fd 2 is non-blocking.** A C library writing to a full pipe gets `EAGAIN`
 and loses the line, and a fatal handler cannot retry — it writes once and calls `exit()`. That costs nothing

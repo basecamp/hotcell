@@ -112,6 +112,10 @@ same-UID reads. Measured, not assumed — items 7 and 8 below:
 | `/proc/<sibling>/environ` | **Readable** | Needs only `PTRACE_MODE_READ`, which Yama does not restrict. |
 | `/proc/<sibling>/fd/N` | **Readable** | Same `PTRACE_MODE_READ`. So are the scratch files themselves, by directory listing. |
 
+A worker is forked non-dumpable, so its `/proc` entries are no longer owned by its uid, and both readable
+rows are `EACCES` for a worker. They stay readable for the supervisor, whose environment every
+worker inherits, and for a tool, because an `exec` resets the flag.
+
 So invariant 8 has three parts and they have different answers. Only the first is about `ptrace_scope`.
 
 **Request memory** is protected by `kernel.yama.ptrace_scope >= 1`. That is a host sysctl a container
@@ -153,11 +157,11 @@ closes the offline route, where nothing of the attacker's is still running.
 
 **Files are not isolated between concurrent workers, and cannot be.** Every worker runs as the same uid in
 one mount namespace, so a worker that reads another worker's scratch directory — by listing it, or through
-`/proc/<sibling>/fd/N` — gets that request's input and output bytes. Unlinking the scratch file does not
-close it, because the descriptor is still reachable through the sibling's `/proc`. The two fixes that
-would work need `CAP_SETUID` for a per-worker uid or `CAP_SYS_ADMIN` for a per-request mount namespace,
-and `cap-drop ALL` removes both. This is the same shape as the environment: a real residual, stated rather
-than papered over.
+`/proc/<pid>/fd/N` of a tool that worker runs — gets that request's input and output bytes. Unlinking the
+scratch file does not close it, because the descriptor is still reachable through that tool's `/proc`. The
+two fixes that would work need `CAP_SETUID` for a per-worker uid or `CAP_SYS_ADMIN` for a per-request mount
+namespace, and `cap-drop ALL` removes both. This is the same shape as the environment: a real residual,
+stated rather than papered over.
 
 What bounds it is the size of the window and the value of the contents. Only requests actually in flight
 have bytes inside a cell, a cell holds no credentials, and a cell carries one toolchain. So the exposure

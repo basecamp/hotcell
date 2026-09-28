@@ -6,6 +6,7 @@ require "fileutils"
 require "tmpdir"
 require "pathname"
 require "etc"
+require "rbconfig"
 
 module HotCell
   # Accepts, queues, dispatches, times, kills, reaps, and cleans up. It never evaluates image data.
@@ -65,7 +66,8 @@ module HotCell
 
       def dispatched(connection, deadline, at:)
         # An earlier request's warning is not this request's death. Not a boundary, though: a descendant
-        # holding fd 2 writes whenever it likes, and a sibling can open /proc/<pid>/fd/2 and write there too.
+        # holding fd 2 writes whenever it likes, and a sibling can open a tool's /proc/<pid>/fd/2 and write
+        # there too.
         captured.clear
         self.connection = connection
         self.dispatched_at = at
@@ -149,6 +151,11 @@ module HotCell
     # Request memory is protected by kernel.yama.ptrace_scope >= 1, and nothing else protects it. That is a
     # host sysctl no container flag can supply.
     PTRACE_SCOPE = "/proc/sys/kernel/yama/ptrace_scope"
+
+    # prctl(2) by architecture, for `fork_nondumpable`. An architecture missing here forks dumpable workers.
+    PRCTL = { "x86_64" => 157, "aarch64" => 167 }.freeze
+    PR_GET_DUMPABLE = 3
+    PR_SET_DUMPABLE = 4
 
     # A control connection that has not sent its request yet. Reading it non-blockingly is what stops a
     # client that connects and then says nothing from stalling the loop every conversion depends on.
@@ -487,7 +494,7 @@ module HotCell
         # A fork that fails is a host under pressure, not a reason to stop serving. The request stays queued
         # and is either dispatched on a later pass or answered `capacity` when its wait runs out.
         pid = begin
-          fork do
+          fork_nondumpable do
             become_worker supervisor_side, stderr_reader, stderr_writer
             Worker.new(slot: slot, configuration: configuration, control: Connection.new(worker_side),
                        log: log).run
@@ -552,6 +559,37 @@ module HotCell
         stderr_writer.fcntl Fcntl::F_SETFL, stderr_writer.fcntl(Fcntl::F_GETFL) | Fcntl::O_NONBLOCK
         $stderr.reopen stderr_writer
         stderr_writer.close
+      end
+
+      # Every worker runs as one uid, so a sibling could open /proc/<pid>/fd/N and reopen the files and pipes
+      # a worker holds. A non-dumpable process's /proc/<pid> is no longer owned by its uid, which
+      # `cap-drop ALL` leaves nothing to override, and setting it needs no capability. It also stops a core
+      # dump, which RLIMIT_CORE 0 in `Limits#apply` already did.
+      #
+      # Set around the fork rather than by the worker first thing, because the child is in /proc before it
+      # runs any Ruby: a sibling watching for new pids listed a child's descriptors before its own prctl in
+      # nearly every fork.
+      #
+      # An exec resets the flag, so a tool a worker runs is reachable again for as long as it runs. See
+      # "Worker isolation" in docs/DESIGN.md.
+      def fork_nondumpable(&block)
+        dumpable = prctl(PR_GET_DUMPABLE)
+        prctl PR_SET_DUMPABLE, 0
+        fork(&block)
+      ensure
+        prctl PR_SET_DUMPABLE, dumpable if dumpable
+      end
+
+      # `syscall` rather than Fiddle, which is a bundled gem since Ruby 4.0 and so a dependency this gem does
+      # not carry. It warns on every call under -W:deprecated.
+      def prctl(option, argument = 0)
+        number = PRCTL[RbConfig::CONFIG["host_cpu"]]
+        return unless number && RUBY_PLATFORM.include?("linux")
+
+        deprecated, Warning[:deprecated] = Warning[:deprecated], false
+        syscall number, option, argument
+      ensure
+        Warning[:deprecated] = deprecated unless deprecated.nil?
       end
 
       # Everything the supervisor holds and a child of its must not: the listeners, the signal pipe, the

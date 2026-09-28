@@ -21,6 +21,10 @@ Some actions that application developers should consider taking when upgrading f
 
 ### HotCell::Server
 
+#### Security
+
+* A worker is now non-dumpable. Another worker cannot open the worker's descriptors through `/proc/<pid>/fd`. A tool that the worker runs does not get this protection.
+
 #### Added
 
 * `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
