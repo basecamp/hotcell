@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# The parts of the conformance gate that need neither a container nor a toolchain, so they run in the
-# no-toolchain suite alongside the development cell. Two regressions live here:
+# Tests of the conformance gate that need neither a container nor a toolchain, so they run in the
+# no-toolchain suite alongside the development cell:
 #
 #   1. The battery's isolation check must observe each isolation flag conformance claims — the network,
 #      the read-only root, the noexec scratch, cap-drop, no-new-privileges, and the uid — and must treat a
@@ -16,6 +16,11 @@
 #      lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
 #      verdict the caller retries against a limit that will fail it again, so a helper that set it would
 #      measure a shape operators are told not to deploy.
+#
+#   3. The battery's overload check must wait for the cell to empty before it fills it. A worker holds its
+#      place until it has answered its caller and cleaned up. The previous check's worker can therefore
+#      still hold a place when the overload check starts, and the cell refuses a sleep request sent then.
+#      This test runs the overload check against a fake cell that holds such a leftover worker.
 #
 # The container conformance run and its negative jobs (see .github/workflows/ci.yml) are the end-to-end
 # proof; this is the fast guard that keeps the gate honest without Docker.
@@ -122,6 +127,59 @@ NEGATIVES.each do |flag, message|
   check("the negative run for #{flag} looks for a message the battery prints") do
     raise "no isolation assertion contains #{message.inspect}" unless ISOLATION_ASSERTIONS.include?(message)
   end
+end
+
+# A fake cell whose worker from the previous check is still cleaning up, as in the CI failures on #66.
+# That worker holds its place until the first metrics request returns. Like the supervisor, the fake
+# admits a request only while running plus queued is below the cell's capacity.
+class StragglingCell
+  PLACES = 4
+
+  def initialize
+    @admitted = 0
+    @straggling = true
+    @lock = Mutex.new
+  end
+
+  def describe
+    { concurrency: 2, queue_size: 2, operations: Examples::Battery::OPERATIONS }
+  end
+
+  def metrics
+    sleep 0.05
+    @lock.synchronize do
+      @straggling = false
+      HotCell::Response.ok(result: { running: occupied, queued: 0 })
+    end
+  end
+
+  def transient
+    HotCell::TransientFailure
+  end
+
+  def admit
+    @lock.synchronize do
+      raise transient, "capacity: the queue is full" if occupied >= PLACES
+
+      @admitted += 1
+    end
+  end
+
+  private
+    def occupied
+      @admitted + (@straggling ? 1 : 0)
+    end
+end
+
+check("the overload check waits out a request left over from an earlier check") do
+  cell = StragglingCell.new
+  Examples::Sleep.singleton_class.send(:define_method, :perform_in_hotcell) { |*| cell.admit }
+
+  battery = Examples::Battery.new(cell: cell)
+  battery.send(:describe)
+  battery.send(:overload)
+ensure
+  Examples::Sleep.singleton_class.send(:remove_method, :perform_in_hotcell)
 end
 
 if FAILURES.empty?
