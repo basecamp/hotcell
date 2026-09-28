@@ -18,6 +18,7 @@ gem but are what an operator runs against their own image.
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
 * Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
+* Remove the application's own log line for the `perform.hot_cell` event. `HotCell::LogSubscriber` now writes one. See the README's "Per-call telemetry".
 
 ### HotCell::Server
 
@@ -30,6 +31,10 @@ Some actions that application developers should consider taking when upgrading f
 * The supervisor now forks a worker into each free slot at boot. When the supervisor reaps a worker that served a request, it forks a replacement immediately. A request that finds a waiting worker does not wait for `fork`. A request that waits in the queue still waits for `fork`. The supervisor also runs `Process.warmup` one time, at boot, before the first fork.
 
 ### HotCell::Client
+
+#### Added
+
+* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line has the cell, the operation, the code and both durations. It also has the byte counts when the client can measure them. A failed call also has the cause and the `stderr` when it has them. The railtie attaches it. Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set `ActiveSupport::LogSubscriber.logger`.
 
 #### Fixed
 
