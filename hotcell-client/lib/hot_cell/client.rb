@@ -13,8 +13,15 @@ require "hot_cell/failures"
 require "hot_cell/transport"
 require "hot_cell/cell"
 require "hot_cell/cells"
+require "hot_cell/diagnosis"
 
 require "hot_cell/railtie" if defined?(::Rails::Railtie)
+
+module HotCell
+  # Loaded when a route first names them, so an application without Action Pack never requires it.
+  autoload :HealthController, "hot_cell/health_controller"
+  autoload :DiagnosticsController, "hot_cell/diagnostics_controller"
+end
 
 module HotCell
   # The application side. A client class names the cell that serves it, and the call carries the same

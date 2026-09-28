@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 module HotCell
   # One registered cell: where its sockets are, how long this application will wait, and which of its own
   # exception classes to raise for each side of the permanent split.
@@ -98,7 +100,65 @@ module HotCell
       enabled? ? control(METRICS) : nil
     end
 
+    # The control socket takes no worker but carries no descriptor, so its checks pass on a cell whose work
+    # socket this application cannot use. Only the round trips see that, and echo alone passes a cell with
+    # the wrong group. `control` rather than `describe`, whose boot warnings would repeat on every poll.
+    def diagnose(work: false)
+      checks = { describe: check { answered control(DESCRIBE) },
+                 metrics: check { answered control(METRICS) } }
+      return checks unless work
+
+      checks.merge echo: check { round_trip "health.echo" }, reopen: check { round_trip "health.reopen" }
+    end
+
     private
+      class CheckFailed < StandardError; end
+
+      def check
+        return { ok: false, error: "no socket directory, so this cell is off" } unless enabled?
+
+        { ok: true, result: yield }
+      rescue CheckFailed => error
+        { ok: false, error: error.message }
+      rescue StandardError => error
+        { ok: false, error: "#{error.class}: #{Failure.one_line error.message}" }
+      end
+
+      def answered(response)
+        raise CheckFailed, response.failure.to_s unless response.ok?
+
+        response.result
+      end
+
+      def round_trip(operation_name, message = "hotcell")
+        client = client_for(operation_name)
+
+        Dir.mktmpdir "hotcell-diagnose" do |directory|
+          source = File.join(directory, "in")
+          destination = File.join(directory, "out")
+          File.write source, message
+
+          result = File.open(source, "rb") do |input|
+            File.open(destination, "wb") { |output| client.perform_in_hotcell input, output }
+          end
+
+          returned = File.binread(destination)
+          raise CheckFailed, "the cell returned other bytes than it was sent" unless returned == message
+          raise CheckFailed, "the input was staged, so this did not cross a descriptor" if result[:staged]
+
+          result
+        end
+      end
+
+      def client_for(operation_name)
+        cell = self
+
+        Class.new(Client) do
+          define_singleton_method(:cell) { cell }
+          operation operation_name
+        end
+      end
+
       # A cell's sockets are `0660`, so the group that lets a worker re-open a descriptor is also the group
       # that admits a caller. EACCES therefore means one thing, and it is worth saying rather than leaving an
       # operator to read "could not describe the cell" as "the cell is down". Every other failure reads that
