@@ -97,17 +97,18 @@ class WorkerStderrTest < HotCellServerTest
   # under churn rather than anywhere near the code that caused it. Counted in the supervisor's own process,
   # which is why this needs procfs.
   #
-  # A ceiling rather than an equality, and the baseline is taken before the first request: a leak only ever
+  # A ceiling rather than an equality, and the baseline is taken once the first worker is forked: a leak only ever
   # pushes the count up, while an unreferenced IO the supervisor has finished with is closed whenever its
   # process next collects, so the count legitimately falls. Asserting equality against a post-request
   # baseline failed on Ruby 4.0 with two descriptors fewer than it started with.
   def test_worker_churn_leaves_no_descriptors_behind_in_the_supervisor
     TestCell.boot(concurrency: 1) do |cell|
       pid = cell.log_events("cell.boot").first.dig(:process, :pid)
+      wait_until(what: "the first worker to be forked") { cell.log_events("worker.forked").size == 1 }
       booted = supervisor_descriptors(pid)
 
       5.times { assert_ok cell.call("test.echo") }
-      wait_until(what: "every worker to be reaped") { cell.log_events("worker.reaped").size == 5 }
+      wait_until(what: "every worker to be replaced") { cell.log_events("worker.forked").size == 6 }
 
       assert_operator supervisor_descriptors(pid), :<=, booted,
                       "the supervisor kept descriptors from the workers it forked"

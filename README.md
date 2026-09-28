@@ -115,7 +115,8 @@ never evaluates a byte of image data -- it hands the accepted connection itself 
 `SCM_RIGHTS` without ever calling `recvmsg`, so the caller's descriptors are still queued on it when
 the worker reads them.
 
-A **worker** is a child the supervisor forks. Every untrusted byte is touched there and nowhere
+A **worker** is a child the supervisor forks before a request needs it: one per slot at boot, and a
+replacement as soon as a worker that served is reaped. Every untrusted byte is touched there and nowhere
 else. It applies the cell's resource limits before touching the socket, serves
 `max_requests_per_worker` requests, and exits without running finalizers.
 
@@ -162,11 +163,11 @@ that verdict against it. Everything uncertain is transient, meaning it might suc
 sequenceDiagram
     participant App as app process<br>(cold side, privileged)
     participant Supervisor as supervisor, pid 1<br>(hot side, unprivileged)
-    participant Worker as worker<br>(forked per dispatch)
+    participant Worker as worker<br>(forked ahead of dispatch)
 
     App->>Supervisor: one sendmsg -- JSON request + N descriptors
     note over Supervisor: never reads the request<br>queues it, or answers capacity
-    Supervisor->>Worker: forks, and passes the connection itself over SCM_RIGHTS
+    Supervisor->>Worker: passes the connection itself over SCM_RIGHTS
     note over Worker: applies the cell's limits before touching the socket<br>reads the request, narrows to the operation's limits
     Worker->>Worker: perform(inputs, outputs, **payload)<br>an input copies to scratch when asked for a path
     Worker->>App: posts the outputs, flushes, answers with one JSON line

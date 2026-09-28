@@ -23,7 +23,7 @@ module HotCell
       # is worth doing the day this is observed and not before.
       def call(cell, line, descriptors, socket: cell.work_socket, timeout: cell.timeout)
         connection = Connection.new(UNIXSocket.new(socket))
-        connection.send_message line, descriptors: descriptors
+        deliver connection, line, descriptors
         receive connection, timeout
       rescue SystemCallError, IOError => error
         # A socket that does not exist, a cell that is restarting, an accessory not yet booted. These are
@@ -36,6 +36,16 @@ module HotCell
       end
 
       private
+        # A full cell writes its answer and closes the connection without reading the request. The send can
+        # then fail while the answer is already waiting on the socket. So this ignores the failed send, and
+        # `receive` reads the answer. If the peer closed without an answer, `receive` reports that the
+        # supervisor is gone.
+        def deliver(connection, line, descriptors)
+          connection.send_message line, descriptors: descriptors
+        rescue Errno::EPIPE, Errno::ECONNRESET
+          nil
+        end
+
         # One absolute deadline across the whole response, not a wait for the first byte. Waiting for
         # readability and then calling a blocking read bounded nothing: a peer that sent one byte inside the
         # timeout and then stopped held this caller until the cell's own deadline, and a peer that never

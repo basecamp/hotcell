@@ -219,6 +219,30 @@ class ClassificationTest < HotCellClientTest
     end
   end
 
+  # A full cell writes its answer and closes the connection without reading the request. The client's send
+  # then fails, but the answer is already on its socket. The answer is the verdict. A request larger than the
+  # socket buffer makes the send fail every time.
+  def test_an_answer_that_arrives_before_the_request_is_sent_is_still_the_verdict
+    refusal = HotCell::Response.failed(HotCell::Failure.new(code: "capacity", message: "the queue is full at 8")).to_line
+
+    Dir.mktmpdir "hotcell-refusing" do |directory|
+      path = File.join(directory, "work.sock")
+      work = UNIXServer.new(path)
+      refuser = Thread.new do
+        connection = HotCell::Connection.new(work.accept)
+        connection.write_line refusal
+        connection.close
+      end
+
+      response = HotCell::Transport::Socket.new.call(nil, "x" * (4 * 1024 * 1024), [], socket: path, timeout: 5)
+
+      assert_equal "capacity", response.failure.code, response.failure.to_s
+    ensure
+      refuser&.join
+      work&.close
+    end
+  end
+
   private
     # A cell whose supervisor answers one fixed line and closes, so the client reads exactly these bytes.
     #

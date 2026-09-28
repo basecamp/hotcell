@@ -25,6 +25,16 @@ Some actions that application developers should consider taking when upgrading f
 
 * `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
 
+#### Improved
+
+* The supervisor now forks a worker into each free slot at boot. When the supervisor reaps a worker that served a request, it forks a replacement immediately. A request that finds a waiting worker does not wait for `fork`. A request that waits in the queue still waits for `fork`. The supervisor also runs `Process.warmup` one time, at boot, before the first fork.
+
+### HotCell::Client
+
+#### Fixed
+
+* The client now returns `capacity` when a full cell closes the connection before the client finishes sending the request. Previously, the client returned `unavailable` for the broken pipe.
+
 ### Tooling
 
 #### Changed
