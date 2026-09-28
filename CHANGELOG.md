@@ -31,6 +31,10 @@ Some actions that application developers should consider taking when upgrading f
 
 * The example cell serves the gem's `health.echo` and `health.reopen` in place of its own `example.echo` and `example.reopen`.
 
+#### Fixed
+
+* `bin/conformance` no longer fails intermittently at "offered overload answers capacity" against a healthy cell. A worker still cleaning up after the previous check could take one of the places the overload check fills, so the cell never filled. The check now waits for the cell to go idle first.
+
 ## v0.5.0 / 2026-09-09
 
 ### HotCell::Server

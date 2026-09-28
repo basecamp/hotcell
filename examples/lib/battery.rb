@@ -136,14 +136,21 @@ module Examples
         assert gone, "the grandchild (pid #{pid}) outlived its worker"
       end
 
-      # Fills every worker and every queue place with sleeps, then offers one more. The offer waits until
-      # metrics count every place taken rather than for a fixed interval: on a slow runner a blocker can
-      # take longer than that to arrive, and the offer then takes its place and succeeds. The blockers'
-      # own outcomes are not asserted: the queued ones may run or may wait, and either way the cell is full
-      # when the last request arrives. They are reported when the cell never fills, so a blocker that
-      # failed says why.
+      # Fills every worker and queue place with 2-second sleep requests (the blockers), then sends an extra
+      # request and expects the cell to refuse it with `capacity`.
+      #
+      # It waits for the cell to empty first. A worker counts as busy until it reports idle, which it does
+      # only after answering its caller and cleaning up. The previous check's worker can therefore still be
+      # busy when this check starts. A blocker sent then is refused, because that place is still taken. The
+      # place frees a moment later, and the cell never fills.
+      #
+      # The extra request waits until metrics show every place taken rather than for a fixed interval: on a
+      # slow runner a blocker can arrive late, and the extra request then takes its place and succeeds. The
+      # blockers' own outcomes are not asserted, because the queued ones may run or may wait and either way
+      # the cell is full. They are reported when the cell never fills, so a blocker that failed says why.
       def overload
         places = @described.fetch(:concurrency) + @described.fetch(:queue_size)
+        assert within(5) { occupied.zero? }, "earlier checks still hold places in the cell"
         blockers = places.times.map do
           Thread.new do
             Sleep.perform_in_hotcell [], [], { seconds: 2 }
