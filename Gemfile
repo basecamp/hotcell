@@ -9,6 +9,8 @@ gemspec path: "hotcell-server", name: "hotcell-server"
 gemspec path: "activestorage-hotcell-client", name: "activestorage-hotcell-client"
 gemspec path: "activestorage-hotcell-server", name: "activestorage-hotcell-server"
 
+gemspec path: "yabeda-hotcell", name: "yabeda-hotcell"
+
 # activestorage-hotcell-client needs config.active_storage.variant_processor to accept a class, which is
 # rails/rails#58384. Merged, unreleased — so this tracks main until 8.2 ships and the gemspec floor can name
 # a version instead.
