@@ -70,6 +70,16 @@ module HotCell
       end
     end
 
+    # A worker inherits the supervisor's GC counters at the fork. So this reports what the supervisor did to
+    # its heap before the fork.
+    class HeapState < HotCell::Operation
+      operation "test.heap_state"
+
+      def perform(_inputs, _outputs)
+        { compactions: GC.stat(:compact_count) }
+      end
+    end
+
     # Leaves its $HOME in a state the worker cannot remove, by taking write permission off a subdirectory
     # that still has a file in it. A tool running as this user can do the same to a sibling's directory,
     # which is why a removal that fails has to be reported rather than swallowed.

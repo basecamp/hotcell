@@ -191,6 +191,7 @@ module HotCell
       verify_scratches!
       prepare_directories
       preload
+      warm_up
       @work = listen "work.sock"
       @control = listen "control.sock"
       @control_handler = Control.new(configuration: configuration, counters: counters)
@@ -202,6 +203,8 @@ module HotCell
     end
 
     def run
+      prefork
+
       until stopped?
         readable, = IO.select(sources, nil, nil, wait_for)
         Array(readable).each { |source| handle source }
@@ -463,8 +466,20 @@ module HotCell
         @children.each_value.find(&:available?) || spawn
       end
 
+      # Forks a worker into each free slot, so that a request does not wait for `fork`. If a fork fails,
+      # `spawn` logs it and this stops. The next request forks its own worker.
+      def prefork
+        return if @stopping
+
+        while free_slot
+          break unless spawn
+        end
+      end
+
       def spawn
-        number = free_slot or return nil
+        number = free_slot
+        return nil if number.nil?
+
         slot = Slot.build(workspace, number)
         supervisor_side, worker_side = UNIXSocket.pair(:STREAM)
         stderr_reader, stderr_writer = IO.pipe
@@ -936,6 +951,12 @@ module HotCell
 
           log.write "worker.reaped", pid: pid, slot: child.slot.number, served: child.served,
                                      signal: signal_name(status), exit_code: status.exitstatus
+
+          # A worker that exited without serving a request is not replaced. This guards against a worker
+          # that crashes during its startup, for example after a bad deploy. A replacement would crash too,
+          # and the supervisor would fork again, with no requests arriving. Instead, the next request forks
+          # its own worker.
+          prefork if child.served.positive?
         end
       rescue Errno::ECHILD
         nil
@@ -1235,6 +1256,13 @@ module HotCell
 
       def preload
         Registry.operations.each { |operation| operation.before_fork.each(&:call) }
+      end
+
+      # Runs after `preload`, so that the objects the operations loaded are compacted too. Runs before the
+      # first fork, so that each worker inherits the compacted heap. The compacted objects use fewer pages,
+      # so a worker copies fewer pages when it writes to them.
+      def warm_up
+        Process.warmup
       end
 
 

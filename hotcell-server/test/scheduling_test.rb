@@ -125,6 +125,45 @@ class SchedulingTest < HotCellServerTest
     end
   end
 
+  def test_a_cell_forks_its_workers_before_any_request_arrives
+    TestCell.boot(concurrency: 2) do |cell|
+      wait_until(what: "both workers to be forked") { cell.log_events("worker.forked").size == 2 }
+    end
+  end
+
+  def test_a_reaped_worker_is_replaced_before_the_next_request_arrives
+    TestCell.boot(concurrency: 1) do |cell|
+      served = assert_ok(cell.call("test.whoami")).result[:pid]
+      wait_until(what: "a replacement to be forked") { cell.log_events("worker.forked").size == 2 }
+      replacement = cell.log_events("worker.forked").last.dig(:process, :pid)
+
+      refute_equal served, replacement
+      assert_equal replacement, assert_ok(cell.call("test.whoami")).result[:pid]
+    end
+  end
+
+  # A worker that cannot start would otherwise cause a loop: fork, crash, reap, fork again.
+  def test_a_worker_that_dies_before_serving_anything_is_not_replaced
+    TestCell.boot(concurrency: 1) do |cell|
+      wait_until(what: "the worker to be forked") { cell.log_events("worker.forked").any? }
+      Process.kill :KILL, cell.log_events("worker.forked").first.dig(:process, :pid)
+      wait_until(what: "the worker to be reaped") { cell.log_events("worker.reaped").any? }
+
+      # The reap and any replacement fork happen in one pass of the loop. An answer comes from a later pass,
+      # so any replacement fork is already in the log.
+      assert_ok cell.control("hotcell.describe")
+      assert_equal 1, cell.log_events("worker.forked").size
+
+      assert_ok cell.call("test.whoami")
+    end
+  end
+
+  def test_workers_start_from_a_warmed_up_heap
+    TestCell.boot do |cell|
+      assert_operator assert_ok(cell.call("test.heap_state")).result[:compactions], :>, 0
+    end
+  end
+
   # A reused worker keeps its slot and does not keep its home: the two requests run in the same numbered
   # directory under two names, because a name an earlier request held is one it could have prepared. What
   # does not carry across is held in cell_test.rb.
@@ -179,7 +218,7 @@ class SchedulingTest < HotCellServerTest
 
       begin
         connection.send_message request_line("test.blocking", seconds: 0.4)
-        wait_until(what: "the first worker to start") { cell.log_events("worker.forked").any? }
+        wait_until(what: "the first request to be running") { cell.control("hotcell.metrics").result[:running] == 1 }
 
         refute_predicate assert_failed("capacity", cell.call("test.echo")), :permanent?
       ensure
@@ -198,7 +237,7 @@ class SchedulingTest < HotCellServerTest
 
       begin
         blocker.send_message request_line("test.blocking", seconds: 3)
-        wait_until(what: "the first worker to start") { cell.log_events("worker.forked").any? }
+        wait_until(what: "the first request to be running") { cell.control("hotcell.metrics").result[:running] == 1 }
 
         took = elapsed { assert_failed "capacity", cell.call("test.echo", timeout: 20) }
 
