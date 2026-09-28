@@ -50,6 +50,12 @@ Some actions that application developers should consider taking when upgrading f
 
 * New gem `yabeda-hotcell`. It publishes Yabeda metrics for the application side. Call `Yabeda::HotCell.install!` one time at boot. The gem counts each call by cell, operation, code and cause, and measures the time the cell spent. On each scrape, it reads the counters of each registered cell. See the README's "Metrics collection".
 
+### ActiveStorage::HotCell::Client
+
+#### Fixed
+
+* An application that uses only the Vips transformer no longer needs the `mini_magick` gem. Previously, `require "active_storage/hot_cell/client"` raised `LoadError` when `mini_magick` was not installed. The gem now loads `Transformers::Image::Magick` when the application first names it.
+
 ### Tooling
 
 #### Changed

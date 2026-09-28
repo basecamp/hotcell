@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "open3"
 
 class TransformersImageMagickTest < ActiveStorageHotCellClientTest
   def test_it_yields_an_open_rewound_tempfile_of_the_converted_image
@@ -52,7 +53,40 @@ class TransformersImageMagickTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # image_processing 2.x no longer depends on mini_magick, so an application on vips may not have it. Only a
+  # fresh process can show what requiring the gem loads, and a stand-in first on the load path makes
+  # `require "mini_magick"` fail the way it does when the gem is not installed. Rails is loaded first, as
+  # Bundler.require does in an application, so the railtie is loaded too.
+  def test_the_gem_loads_without_mini_magick
+    output, status = ruby_without_mini_magick <<~RUBY
+      require "rails"
+      require "activestorage-hotcell-client"
+    RUBY
+
+    assert_predicate status, :success?, output
+  end
+
+  def test_naming_the_transformer_without_mini_magick_raises_load_error
+    output, status = ruby_without_mini_magick <<~RUBY
+      require "active_storage/hot_cell/client"
+      puts "loaded"
+      ActiveStorage::HotCell::Client::Transformers::Image::Magick
+    RUBY
+
+    refute_predicate status, :success?
+    assert_match(/^loaded$/, output)
+    assert_match "requires the mini_magick gem", output
+  end
+
   private
+    def ruby_without_mini_magick(script)
+      Dir.mktmpdir "hotcell-no-mini-magick" do |dir|
+        File.write File.join(dir, "mini_magick.rb"), 'raise LoadError, "cannot load such file -- mini_magick"'
+
+        Open3.capture2e RbConfig.ruby, "-I", dir, "-I", File.expand_path("../../lib", __dir__), "-e", script
+      end
+    end
+
     def transformer(transformations)
       ActiveStorage::HotCell::Client::Transformers::Image::Magick.new transformations
     end
