@@ -136,6 +136,11 @@ module HotCell
   class Output < Descriptor
     ACCESS_MODE = Fcntl::O_WRONLY
 
+    def initialize(...)
+      super
+      verify_empty!
+    end
+
     # Names the file the operation is to write, on the first call. Nothing is copied yet: post sends
     # the file back out through the descriptor, and an operation that writes the descriptor directly
     # never names one at all.
@@ -175,5 +180,21 @@ module HotCell
         io.stat.size
       end
     end
+
+    private
+      # Success is judged by the size post reports, and a direct output reports the file's whole size. Bytes
+      # already there would pass as this request's output, and a staged copy would overwrite only their
+      # head. Refused rather than truncated, because destroying the caller's data is the worse failure.
+      def verify_empty!
+        if (size = io.stat.size).positive?
+          raise AccessModeError, "#{self.class.name} already holds #{size} bytes, so they would pass as " \
+                                 "this request's output"
+        end
+
+        return if io.pos.zero?
+
+        raise AccessModeError, "#{self.class.name} is positioned at byte #{io.pos}, so a conversion would " \
+                               "not start at the beginning of the file"
+      end
   end
 end

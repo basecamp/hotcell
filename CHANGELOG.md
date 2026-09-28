@@ -18,6 +18,7 @@ gem but are what an operator runs against their own image.
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
 * Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
+* If your own client passes output files to `perform_in_hotcell`, pass only empty files that are at offset zero. The client now raises `HotCell::AccessModeError` for other output files.
 
 ### HotCell::Server
 
@@ -34,6 +35,12 @@ Some actions that application developers should consider taking when upgrading f
 #### Fixed
 
 * The client now returns `capacity` when a full cell closes the connection before the client finishes sending the request. Previously, the client returned `unavailable` for the broken pipe.
+
+### HotCell::Client and HotCell::Server
+
+#### Fixed
+
+* The client and the cell now refuse an output file that already holds bytes or is not at offset zero. The client raises `HotCell::AccessModeError`. The cell answers `invalid`. Previously, the old bytes could pass as the output of a successful request.
 
 ### Tooling
 

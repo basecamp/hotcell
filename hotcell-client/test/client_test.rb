@@ -73,6 +73,49 @@ class ClientTest < HotCellClientTest
     end
   end
 
+  def test_an_output_that_already_holds_bytes_raises_rather_than_being_classified
+    with_cell do
+      with_files do |source, first|
+        with_file("SECRET-TAIL") do |second|
+          reading(source) do |readable|
+            writing(first) do |empty|
+              File.open(second, File::WRONLY) do |nonempty|
+                error = assert_raises HotCell::AccessModeError do
+                  Uppercase.perform_in_hotcell [ readable ], [ empty, nonempty ], {}
+                end
+
+                assert_match "already holds 11 bytes", error.message
+              end
+            end
+          end
+
+          assert_equal "SECRET-TAIL", File.binread(second)
+        end
+      end
+    end
+  end
+
+  def test_an_output_positioned_past_the_start_raises_rather_than_being_classified
+    with_cell do
+      with_files do |source, first|
+        with_file do |second|
+          reading(source) do |readable|
+            writing(first) do |empty|
+              writing(second) do |positioned|
+                positioned.seek 5
+                error = assert_raises HotCell::AccessModeError do
+                  Uppercase.perform_in_hotcell [ readable ], [ empty, positioned ], {}
+                end
+
+                assert_match "positioned at byte 5", error.message
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   def test_a_request_over_the_byte_limit_raises_rather_than_being_classified
     with_cell do
       assert_raises HotCell::MessageError do

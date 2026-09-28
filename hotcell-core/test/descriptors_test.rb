@@ -232,6 +232,29 @@ class DescriptorsTest < HotCellTest
     end
   end
 
+  # The size of a direct output is what post reports, so bytes already in the file would pass as this
+  # request's output.
+  def test_an_output_that_already_holds_bytes_is_refused
+    with_file("SECRET-TAIL") do |path|
+      File.open(path, File::WRONLY) do |io|
+        error = assert_raises(HotCell::AccessModeError) { HotCell::Output.new(io) }
+
+        assert_match "already holds 11 bytes", error.message
+      end
+    end
+  end
+
+  def test_an_output_positioned_past_the_start_is_refused
+    with_file do |path|
+      writing(path) do |io|
+        io.seek 5
+        error = assert_raises(HotCell::AccessModeError) { HotCell::Output.new(io) }
+
+        assert_match "positioned at byte 5", error.message
+      end
+    end
+  end
+
   def test_an_ordinary_write_only_output_is_fine
     with_file do |path|
       writing(path) { |io| assert HotCell::Output.new(io) }

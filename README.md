@@ -147,10 +147,11 @@ The **payload** is a `Hash` of options, riding the request as its one JSON objec
 response the same way. Neither carries file contents.
 
 **Inputs** and **outputs** are the open file descriptors a caller passes -- inputs read-only,
-outputs write-only. They are the only way file contents enter or leave a cell. Asking one for its
-`path` materializes a temporary file on the worker's scratch that a tool can take. An input's bytes
-are copied there on the first ask, and an output's file is sent back through the descriptor when
-`perform` returns.  An operation may read and write directly to the descriptors for efficiency.
+outputs write-only, empty, and at offset zero. They are the only way file contents enter or leave a
+cell. Asking one for its `path` materializes a temporary file on the worker's scratch that a tool can
+take. An input's bytes are copied there on the first ask, and an output's file is sent back through the
+descriptor when `perform` returns.  An operation may read and write directly to the descriptors for
+efficiency.
 
 A failure carries a **code** -- `unreadable`, `invalid`, `unsupported`, `failed`, `capacity`,
 `unavailable`, `timeout`, `protocol`, or `killed` with a cause -- and each code is **permanent** or
@@ -176,8 +177,8 @@ sequenceDiagram
 ```
 
 1. The application calls `perform_in_hotcell inputs, outputs, payload` on a client class. The client wraps
-   each IO as an `Input` or `Output`, verifies its access mode -- inputs read-only, outputs write-only --
-   validates the payload, and connects to the cell's `work.sock`.
+   each IO as an `Input` or `Output`, verifies its access mode -- inputs read-only, outputs write-only and
+   empty -- validates the payload, and connects to the cell's `work.sock`.
 2. One `sendmsg` carries one JSON line and every descriptor.
 3. The supervisor accepts and dispatches, or answers `capacity` when the queue is full.
 4. The worker narrows to the operation's limits, clamped to the cell's, before reading any untrusted byte,

@@ -282,6 +282,55 @@ class CellTest < HotCellServerTest
     end
   end
 
+  # The size of a direct output is what the worker reports, so bytes the caller's file already held would
+  # pass as this request's output. The second output is the nonempty one, so every member is checked.
+  def test_an_output_that_already_holds_bytes_is_refused_by_the_cell
+    TestCell.boot do |cell|
+      with_files do |source, first|
+        with_file("SECRET-TAIL") do |second|
+          File.open(source, "rb") do |readable|
+            File.open(first, "wb") do |empty|
+              File.open(second, File::WRONLY) do |nonempty|
+                failure = assert_failed "invalid", cell.dispatch("test.uppercase",
+                                                                 descriptors: [ readable, empty, nonempty ],
+                                                                 inputs: 1, outputs: 2)
+
+                assert_match "already holds 11 bytes", failure.message
+              end
+            end
+          end
+
+          assert_equal 0, File.size(first)
+          assert_equal "SECRET-TAIL", File.binread(second)
+        end
+      end
+    end
+  end
+
+  def test_an_output_positioned_past_the_start_is_refused_by_the_cell
+    TestCell.boot do |cell|
+      with_files do |source, first|
+        with_file do |second|
+          File.open(source, "rb") do |readable|
+            File.open(first, "wb") do |empty|
+              File.open(second, "wb") do |positioned|
+                positioned.seek 5
+                failure = assert_failed "invalid", cell.dispatch("test.uppercase",
+                                                                 descriptors: [ readable, empty, positioned ],
+                                                                 inputs: 1, outputs: 2)
+
+                assert_match "positioned at byte 5", failure.message
+              end
+            end
+          end
+
+          assert_equal 0, File.size(first)
+          assert_equal 0, File.size(second)
+        end
+      end
+    end
+  end
+
   def test_a_request_that_is_not_valid_json
     TestCell.boot do |cell|
       assert_failed "invalid", cell.send_line("this is not json\n")
