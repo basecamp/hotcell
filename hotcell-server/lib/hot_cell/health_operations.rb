@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "hot_cell/server"
+
 # The two round trips an application runs against its own cell for a health check. Shipped in the
 # gem because every deployment was copying them from examples/, and copies drift.
 #

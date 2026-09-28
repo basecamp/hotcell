@@ -1,11 +1,18 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "open3"
 
 # Not required at the top of this file: a cell inherits what the test process defined, and requiring
 # the probes here would serve them from every cell the suite boots and hide the opt-in.
 class HealthOperationsTest < HotCellServerTest
   PROBES = -> { require "hot_cell/health_operations" }
+
+  def test_they_can_be_required_on_their_own
+    output, status = Open3.capture2e(RbConfig.ruby, "-e", 'require "hot_cell/health_operations"')
+
+    assert_predicate status, :success?, output
+  end
 
   def test_a_cell_that_has_not_required_them_does_not_serve_them
     TestCell.boot do |cell|
