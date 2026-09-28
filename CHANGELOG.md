@@ -24,6 +24,7 @@ Some actions that application developers should consider taking when upgrading f
 #### Added
 
 * `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
+* The `hotcell.describe` response now includes `server_version`. This value is the version of the `hotcell-server` gem that the cell runs. You do not need a shell in the container to find it. (#21)
 
 #### Improved
 
