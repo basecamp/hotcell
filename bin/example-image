@@ -57,7 +57,7 @@ FileUtils.cp Dir.glob(File.join(REPO, "examples", "operations", "*.rb")),
 # Dockerfile has to copy them in before `bundle install` runs.
 puts "pointing the cell's Gemfile at this checkout"
 GEMS.each do |gem|
-  files = `git -C #{REPO} ls-files #{gem}`.lines(chomp: true)
+  files = IO.popen([ "git", "-C", REPO, "ls-files", "--", gem ], &:read).lines(chomp: true)
   abort "git listed no files under #{gem}" if files.empty?
 
   files.each do |file|

@@ -44,6 +44,7 @@ Some actions that application developers should consider taking when upgrading f
 #### Fixed
 
 * `bin/conformance` no longer fails intermittently at "offered overload answers capacity" against a healthy cell. A worker still cleaning up after the previous check could take one of the places the overload check fills, so the cell never filled. The check now waits for the cell to go idle first.
+* `bin/example-image` and `bin/load` no longer pass their inputs through a shell. Before, a checkout path that contained shell syntax ran as a command in `bin/example-image`. A `bin/load` scenario, duration or thread count that contained shell syntax ran as a command in the driver container. Now the scripts pass these values as arguments. (#33)
 
 ## v0.5.0 / 2026-09-09
 
