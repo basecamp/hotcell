@@ -22,10 +22,17 @@
 #      still hold a place when the overload check starts, and the cell refuses a sleep request sent then.
 #      This test runs the overload check against a fake cell that holds such a leftover worker.
 #
+#   4. bin/example-image and bin/load must pass their inputs to commands as arguments, never through a
+#      shell. Each runs here against a fake docker, with a checkout path or arguments that run a command
+#      if a shell parses them.
+#
 # The container conformance run and its negative jobs (see .github/workflows/ci.yml) are the end-to-end
 # proof; this is the fast guard that keeps the gate honest without Docker.
 
 require "bundler/setup"
+require "fileutils"
+require "open3"
+require "tmpdir"
 require_relative "lib/battery"
 
 REPO = File.expand_path("..", __dir__)
@@ -180,6 +187,67 @@ check("the overload check waits out a request left over from an earlier check") 
   battery.send(:overload)
 ensure
   Examples::Sleep.singleton_class.send(:remove_method, :perform_in_hotcell)
+end
+
+# Each name runs a command, and so creates `injected` in the working directory, only if a shell parses it.
+INJECTION = "$(touch injected)"
+
+def fake_command(bin, name, script)
+  path = File.join(bin, name)
+  File.write path, "#!/usr/bin/env bash\n#{script}\n"
+  File.chmod 0o755, path
+end
+
+check("bin/example-image lists the gems in a checkout whose path a shell would parse") do
+  Dir.mktmpdir do |tmp|
+    checkout = File.join(tmp, "hot cell #{INJECTION}")
+    files = [ "bin/example-image", "VERSION", *Dir.glob("examples/operations/*.rb", base: REPO) ]
+    files += Open3.capture2("git", "-C", REPO, "ls-files", "--", "hotcell-core", "hotcell-server").first.lines(chomp: true)
+    files.each do |file|
+      FileUtils.mkdir_p File.join(checkout, File.dirname(file))
+      FileUtils.cp File.join(REPO, file), File.join(checkout, file)
+    end
+    _, status = Open3.capture2e("git", "init", "--quiet", checkout)
+    raise "git init failed" unless status.success?
+    _, status = Open3.capture2e("git", "-C", checkout, "add", ".")
+    raise "git add failed" unless status.success?
+
+    bin = File.join(tmp, "bin")
+    FileUtils.mkdir_p bin
+    fake_command bin, "docker", "exit 0"
+
+    output, status = Open3.capture2e({ "PATH" => "#{bin}:#{ENV["PATH"]}" },
+                                     RbConfig.ruby, File.join(checkout, "bin/example-image"), chdir: tmp)
+    raise "a shell ran the command in the checkout path" if File.exist?(File.join(tmp, "injected"))
+    raise "it failed:\n#{output}" unless status.success?
+  end
+end
+
+check("bin/load passes the scenario, duration and thread count to the driver as arguments") do
+  arguments = [ "echo #{INJECTION}", "5 #{INJECTION}", "2 #{INJECTION}" ]
+
+  Dir.mktmpdir do |tmp|
+    bin = File.join(tmp, "bin")
+    FileUtils.mkdir_p bin
+    # The driver container's `bash -c` runs here, so what reaches examples/load is what bundle receives.
+    fake_command bin, "docker", <<~BASH
+      [ "$1 $2" = "run --rm" ] || exit 0
+      while [ "$1" != bash ]; do shift; done
+      exec "$@"
+    BASH
+    fake_command bin, "install", "exit 0"
+    fake_command bin, "bundle", %(printf '%s\\n' "$@" >> "#{tmp}/bundle-arguments")
+
+    output, status = Open3.capture2e({ "PATH" => "#{bin}:#{ENV["PATH"]}" },
+                                     File.join(REPO, "bin/load"), "hotcell:example", *arguments,
+                                     chdir: tmp)
+    raise "a shell ran a command in the arguments" if File.exist?(File.join(tmp, "injected"))
+    raise "it failed:\n#{output}" unless status.success?
+
+    load = File.readlines(File.join(tmp, "bundle-arguments"), chomp: true).drop_while { |argument| argument != "exec" }
+    expected = [ "exec", "ruby", "/repo/examples/load", *arguments ]
+    raise "bundle received #{load.inspect}" unless load == expected
+  end
 end
 
 if FAILURES.empty?

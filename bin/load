@@ -59,11 +59,11 @@ if ! docker run --rm \
   --env HOTCELL_REPO=/repo \
   --env BUNDLE_GEMFILE=/tmp/driver/Gemfile \
   --env BUNDLE_PATH=/tmp/driver/bundle \
-  "$DRIVER_IMAGE" bash -c "
+  "$DRIVER_IMAGE" bash -c '
     install -D /repo/examples/Gemfile /tmp/driver/Gemfile &&
     bundle install --quiet &&
-    bundle exec ruby /repo/examples/load $SCENARIO $SECONDS_ARG $THREADS
-  "
+    bundle exec ruby /repo/examples/load "$@"
+  ' bash "$SCENARIO" "$SECONDS_ARG" "$THREADS"
 then
   echo "FAIL. Cell log tail:"
   docker logs --tail 20 "$CELL" 2>&1 | sed 's/^/  /'
