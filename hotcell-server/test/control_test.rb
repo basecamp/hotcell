@@ -16,6 +16,12 @@ class ControlTest < HotCellServerTest
     end
   end
 
+  def test_describe_reports_which_build_of_the_cell_is_running
+    TestCell.boot do |cell|
+      assert_equal HotCell::Server::VERSION, assert_ok(cell.control("hotcell.describe")).result[:server_version]
+    end
+  end
+
   # Counts lag responses, and the wait is the assertion rather than a workaround. The worker writes the
   # response and the supervisor increments the counter when it later reads that worker's idle report — two
   # processes — so a caller can be holding its answer before the count exists. Anything reading these for

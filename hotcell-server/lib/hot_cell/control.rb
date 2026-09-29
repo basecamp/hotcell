@@ -40,8 +40,12 @@ module HotCell
 
     # Static, and called once per registered cell at app boot. It is the cheapest way to catch a client
     # whose own timeout is below what this cell may take, and it is what `bin/hotcell describe` reads.
+    #
+    # `v` is the wire format and changes only when the format does; `server_version` says which release of
+    # hotcell-server is answering.
     def describe
-      { v: PROTOCOL_VERSION, operations: Registry.names, groups: groups, **@configuration.to_h }
+      { v: PROTOCOL_VERSION, server_version: Server::VERSION, operations: Registry.names, groups: groups,
+        **@configuration.to_h }
     end
 
     private
