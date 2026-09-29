@@ -78,6 +78,9 @@ jobs:
     runs-on: macos-latest
     continue-on-error: true
     timeout-minutes: 15
+    # The per-user TMPDIR leaves a HotCell::TestCell socket path a few bytes from macOS's 104-byte limit.
+    env:
+      TMPDIR: /tmp
     permissions:
       contents: read
     steps:
