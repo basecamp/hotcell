@@ -26,6 +26,9 @@ module HotCell
   # which is the only place such a library may be loaded.
   #
   #   HotCell::TestCell.boot(operations: -> { require "active_storage/hot_cell/server" })
+  #
+  # The cell's sockets go beneath `Dir.tmpdir`, and a Unix socket path holds 104 bytes on macOS, whose per-user
+  # `TMPDIR` spends about half of that. A suite on macOS should set a short `TMPDIR`, such as `/tmp`.
   class TestCell
     READY = "up"
 
