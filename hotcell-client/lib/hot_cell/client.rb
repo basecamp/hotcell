@@ -96,7 +96,7 @@ module HotCell
       line = request_line(inputs, outputs, payload)
 
       response = nil
-      ActiveSupport::Notifications.instrument "perform.hot_cell" do |event|
+      ActiveSupport::Notifications.instrument "perform.hot_cell", operation: self.class.operation, cell: cell.name do |event|
         response = verify_output(cell.transport.call(cell, line, descriptors), outputs)
         publish event, cell, response, inputs, outputs
       end
@@ -171,8 +171,6 @@ module HotCell
       def publish(event, cell, response, inputs, outputs)
         failure = response.failure
 
-        event[:operation] = self.class.operation
-        event[:cell] = cell.name
         event[:code] = failure&.code
         event[:cause] = failure&.cause
         event[:signal] = failure&.signal

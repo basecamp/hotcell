@@ -3,6 +3,7 @@
 require "test_helper"
 require "hot_cell/log_subscriber"
 require "stringio"
+require "timeout"
 
 class LogSubscriberTest < HotCellClientTest
   FORGERY = "libgomp: Thread creation failed\nforged\u0085forged\u2028forged\u2029forged"
@@ -57,6 +58,22 @@ class LogSubscriberTest < HotCellClientTest
     assert_equal "killed", fields["code"]
     assert_equal "crashed", fields["cause"]
     assert_match FORGERY, fields["stderr"]
+  end
+
+  # An exception that escapes the call, such as the application's own request timeout, still fires the event,
+  # but before the client has recorded any verdict.
+  def test_a_call_interrupted_by_an_exception_logs_the_exception_rather_than_ok
+    HotCell.root = "/nowhere"
+    HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable,
+                             transport: ->(*) { raise Timeout::Error, "the request ran out of time" }
+
+    assert_raises(Timeout::Error) { Uppercase.perform_in_hotcell [], [], {} }
+
+    fields = logged_fields
+    assert_equal "test", fields["cell"]
+    assert_equal "test.uppercase", fields["operation"]
+    assert_equal "Timeout::Error", fields["exception"]
+    assert_nil fields["code"]
   end
 
   class Uppercase < HotCell::Client

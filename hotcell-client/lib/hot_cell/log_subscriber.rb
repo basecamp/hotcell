@@ -28,7 +28,8 @@ module HotCell
         "  HotCell (#{duration_ms}ms) " + JSON.generate({
           cell: payload[:cell],
           operation: payload[:operation],
-          code: payload[:code] || "ok",
+          code: payload[:code] || ("ok" unless payload[:exception]),
+          exception: payload[:exception]&.first,
           cause: payload[:cause],
           perform_ms: payload[:perform_ms],
           duration_ms: duration_ms,

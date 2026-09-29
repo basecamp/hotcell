@@ -563,7 +563,8 @@ In a Rails application, `HotCell::LogSubscriber` already writes one `info` line 
   HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
 ```
 
-A failed call adds `cause` and `stderr` when it has them. To turn it off, call
+A failed call adds `cause` and `stderr` when it has them. A call interrupted by an exception, such as the
+application's own request timeout, logs the exception's class in place of the code. To turn the line off, call
 `HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
 
 ### Container healthcheck
