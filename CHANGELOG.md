@@ -38,6 +38,7 @@ Some actions that application developers should consider taking when upgrading f
 #### Added
 
 * `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line has the cell, the operation, the code and both durations. It also has the byte counts when the client can measure them. A failed call also has the cause and the `stderr` when it has them. When an exception interrupts the call, the line has the exception's class in place of the code and the cell's duration. The railtie attaches it. Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set `ActiveSupport::LogSubscriber.logger`.
+* Added public and private health check controllers. `HotCell::HealthController` answers `OK` or `FAIL` from each registered cell's control socket without taking a worker. `HotCell::DiagnosticsController` returns every check as JSON, including `health.echo` and `health.reopen` round trips, and inherits from the class named by `HotCell.diagnostics_controller_parent`. Your application adds the routes; see the README's "Rails healthcheck".
 
 #### Fixed
 

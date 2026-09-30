@@ -592,14 +592,48 @@ remember to use this.
 
 ### Rails healthcheck
 
-Poll `describe` and `metrics` from an unauthenticated endpoint like `/up/hotcell`. The supervisor
-answers both on the control socket without forking, so polling costs nothing.
+hotcell-client ships two controllers. Your application adds the routes.
 
-A descriptor never crosses that socket, so both stay green on a cell whose work socket your application
-cannot use. Only a round trip sees that: add `require "hot_cell/health_operations"` to an operation file in
-the cell, call `health.echo` and `health.reopen` from a second authenticated endpoint, and check the bytes
-come back. A cell missing the shared group answers `health.echo` perfectly and fails `health.reopen` with
-`EACCES`.
+`HotCell::HealthController` asks each registered cell for `describe` and `metrics` over its control socket.
+It returns `OK` with a 200 when at least one cell is registered and every cell answers, and `FAIL` with a
+503 otherwise. These calls take no worker, so the endpoint can be public, like `/up`.
+
+`HotCell::DiagnosticsController` returns the result of every check as JSON, with a 503 if any check fails.
+Along with `describe` and `metrics`, it sends `health.echo` and `health.reopen` over the work socket. Each
+of those takes a worker, so put this endpoint behind authentication.
+
+The control socket carries no file descriptors, so `describe` and `metrics` succeed even when your
+application cannot use the work socket. Only the round trips exercise the work socket. A cell without the
+shared group passes `health.echo` and fails `health.reopen` with `EACCES`. The cell serves both operations
+only if one of its operation files has `require "hot_cell/health_operations"`.
+
+Set the diagnostics controller's superclass in an initializer, then add the routes:
+
+```ruby
+# config/initializers/hotcell.rb
+HotCell.diagnostics_controller_parent = "Admin::BaseController"
+
+# config/routes.rb
+get "up/hotcell" => "hot_cell/health#show", as: :hotcell_health_check
+
+constraints subdomain: "admin" do
+  get "hotcell" => "hot_cell/diagnostics#show", as: :hotcell_diagnostics
+end
+```
+
+If your authentication is a concern, subclass the controller instead:
+
+```ruby
+# app/controllers/hotcell_diagnostics_controller.rb
+class HotcellDiagnosticsController < HotCell::DiagnosticsController
+  include StaffOnly
+end
+
+# config/routes.rb
+get "up/hotcell/diagnostics" => "hotcell_diagnostics#show"
+```
+
+From a console, `HotCell.diagnose(work: true).as_json` returns the same checks.
 
 ## Development
 

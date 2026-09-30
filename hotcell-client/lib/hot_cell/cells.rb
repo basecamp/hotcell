@@ -79,6 +79,18 @@ module HotCell
                   "unset HotCell.group where both sides run as one user."
     end
 
+    def diagnose(work: false)
+      Diagnosis.new(cells.values, work: work)
+    end
+
+    # Read when HotCell::DiagnosticsController loads, so set it in an initializer. A development reload of
+    # the parent does not reach it.
+    attr_writer :diagnostics_controller_parent
+
+    def diagnostics_controller_parent
+      @diagnostics_controller_parent || "ActionController::Base"
+    end
+
     # Test support. Named apart from the server gem's own reset, because both gems open this module and a
     # shared name would mean whichever loaded last silently won.
     def reset_registrations!
