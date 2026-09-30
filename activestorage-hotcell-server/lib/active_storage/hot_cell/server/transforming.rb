@@ -14,15 +14,8 @@ module ActiveStorage
 
           format = format.to_s
 
-          # ImageProcessing chooses its saver from the destination's extension, and a scratch path has none,
-          # so encode to a suffixed sibling on the slot's own scratch and adopt it into place. That is one
-          # rename rather than the copy-out-of-Dir.tmpdir that a destination-less `call` would do, and it
-          # keeps ImageProcessing's own saver — quality, strip, format defaults — rather than reaching past
-          # it to the library, which cannot reproduce those without restating them. Output#post makes the
-          # one remaining copy, out through the caller's descriptor.
-          encoded = destination.path(extension: format)
-          pipeline(source, format, operations).call(destination: encoded)
-          destination.adopt encoded
+          # A scratch path has no extension, so ImageProcessing saves in the `convert` format.
+          pipeline(source, format, operations).call(destination: destination.path)
 
           describe destination.path, format
         end

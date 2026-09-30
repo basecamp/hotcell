@@ -57,6 +57,12 @@ Some actions that application developers should consider taking when upgrading f
 
 * An application that uses only the Vips transformer no longer needs the `mini_magick` gem. Previously, `require "active_storage/hot_cell/client"` raised `LoadError` when `mini_magick` was not installed. The gem now loads `Transformers::Image::Magick` when the application first names it.
 
+### ActiveStorage::HotCell::Server
+
+#### Improved
+
+* The transform operations write their output straight to its final path, saving a file rename on every transform. This needs image_processing 2.2.0, which the gemspec now requires. (#4)
+
 ### Tooling
 
 #### Changed
