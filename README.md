@@ -623,7 +623,8 @@ remember to use this.
 
 ### Rails healthcheck
 
-`hotcell-client` defines two controllers. It does not define routes for them.
+`hotcell-client` defines two controllers, `HotCell::HealthController` and `HotCell::DiagnosticsController`.
+Add a route for each to the application's `config/routes.rb`, as the example below shows.
 
 `HotCell::HealthController` asks each registered cell for `describe` and `metrics` over its control socket.
 It returns `OK` with a 200 when at least one cell is registered and every cell answers, and `FAIL` with a
