@@ -17,7 +17,7 @@ module HotCell
     # number would give the call whose job is to say "this cell is down" the patience of a video transcode.
     #
     # Both bound the answer rather than the whole call: connecting is not covered. Transport::Socket says
-    # why that is left alone.
+    # why that does not hang.
     def initialize(name, dir: nil, timeout: 30, control_timeout: 5,
                    permanent: PermanentFailure, transient: TransientFailure,
                    on_contract_skew: nil, transport: Transport::Socket.new)

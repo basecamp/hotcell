@@ -74,7 +74,54 @@ class ControlTimeoutTest < HotCellClientTest
     end
   end
 
+  # No timeout covers connecting, and on Linux a blocking `connect` to a Unix socket whose backlog is full waits
+  # in the kernel until the listener accepts. Ruby is what stops it waiting here — see Transport::Socket — so a
+  # Ruby that stopped doing so has to fail this test rather than hang it.
+  def test_a_cell_that_stops_accepting_does_not_hold_the_caller
+    with_unaccepting_cell(control_timeout: 0.2) do |cell|
+      call = Thread.new { cell.metrics }
+
+      assert call.join(2), "the call waited on a cell whose backlog is full"
+      refute_predicate call.value, :ok?
+      assert_equal "unavailable", call.value.failure.code
+    ensure
+      call&.kill
+    end
+  end
+
   private
+    # A cell whose supervisor never calls `accept`, with its control socket's backlog already full.
+    def with_unaccepting_cell(name: "test", **register)
+      Dir.mktmpdir "hc" do |root|
+        directory = File.join(root, name)
+        Dir.mkdir directory
+
+        path = File.join(directory, "control.sock")
+        control = UNIXServer.new path
+        control.listen 1
+        queued = fill_backlog(path)
+        refute_empty queued, "the backlog took no connection, so nothing here is full"
+
+        HotCell.root = root
+        yield HotCell.register(name, permanent: Unprocessable, transient: TemporarilyUnavailable, **register)
+      ensure
+        queued&.each(&:close)
+        control&.close
+      end
+    end
+
+    def fill_backlog(path)
+      queued = []
+      loop do
+        socket = Socket.new(:UNIX, :STREAM)
+        socket.connect_nonblock Socket.sockaddr_un(path)
+        queued << socket
+      rescue Errno::EAGAIN, Errno::ECONNREFUSED
+        socket.close
+        return queued
+      end
+    end
+
     # A cell whose sockets exist and whose supervisor never writes a byte back.
     #
     # The prefix is two characters because the whole path has to fit a `sockaddr_un`, which holds 104 bytes
