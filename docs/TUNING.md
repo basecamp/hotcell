@@ -143,7 +143,7 @@ safe to decide per caller.
 | `killed_by` by cause | the only legitimate reason to tighten a limit |
 | `queued_ms` p95 rising, `perform_ms` p95 flat | the cell needs more workers, not faster ones |
 | `perform_ms` p95 rising | the work got more expensive; check for a library upgrade |
-| `queue_high_water` near `queue_size` | no headroom left |
+| `queued` near `queue_size`, or `queue_high_water` rising toward it | no headroom left; `queue_high_water` resets only at boot |
 | `capacity` above zero in steady state | under-provisioned |
 | `unavailable` | the cell is down, restarting, or unreachable |
 | `unreadable` rate | worth watching after a toolchain upgrade |

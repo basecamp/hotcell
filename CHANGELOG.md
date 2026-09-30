@@ -18,61 +18,62 @@ gem but are what an operator runs against their own image.
 
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
-* If the application has its own Yabeda integration for HotCell, replace it with the `yabeda-hotcell` gem. The gem uses the same metric names. It does not write a log line for each call.
-* Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
-* Remove the application's own log line for the `perform.hot_cell` event. `HotCell::LogSubscriber` now writes one. See the README's "Per-call telemetry".
+* Replace the application's Yabeda integration for HotCell with the `yabeda-hotcell` gem. The README's "Metrics collection" lists the gem's metrics for comparison with the application's dashboards and alerts.
+* Remove the log line that the application writes for each HotCell call, in a `perform.hot_cell` subscriber or in its Yabeda integration. `HotCell::LogSubscriber` writes this line now; see the README's "Application logs".
+* Replace the application's HotCell health endpoints with `HotCell::HealthController` and `HotCell::DiagnosticsController`. The README's "Rails healthcheck" shows the routes and the authentication for the diagnostics route.
+* Replace the cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and change the application's clients to call `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
 
 ### HotCell::Server
 
 #### Added
 
-* `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
-* The `hotcell.describe` response now includes `server_version`. This value is the version of the `hotcell-server` gem that the cell runs. You do not need a shell in the container to find it. (#21)
+* `hot_cell/health_operations` defines the `health.echo` and `health.reopen` operations. An application calls them to make sure that it can use the cell's work socket. A cell accepts them only when one of its operation files requires `hot_cell/health_operations`. Otherwise, the cell answers `unsupported`.
+* The `hotcell.describe` response includes `server_version`, the version of `hotcell-server` that the cell runs. Use it to find the version without a shell in the container. (#21)
 
 #### Improved
 
-* The supervisor now forks a worker into each free slot at boot. When the supervisor reaps a worker that served a request, it forks a replacement immediately. A request that finds a waiting worker does not wait for `fork`. A request that waits in the queue still waits for `fork`. The supervisor also runs `Process.warmup` one time, at boot, before the first fork.
+* A request that finds an idle worker no longer waits for `fork`. The supervisor forks a worker into each free slot at boot, and forks a replacement as soon as it reaps a worker that served a request. A request that waits in the queue still waits for `fork`. The supervisor runs `Process.warmup` once, at boot, before the first fork.
 
 ### HotCell::Client
 
 #### Added
 
-* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line has the cell, the operation, the code and both durations. It also has the byte counts when the client can measure them. A failed call also has the cause and the `stderr` when it has them. When an exception interrupts the call, the line has the exception's class in place of the code and the cell's duration. The railtie attaches it. Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set `ActiveSupport::LogSubscriber.logger`.
-* Added public and private health check controllers. `HotCell::HealthController` answers `OK` or `FAIL` from each registered cell's control socket without taking a worker. `HotCell::DiagnosticsController` returns every check as JSON, including `health.echo` and `health.reopen` round trips, and inherits from the class named by `HotCell.diagnostics_controller_parent`. Your application adds the routes; see the README's "Rails healthcheck".
+* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line contains the cell, the operation, the outcome and both durations. It also contains the byte counts when the client measures them. The railtie attaches the subscriber. See the README's "Application logs".
+* `HotCell::HealthController` and `HotCell::DiagnosticsController` check each registered cell. `HotCell::HealthController` uses only the control socket and returns `OK` or `FAIL`. It takes no worker. `HotCell::DiagnosticsController` also sends `health.echo` and `health.reopen` on the work socket. It takes a worker for each round trip. It returns each result as JSON. To use the controllers, add a route for each to the application. Put the diagnostics route behind authentication. To do this, set `HotCell.diagnostics_controller_parent` in an initializer to the name of an authenticated controller class. Alternatively, subclass `HotCell::DiagnosticsController`, authenticate in the subclass, and route to the subclass. See the README's "Rails healthcheck".
 
 #### Fixed
 
-* The `perform.hot_cell` event now carries `cell` and `operation` when an exception escapes the call. Previously, a subscriber saw neither.
+* The `perform.hot_cell` event now contains `cell` and `operation` when an exception escapes the call. Previously, the event contained neither.
 * The client now returns `capacity` when a full cell closes the connection before the client finishes sending the request. Previously, the client returned `unavailable` for the broken pipe.
 
 ### Yabeda::HotCell
 
 #### Added
 
-* New gem `yabeda-hotcell`. It publishes Yabeda metrics for the application side. Call `Yabeda::HotCell.install!` one time at boot. The gem counts each call by cell, operation, code and cause, and measures the time the cell spent. On each scrape, it reads the counters of each registered cell. See the README's "Metrics collection".
+* New gem `yabeda-hotcell`. It records Yabeda metrics for each call. On each scrape, it also sets gauges from the counters of each registered cell. Call `Yabeda::HotCell.install!` once at boot. See the README's "Metrics collection".
 
 ### ActiveStorage::HotCell::Client
 
 #### Fixed
 
-* An application that uses only the Vips transformer no longer needs the `mini_magick` gem. Previously, `require "active_storage/hot_cell/client"` raised `LoadError` when `mini_magick` was not installed. The gem now loads `Transformers::Image::Magick` when the application first names it.
+* `require "active_storage/hot_cell/client"` now works without the `mini_magick` gem. Previously, it raised `LoadError` when `mini_magick` was not installed. The gem now loads `Transformers::Image::Magick` when the application first references that constant. An application that uses only the Vips transformer can remove `mini_magick`.
 
 ### ActiveStorage::HotCell::Server
 
 #### Improved
 
-* The transform operations write their output straight to its final path, saving a file rename on every transform. This needs image_processing 2.2.0, which the gemspec now requires. (#4)
+* The transform operations write their output directly to its final path. This removes one file rename from each transform. This change requires image_processing 2.2.0, which the gemspec now specifies. (#4)
 
 ### Tooling
 
 #### Changed
 
-* The example cell serves the gem's `health.echo` and `health.reopen` in place of its own `example.echo` and `example.reopen`.
+* The example cell accepts `health.echo` and `health.reopen` from `hot_cell/health_operations`. Its own `example.echo` and `example.reopen` operations are removed.
 
 #### Fixed
 
-* `bin/conformance` no longer fails intermittently at "offered overload answers capacity" against a healthy cell. A worker still cleaning up after the previous check could take one of the places the overload check fills, so the cell never filled. The check now waits for the cell to go idle first.
-* `bin/example-image` and `bin/load` no longer pass their inputs through a shell. Before, a checkout path that contained shell syntax ran as a command in `bin/example-image`. A `bin/load` scenario, duration or thread count that contained shell syntax ran as a command in the driver container. Now the scripts pass these values as arguments. (#33)
+* `bin/conformance` no longer fails intermittently at "offered overload answers capacity" against a healthy cell. Previously, a worker that was still cleaning up after the previous check could take a place that the overload check fills, so the cell did not fill. The check now waits until the cell is idle.
+* `bin/example-image` and `bin/load` pass their inputs as arguments, not through a shell. Previously, shell syntax in a checkout path ran as a command in `bin/example-image`. Shell syntax in a `bin/load` scenario, duration or thread count ran as a command in the driver container. (#33)
 
 ## v0.5.0 / 2026-09-09
 
