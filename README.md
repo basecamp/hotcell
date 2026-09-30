@@ -25,6 +25,7 @@ applied, and the results are returned or written to the output file.
   * [Using the Active Storage operations](#using-the-active-storage-operations)
   * [Using custom operations](#using-custom-operations)
 - [Observability](#observability)
+  * [Recommended alerts](#recommended-alerts)
   * [Cell logs](#cell-logs)
   * [Application logs](#application-logs)
   * [Metrics collection](#metrics-collection)
@@ -538,13 +539,38 @@ its class, clamped to the cell's exactly as the shipped ones are.
 
 ## Observability
 
-Some strategies that are working for us to monitor HotCell, which we recommend you add to your
-application.
+HotCell's signals are the cell's own log, the counters the cell reports on its control socket, and
+the application's record of every call. The alerts below are the ones we recommend, and the sections
+after them say where each signal comes from.
+
+### Recommended alerts
+
+- **Cell availability.** Alert when the `up` gauge is 0 or absent for any cell on any host. A deploy that
+  missed a role, an application without the cell's group, or a dead supervisor shows here first. A host
+  without `HOTCELL_ROOT` reports no `up` at all, and its calls raise `HotCell::CellNotConfigured`.
+- **Failed calls.** Alert on the `requests` counter by `code`. `unavailable` means the cell is down,
+  restarting, or unreachable, and it is recorded even when the cell cannot answer. Any other shift away
+  from `ok` is the early warning.
+- **Queue headroom.** Alert when `queued` nears the cell's `queue_size`, when `queue_high_water` rises
+  toward it, or when `capacity` appears in steady state. Each means the cell is under-provisioned.
+  `queue_size` is configuration, not a metric, and `queue_high_water` resets only at boot, so alert on
+  its rise. A rising `cancelled` means callers gave up waiting.
+- **Scratch space.** Alert on free space on each host's scratch: `node_filesystem_avail_bytes` from the
+  node exporter for a disk-backed scratch or, for a tmpfs, the container's memory usage against the
+  tmpfs `size=`. A full scratch fails
+  every request that needs it, and a write that fails inside libvips comes back `unreadable`, a permanent
+  verdict against the file (see [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md)).
+  [Where scratch lives](docs/DEPLOYMENT.md#where-scratch-lives) covers the layouts.
+- **Cell errors.** Alert on any `ERROR` event in the cell log, such as `worker.crashed` or
+  `worker.unforkable`, which should never happen. Alert on a rise in the `killed` gauge by cause: a
+  single kill for `memory` or `fsize` is the cell rejecting a hostile file.
+
+[What to watch](docs/TUNING.md#what-to-watch) adds the signals for tuning a cell's limits.
 
 ### Cell logs
 
 The cell writes one JSON object per event to stdout, so whatever ships your container logs ships
-these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause.
+these too. [docs/LOGS.md](docs/LOGS.md) lists every event and field.
 
 ### Application logs
 
@@ -579,15 +605,14 @@ scrape the gem polls `cell.metrics` from every registered cell and sets the gaug
 `queued`, `queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
 
 The control socket answers even while the work socket is saturated, and it is host-local, so the
-scraped process must be on the cell's own host. Watch `queued`, `queue_high_water`, `cancelled`, and
-`killed` by cause.
+scraped process must be on the cell's own host.
 
 ### Per-call telemetry
 
-The `perform.hot_cell` Active Support Notification fires on every call, success or failure, and it is
-the only signal that survives a dead cell -- an unreachable socket comes back as code `unavailable`, so
-the primary alarm belongs here. `HotCell::LogSubscriber` and `yabeda-hotcell` both subscribe to it, and
-an application can subscribe to it for anything else.
+The `perform.hot_cell` Active Support Notification fires in the application on every call, success or
+failure, so it still reports a dead cell: an unreachable socket comes back as code `unavailable`.
+`HotCell::LogSubscriber` and `yabeda-hotcell` both subscribe to it, and an application can subscribe to
+it for anything else.
 
 ### Container healthcheck
 
