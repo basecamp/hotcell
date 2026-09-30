@@ -6,7 +6,10 @@ require "active_support/core_ext/string/inflections"
 require "active_storage/hot_cell/client/version"
 require "active_storage/hot_cell/client/operations"
 require "active_storage/hot_cell/client/transformers/image/vips"
-require "active_storage/hot_cell/client/transformers/image/magick"
+# Autoloaded because it subclasses Rails' ImageMagick transformer, which requires mini_magick, and an application
+# on vips need not bundle that gem.
+ActiveStorage::HotCell::Client::Transformers::Image.autoload :Magick,
+                                                             "active_storage/hot_cell/client/transformers/image/magick"
 require "active_storage/hot_cell/client/analyzers/image/vips"
 require "active_storage/hot_cell/client/analyzers/image/magick"
 require "active_storage/hot_cell/client/analyzers/video/ffprobe"
