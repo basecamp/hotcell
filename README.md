@@ -25,7 +25,8 @@ applied, and the results are returned or written to the output file.
   * [Using the Active Storage operations](#using-the-active-storage-operations)
   * [Using custom operations](#using-custom-operations)
 - [Observability](#observability)
-  * [Logs](#logs)
+  * [Cell logs](#cell-logs)
+  * [Application logs](#application-logs)
   * [Metrics collection](#metrics-collection)
   * [Per-call telemetry](#per-call-telemetry)
   * [Container healthcheck](#container-healthcheck)
@@ -538,12 +539,26 @@ its class, clamped to the cell's exactly as the shipped ones are.
 ## Observability
 
 Some strategies that are working for us to monitor HotCell, which we recommend you add to your
-application. (Some of these things may show up more-fully-formed in a future release.)
+application.
 
-### Logs
+### Cell logs
 
 The cell writes one JSON object per event to stdout, so whatever ships your container logs ships
 these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by cause.
+
+### Application logs
+
+In a Rails application, `HotCell::LogSubscriber` writes one `info` line per call to the Rails log:
+
+```
+  HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
+```
+
+A failed call adds `cause` and `stderr` when it has them. A call interrupted by an exception, such as the
+application's own request timeout, logs the exception's class in place of the code. To turn the line off, call
+`HotCell::LogSubscriber.detach_from :hot_cell` in an initializer. Without Rails, require
+`hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set
+`ActiveSupport::LogSubscriber.logger`.
 
 ### Metrics collection
 
@@ -569,19 +584,10 @@ scraped process must be on the cell's own host. Watch `queued`, `queue_high_wate
 
 ### Per-call telemetry
 
-Subscribe to the `perform.hot_cell` Active Support Notification for logging, metrics, or both. It
-fires on every call, success or failure, and it is the only signal that survives a dead cell -- an
-unreachable socket comes back as code `unavailable`, so the primary alarm belongs here.
-
-In a Rails application, `HotCell::LogSubscriber` already writes one `info` line per call to the Rails log:
-
-```
-  HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
-```
-
-A failed call adds `cause` and `stderr` when it has them. A call interrupted by an exception, such as the
-application's own request timeout, logs the exception's class in place of the code. To turn the line off, call
-`HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
+The `perform.hot_cell` Active Support Notification fires on every call, success or failure, and it is
+the only signal that survives a dead cell -- an unreachable socket comes back as code `unavailable`, so
+the primary alarm belongs here. `HotCell::LogSubscriber` and `yabeda-hotcell` both subscribe to it, and
+an application can subscribe to it for anything else.
 
 ### Container healthcheck
 
@@ -592,7 +598,7 @@ remember to use this.
 
 ### Rails healthcheck
 
-hotcell-client ships two controllers. Your application adds the routes.
+`hotcell-client` ships two controllers. Your application adds the routes.
 
 `HotCell::HealthController` asks each registered cell for `describe` and `metrics` over its control socket.
 It returns `OK` with a 200 when at least one cell is registered and every cell answers, and `FAIL` with a

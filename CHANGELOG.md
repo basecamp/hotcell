@@ -18,27 +18,28 @@ gem but are what an operator runs against their own image.
 
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
-* If the application has its own Yabeda integration for HotCell, replace it with the `yabeda-hotcell` gem. The gem uses the same metric names. It does not write a log line for each call.
-* Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
-* Remove the application's own log line for the `perform.hot_cell` event. `HotCell::LogSubscriber` now writes one. See the README's "Per-call telemetry".
+* Replace the application's own Yabeda integration for HotCell with the `yabeda-hotcell` gem. The README's "Metrics collection" lists the gem's metrics, to compare with the application's dashboards and alerts.
+* Remove the application's own log line for each HotCell call, whether a `perform.hot_cell` subscriber or the application's Yabeda integration writes it. `HotCell::LogSubscriber` now writes that line, as the README's "Application logs" describes.
+* Replace the application's own HotCell health endpoints with `HotCell::HealthController` and `HotCell::DiagnosticsController`. The README's "Rails healthcheck" shows the routes and how to put the diagnostics endpoint behind authentication.
+* Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. The README's "Rails healthcheck" explains what the round trips prove.
 
 ### HotCell::Server
 
 #### Added
 
 * `hot_cell/health_operations` defines `health.echo` and `health.reopen`, the round trips an application calls to prove it can use a cell's work socket. A cell serves them only if it requires the file.
-* The `hotcell.describe` response now includes `server_version`. This value is the version of the `hotcell-server` gem that the cell runs. You do not need a shell in the container to find it. (#21)
+* The `hotcell.describe` response includes `server_version`, the `hotcell-server` version the cell runs, so finding it no longer takes a shell in the container. (#21)
 
 #### Improved
 
-* The supervisor now forks a worker into each free slot at boot. When the supervisor reaps a worker that served a request, it forks a replacement immediately. A request that finds a waiting worker does not wait for `fork`. A request that waits in the queue still waits for `fork`. The supervisor also runs `Process.warmup` one time, at boot, before the first fork.
+* A request that finds an idle worker no longer waits for `fork`. The supervisor forks a worker into each free slot at boot, and forks a replacement as soon as it reaps a worker that served a request. A request that waits in the queue still waits for `fork`. The supervisor runs `Process.warmup` once, at boot, before the first fork.
 
 ### HotCell::Client
 
 #### Added
 
-* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line has the cell, the operation, the code and both durations. It also has the byte counts when the client can measure them. A failed call also has the cause and the `stderr` when it has them. When an exception interrupts the call, the line has the exception's class in place of the code and the cell's duration. The railtie attaches it. Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set `ActiveSupport::LogSubscriber.logger`.
-* Added public and private health check controllers. `HotCell::HealthController` answers `OK` or `FAIL` from each registered cell's control socket without taking a worker. `HotCell::DiagnosticsController` returns every check as JSON, including `health.echo` and `health.reopen` round trips, and inherits from the class named by `HotCell.diagnostics_controller_parent`. Your application adds the routes; see the README's "Rails healthcheck".
+* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call, with the cell, the operation, the outcome, both durations and, when measured, the byte counts. The railtie attaches it. See the README's "Application logs".
+* `HotCell::HealthController` and `HotCell::DiagnosticsController` serve a cell healthcheck without a controller of the application's own. The health endpoint answers `OK` or `FAIL` from each registered cell's control socket without taking a worker, so it can be public. The diagnostics endpoint returns every check as JSON, including the `health.echo` and `health.reopen` round trips, and belongs behind authentication. The application adds the routes; see the README's "Rails healthcheck".
 
 #### Fixed
 
@@ -49,7 +50,7 @@ Some actions that application developers should consider taking when upgrading f
 
 #### Added
 
-* New gem `yabeda-hotcell`. It publishes Yabeda metrics for the application side. Call `Yabeda::HotCell.install!` one time at boot. The gem counts each call by cell, operation, code and cause, and measures the time the cell spent. On each scrape, it reads the counters of each registered cell. See the README's "Metrics collection".
+* New gem `yabeda-hotcell` publishes Yabeda metrics for every call, and gauges from each registered cell's counters on every scrape. Call `Yabeda::HotCell.install!` once at boot. See the README's "Metrics collection".
 
 ### ActiveStorage::HotCell::Client
 
