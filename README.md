@@ -119,8 +119,8 @@ never evaluates a byte of image data -- it hands the accepted connection itself 
 the worker reads them.
 
 A **worker** is a child the supervisor forks before a request needs it: one per slot at boot, and a
-replacement as soon as a worker that served is reaped. Every untrusted byte is touched there and nowhere
-else. It applies the cell's resource limits before touching the socket, serves
+replacement as soon as the supervisor reaps one that served. Every untrusted byte is touched there and
+nowhere else. It applies the cell's resource limits before touching the socket, serves
 `max_requests_per_worker` requests, and exits without running finalizers.
 
 A **slot** is the numbered workspace a worker borrows. It holds one directory per request, which is
@@ -539,33 +539,33 @@ its class, clamped to the cell's exactly as the shipped ones are.
 
 ## Observability
 
-HotCell's signals are the cell's own log, the counters the cell reports on its control socket, and
-the application's record of every call. The alerts below are the ones we recommend, and the sections
-after them say where each signal comes from.
+Monitor HotCell through the cell's log, the counters the cell reports on its control socket, and the
+application's record of every call. We recommend the alerts below. The sections after them say where
+each signal comes from.
 
 ### Recommended alerts
 
-- **Cell availability.** Alert when the `up` gauge is 0 or absent for any cell on any host. A deploy that
-  missed a role, an application without the cell's group, or a dead supervisor shows here first. A host
-  without `HOTCELL_ROOT` reports no `up` at all, and its calls raise `HotCell::CellNotConfigured`.
-- **Failed calls.** Alert on the `requests` counter by `code`. `unavailable` means the cell is down,
-  restarting, or unreachable, and it is recorded even when the cell cannot answer. Any other shift away
-  from `ok` is the early warning.
+- **Cell availability.** Alert when the `up` gauge is 0 or absent for any cell on any host. It reads 0
+  first when a deploy missed a role, when the application lacks the cell's group, or when the supervisor is
+  dead. On a host without `HOTCELL_ROOT`, the gauge is absent and calls raise
+  `HotCell::CellNotConfigured`.
+- **Failed calls.** Alert on the `requests` counter by `code`. The application records `unavailable`
+  when the cell is down, restarting, or unreachable. Any shift away from `ok` is an early warning.
 - **Queue headroom.** Alert when `queued` nears the cell's `queue_size`, when `queue_high_water` rises
   toward it, or when `capacity` appears in steady state. Each means the cell is under-provisioned.
-  `queue_size` is configuration, not a metric, and `queue_high_water` resets only at boot, so alert on
-  its rise. A rising `cancelled` means callers gave up waiting.
+  `queue_size` is configuration, not a metric. `queue_high_water` resets only at boot, so alert on its
+  rise. A rising `cancelled` means callers gave up waiting.
 - **Scratch space.** Alert on free space on each host's scratch: `node_filesystem_avail_bytes` from the
   node exporter for a disk-backed scratch or, for a tmpfs, the container's memory usage against the
-  tmpfs `size=`. A full scratch fails
-  every request that needs it, and a write that fails inside libvips comes back `unreadable`, a permanent
-  verdict against the file (see [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md)).
+  tmpfs `size=`. A full scratch fails every request that needs it. A write that fails inside libvips
+  gets `unreadable` from the cell, a permanent verdict against the file (see
+  [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md)).
   [Where scratch lives](docs/DEPLOYMENT.md#where-scratch-lives) covers the layouts.
 - **Cell errors.** Alert on any `ERROR` event in the cell log, such as `worker.crashed` or
   `worker.unforkable`, which should never happen. Alert on a rise in the `killed` gauge by cause: a
   single kill for `memory` or `fsize` is the cell rejecting a hostile file.
 
-[What to watch](docs/TUNING.md#what-to-watch) adds the signals for tuning a cell's limits.
+[What to watch](docs/TUNING.md#what-to-watch) lists the signals for tuning a cell's limits.
 
 ### Cell logs
 
@@ -580,11 +580,11 @@ In a Rails application, `HotCell::LogSubscriber` writes one `info` line per call
   HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
 ```
 
-A failed call adds `cause` and `stderr` when it has them. A call interrupted by an exception, such as the
-application's own request timeout, logs the exception's class in place of the code. To turn the line off, call
-`HotCell::LogSubscriber.detach_from :hot_cell` in an initializer. Without Rails, require
-`hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set
-`ActiveSupport::LogSubscriber.logger`.
+For a failed call, the line adds `cause` and `stderr` when they exist. For a call interrupted by an
+exception, such as the application's own request timeout, the line has the exception's class in place of
+the code. To turn the line off, call `HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
+Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and
+set `ActiveSupport::LogSubscriber.logger`.
 
 ### Metrics collection
 
@@ -599,8 +599,8 @@ gem "yabeda-hotcell"
 Yabeda::HotCell.install!
 ```
 
-The metrics are in the `hotcell` group. The `requests` counter counts every call, tagged with `cell`,
-`operation`, `code` and `cause`, and the `perform` histogram measures the time the cell spent. On each
+The metrics are in the `hotcell` group. The `requests` counter counts every call by `cell`, `operation`,
+`code` and `cause`, and the `perform` histogram measures the time the cell spent. On each
 scrape the gem polls `cell.metrics` from every registered cell and sets the gauges `up`, `running`,
 `queued`, `queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
 
