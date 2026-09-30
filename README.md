@@ -539,15 +539,15 @@ its class, clamped to the cell's exactly as the shipped ones are.
 
 ## Observability
 
-Monitor HotCell through the cell's log, the counters the cell reports on its control socket, and the
-application's record of every call. We recommend the alerts below. The sections after them say where
-each signal comes from.
+Use these signals to monitor HotCell: the cell's log, the counters that the cell reports on its control
+socket, and the application's record of each call. Set the alerts below. The sections after the alerts
+tell where each signal comes from.
 
 ### Recommended alerts
 
 - **Cell availability.** Alert when the `up` gauge is 0 or absent for any cell on any host. It reads 0
   first when a deploy missed a role, when the application lacks the cell's group, or when the supervisor is
-  dead. On a host without `HOTCELL_ROOT`, the gauge is absent and calls raise
+  dead. On a host without `HOTCELL_ROOT`, the gauge is absent. Calls on that host raise
   `HotCell::CellNotConfigured`.
 - **Failed calls.** Alert on the `requests` counter by `code`. The application records `unavailable`
   when the cell is down, restarting, or unreachable. Any shift away from `ok` is an early warning.
@@ -555,9 +555,9 @@ each signal comes from.
   toward it, or when `capacity` appears in steady state. Each means the cell is under-provisioned.
   `queue_size` is configuration, not a metric. `queue_high_water` resets only at boot, so alert on its
   rise. A rising `cancelled` means callers gave up waiting.
-- **Scratch space.** Alert on free space on each host's scratch: `node_filesystem_avail_bytes` from the
-  node exporter for a disk-backed scratch or, for a tmpfs, the container's memory usage against the
-  tmpfs `size=`. A full scratch fails every request that needs it. A write that fails inside libvips
+- **Scratch space.** Alert on free space on the scratch of each host. For a disk-backed scratch, use
+  `node_filesystem_avail_bytes` from the node exporter. For a tmpfs, compare the container's memory usage
+  with the tmpfs `size=`. A full scratch fails every request that needs it. A write that fails inside libvips
   gets `unreadable` from the cell, a permanent verdict against the file (see
   [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md)).
   [Where scratch lives](docs/DEPLOYMENT.md#where-scratch-lives) covers the layouts.
@@ -583,13 +583,13 @@ In a Rails application, `HotCell::LogSubscriber` writes one `info` line per call
 For a failed call, the line adds `cause` and `stderr` when they exist. For a call interrupted by an
 exception, such as the application's own request timeout, the line has the exception's class in place of
 the code. To turn the line off, call `HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
-Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and
-set `ActiveSupport::LogSubscriber.logger`.
+Without Rails, require `hot_cell/log_subscriber`. Then call `HotCell::LogSubscriber.attach_to :hot_cell`.
+Then set `ActiveSupport::LogSubscriber.logger`.
 
 ### Metrics collection
 
-The `yabeda-hotcell` gem publishes [Yabeda](https://github.com/yabeda-rb/yabeda) metrics. Add it to the
-application's `Gemfile`, and install it once at boot:
+The `yabeda-hotcell` gem records HotCell metrics in [Yabeda](https://github.com/yabeda-rb/yabeda). Add
+the gem to the application's `Gemfile`. Call `Yabeda::HotCell.install!` once at boot:
 
 ```ruby
 # Gemfile
@@ -599,20 +599,19 @@ gem "yabeda-hotcell"
 Yabeda::HotCell.install!
 ```
 
-The metrics are in the `hotcell` group. The `requests` counter counts every call by `cell`, `operation`,
-`code` and `cause`, and the `perform` histogram measures the time the cell spent. On each
-scrape the gem polls `cell.metrics` from every registered cell and sets the gauges `up`, `running`,
-`queued`, `queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
+The metrics are in the `hotcell` group. The `requests` counter counts each call by `cell`, `operation`,
+`code` and `cause`. The `perform` histogram measures the time that the cell used. On each scrape, the
+gem gets `cell.metrics` from each registered cell. It sets these gauges: `up`, `running`, `queued`,
+`queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
 
-The control socket answers even while the work socket is saturated, and it is host-local, so the
-scraped process must be on the cell's own host.
+The control socket answers when the work socket is saturated. The control socket is local to its host.
+Thus the scraped process must be on the same host as the cell.
 
 ### Per-call telemetry
 
-The `perform.hot_cell` Active Support Notification fires in the application on every call, success or
-failure, so it still reports a dead cell: an unreachable socket comes back as code `unavailable`.
-`HotCell::LogSubscriber` and `yabeda-hotcell` both subscribe to it, and an application can subscribe to
-it for anything else.
+The application sends the `perform.hot_cell` Active Support Notification for each call, successful or
+failed. Thus the notification reports a dead cell: an unreachable socket gives the code `unavailable`.
+`HotCell::LogSubscriber` and `yabeda-hotcell` subscribe to it. To record other data, subscribe to it.
 
 ### Container healthcheck
 
@@ -627,19 +626,20 @@ remember to use this.
 Add a route for each to the application's `config/routes.rb`, as the example below shows.
 
 `HotCell::HealthController` asks each registered cell for `describe` and `metrics` over its control socket.
-It returns `OK` with a 200 when at least one cell is registered and every cell answers, and `FAIL` with a
-503 otherwise. These calls take no worker, so the endpoint can be public, like `/up`.
+It returns `OK` with a 200 when at least one cell is registered and each cell answers. Otherwise, it
+returns `FAIL` with a 503. These calls take no worker. Thus you can make the endpoint public, like `/up`.
 
 `HotCell::DiagnosticsController` returns the result of every check as JSON, with a 503 if any check fails.
 Along with `describe` and `metrics`, it sends `health.echo` and `health.reopen` over the work socket. Each
-of those takes a worker, so put this endpoint behind authentication.
+round trip takes a worker. Put this endpoint behind authentication.
 
-The control socket carries no file descriptors, so `describe` and `metrics` succeed even when your
-application cannot use the work socket. Only the round trips exercise the work socket. A cell without the
-shared group passes `health.echo` and fails `health.reopen` with `EACCES`. The cell serves both operations
-only if one of its operation files has `require "hot_cell/health_operations"`.
+Of the cell's two sockets, only the work socket carries file descriptors. Thus `describe` and `metrics`
+succeed when the application cannot use the work socket. Only the round trips test the work socket. A
+cell without the shared group passes `health.echo` and fails `health.reopen` with `EACCES`. Add
+`require "hot_cell/health_operations"` to one of the cell's operation files. Without it, the cell
+answers `unsupported` for both operations.
 
-Set the diagnostics controller's superclass in an initializer, then add the routes:
+Set the diagnostics controller's superclass in an initializer. Then add the routes:
 
 ```ruby
 # config/initializers/hotcell.rb
