@@ -58,9 +58,9 @@ Some actions that application developers should consider taking when upgrading f
 
 ### ActiveStorage::HotCell::Server
 
-#### Changed
+#### Improved
 
-* The gem requires image_processing 2.2.0. `transformers.image.magick` now fails as `unreadable` for a format ImageMagick has no name for, such as `jfif`, where before it wrote the source's format. (#4)
+* The transform operations write their output straight to its final path, saving a file rename on every transform. This needs image_processing 2.2.0, which the gemspec now requires. (#4)
 
 ### Tooling
 
