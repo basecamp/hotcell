@@ -260,9 +260,11 @@ Add to the `next / unreleased` section, under the gem the change is in — or un
 checks and scripts in `bin/` and `examples/`, which ship in no gem — and under `Breaking`,
 `Security`, `Added`, `Fixed`, `Improved` or `Changed`. `Improved` is for a change that makes existing
 behavior better rather than fixing a defect — a performance win, or a limit that no longer applies.
-Keep it short, one sentence is preferred that explains what changed. If it's a breaking change, it can
-run longer to explain how to tell if an application will be impacted, and how to update the
-application in that case.
+Keep it short, one sentence is preferred that explains what changed. Lead with why the change matters to
+the reader: what is now faster, safer, simpler or possible. Describe the change as it ships. Leave out
+known defects and planned follow-ups; each gets its own entry when it is fixed, so no entry goes stale or
+depends on another. If it's a breaking change, it can run longer to explain how to tell if an
+application will be impacted, and how to update the application in that case.
 
 Skip the entry only for a change no consumer can observe: a test, a refactor, a comment, a CI tweak. If you
 are unsure, write one.
