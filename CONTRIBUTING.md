@@ -77,6 +77,7 @@ hotcell-client/               the application side, and the installer that scaff
 hotcell-server/               the supervisor, workers, slots, limits, and exe/hotcell
 activestorage-hotcell-server/ the media operations
 activestorage-hotcell-client/ the Rails transformer, analyzers and previewers
+yabeda-hotcell/               Yabeda metrics for the application side
 
 examples/                     one cell's worth of sample operations and the battery that drives them
 bin/                          the container checks: example-image, conformance, load
@@ -288,16 +289,16 @@ breaks either.
 
 ## Making a release
 
-The five gems release together on one version, and `VERSION` at the repository root is what sets it.
+The gems release together on one version, and `VERSION` at the repository root is what sets it.
 
 - Prechecks
   - [ ] make sure CI is green
   - [ ] `bundle exec rake` — the full suite and rubocop
   - [ ] update `CHANGELOG.md`: retitle `next / unreleased` with the version and the date
-  - [ ] `bundle exec rake version:bump[1.2.3]` — writes `VERSION` and the five gems' version constants
+  - [ ] `bundle exec rake version:bump[1.2.3]` — writes `VERSION` and every gem's version constant
   - [ ] commit, and tag as `v1.2.3`
 - Release
-  - [ ] `bundle exec rake gems` — builds the five gems into `pkg/`, which it empties first
+  - [ ] `bundle exec rake gems` — builds every gem into `pkg/`, which it empties first
   - [ ] `git push && git push --tags` — **before** the gems: every gemspec's `changelog_uri` and
         `source_code_uri` name the tag, and they 404 until it is on GitHub
   - [ ] `for f in pkg/*.gem ; do gem push $f ; done`

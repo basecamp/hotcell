@@ -1,12 +1,13 @@
 # HotCell changelog
 
-This changelog covers five gems, which release together on the same version:
+This changelog covers these gems, which release together on the same version:
 
 - `hotcell-core`
 - `hotcell-client`
 - `hotcell-server`
 - `activestorage-hotcell-client`
 - `activestorage-hotcell-server`
+- `yabeda-hotcell`
 
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
@@ -17,6 +18,7 @@ gem but are what an operator runs against their own image.
 
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
+* If the application has its own Yabeda integration for HotCell, replace it with the `yabeda-hotcell` gem. The gem uses the same metric names. It does not write a log line for each call.
 * Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
 
 ### HotCell::Server
@@ -35,6 +37,12 @@ Some actions that application developers should consider taking when upgrading f
 #### Fixed
 
 * The client now returns `capacity` when a full cell closes the connection before the client finishes sending the request. Previously, the client returned `unavailable` for the broken pipe.
+
+### Yabeda::HotCell
+
+#### Added
+
+* New gem `yabeda-hotcell`. It publishes Yabeda metrics for the application side. Call `Yabeda::HotCell.install!` one time at boot. The gem counts each call by cell, operation, code and cause, and measures the time the cell spent. On each scrape, it reads the counters of each registered cell. See the README's "Metrics collection".
 
 ### Tooling
 

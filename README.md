@@ -98,6 +98,7 @@ hogs. Whatever is putting your trusted core application at risk, move it out!
 | `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, the container image. |
 | `activestorage-hotcell-client` | the application | The transformer, analyzer, and previewers Rails is configured with. |
 | `activestorage-hotcell-server` | the cell | The `transformers.image.*`, `analyzers.image.*`, `analyzers.media.ffprobe`, and `previewers.*` operations. |
+| `yabeda-hotcell` | the application | Yabeda metrics for every call and for each local cell's counters. |
 
 They are in one repository because they are being developed together today. We may split out the
 Active Storage gems into another repository at a later date.
@@ -546,10 +547,25 @@ these too. Alert on the presence of `worker.crashed`, and on `worker.killed` by 
 
 ### Metrics collection
 
-Poll `cell.metrics` on a schedule, for example with a [Yabeda](https://github.com/yabeda-rb/yabeda)
-`collect` block. The control socket answers even while the work socket is saturated, and it is
-host-local, so the poller must be a process on the cell's own host. Watch `queued`,
-`queue_high_water`, `cancelled`, and `killed_by` cause.
+The `yabeda-hotcell` gem publishes [Yabeda](https://github.com/yabeda-rb/yabeda) metrics. Add it to the
+application's `Gemfile`, and install it once at boot:
+
+```ruby
+# Gemfile
+gem "yabeda-hotcell"
+
+# config/initializers/hotcell.rb
+Yabeda::HotCell.install!
+```
+
+The metrics are in the `hotcell` group. The `requests` counter counts every call, tagged with `cell`,
+`operation`, `code` and `cause`, and the `perform` histogram measures the time the cell spent. On each
+scrape the gem polls `cell.metrics` from every registered cell and sets the gauges `up`, `running`,
+`queued`, `queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
+
+The control socket answers even while the work socket is saturated, and it is host-local, so the
+scraped process must be on the cell's own host. Watch `queued`, `queue_high_water`, `cancelled`, and
+`killed` by cause.
 
 ### Per-call telemetry
 

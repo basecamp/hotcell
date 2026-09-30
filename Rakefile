@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-# The three hotcell gems need no tools and no container: their suites run on fixture operations in a few
-# seconds, and so does the development cell the battery drives. The two activestorage-hotcell gems convert
+# The hotcell gems and yabeda-hotcell need no tools and no container: their suites run on fixture operations in
+# a few seconds, and so does the development cell the battery drives. The two activestorage-hotcell gems convert
 # real files and need libvips, mutool, ffmpeg and ffprobe installed. That split is a design property rather
 # than an accident, so the tasks keep it visible: `test:hotcell` is what CI runs on a machine with nothing
 # installed, and on macOS.
-HOTCELL = %w[ hotcell-core hotcell-client hotcell-server ].freeze
+HOTCELL = %w[ hotcell-core hotcell-client hotcell-server yabeda-hotcell ].freeze
 ACTIVE_STORAGE = %w[ activestorage-hotcell-server activestorage-hotcell-client ].freeze
 GEMS = (HOTCELL + ACTIVE_STORAGE).freeze
 
@@ -18,6 +18,7 @@ VERSION_FILES = %w[
   hotcell-server/lib/hot_cell/server/version.rb
   activestorage-hotcell-client/lib/active_storage/hot_cell/client/version.rb
   activestorage-hotcell-server/lib/active_storage/hot_cell/server/version.rb
+  yabeda-hotcell/lib/yabeda/hot_cell/version.rb
 ].freeze
 
 def suites(*names)
@@ -78,9 +79,9 @@ namespace "version" do
   end
 end
 
-# Releasing is a manual local process: build here, check the five gems, and push them by hand. Each
+# Releasing is a manual local process: build here, check the gems, and push them by hand. Each
 # gem's suite has the test that catches a constant left behind by a version bump.
-desc "Build all five gems into pkg/"
+desc "Build every gem into pkg/"
 task :gems do
   require "fileutils"
 
@@ -98,7 +99,7 @@ task :gems do
   Dir["pkg/*-#{version}.gem"].sort.each { |path| puts "  #{File.expand_path(path)}" }
 end
 
-# One configuration and one run for all five gems, because the style is one style.
+# One configuration and one run for every gem, because the style is one style.
 desc "Check style"
 task :rubocop do
   sh "rubocop"
