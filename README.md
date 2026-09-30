@@ -573,6 +573,16 @@ Subscribe to the `perform.hot_cell` Active Support Notification for logging, met
 fires on every call, success or failure, and it is the only signal that survives a dead cell -- an
 unreachable socket comes back as code `unavailable`, so the primary alarm belongs here.
 
+In a Rails application, `HotCell::LogSubscriber` already writes one `info` line per call to the Rails log:
+
+```
+  HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
+```
+
+A failed call adds `cause` and `stderr` when it has them. A call interrupted by an exception, such as the
+application's own request timeout, logs the exception's class in place of the code. To turn the line off, call
+`HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
+
 ### Container healthcheck
 
 The installed Dockerfile wires `hotcell-health` up as the Docker `HEALTHCHECK`. It probes the

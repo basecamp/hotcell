@@ -20,6 +20,7 @@ Some actions that application developers should consider taking when upgrading f
 
 * If the application has its own Yabeda integration for HotCell, replace it with the `yabeda-hotcell` gem. The gem uses the same metric names. It does not write a log line for each call.
 * Replace a cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and point the application's clients at `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
+* Remove the application's own log line for the `perform.hot_cell` event. `HotCell::LogSubscriber` now writes one. See the README's "Per-call telemetry".
 
 ### HotCell::Server
 
@@ -34,8 +35,13 @@ Some actions that application developers should consider taking when upgrading f
 
 ### HotCell::Client
 
+#### Added
+
+* `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line has the cell, the operation, the code and both durations. It also has the byte counts when the client can measure them. A failed call also has the cause and the `stderr` when it has them. When an exception interrupts the call, the line has the exception's class in place of the code and the cell's duration. The railtie attaches it. Without Rails, require `hot_cell/log_subscriber`, call `HotCell::LogSubscriber.attach_to :hot_cell`, and set `ActiveSupport::LogSubscriber.logger`.
+
 #### Fixed
 
+* The `perform.hot_cell` event now carries `cell` and `operation` when an exception escapes the call. Previously, a subscriber saw neither.
 * The client now returns `capacity` when a full cell closes the connection before the client finishes sending the request. Previously, the client returned `unavailable` for the broken pipe.
 
 ### Yabeda::HotCell
