@@ -39,7 +39,7 @@ Some actions that application developers should consider taking when upgrading f
 #### Added
 
 * `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call, with the cell, the operation, the outcome, both durations and, when measured, the byte counts. The railtie attaches it. See the README's "Application logs".
-* `HotCell::HealthController` and `HotCell::DiagnosticsController` serve a cell healthcheck without a controller of the application's own. The health endpoint answers `OK` or `FAIL` from each registered cell's control socket without taking a worker, so it can be public. The diagnostics endpoint returns every check as JSON, including the `health.echo` and `health.reopen` round trips, and belongs behind authentication. The application adds the routes; see the README's "Rails healthcheck".
+* `HotCell::HealthController` and `HotCell::DiagnosticsController` check each registered cell. `HotCell::HealthController` uses only the control socket and returns `OK` or `FAIL`. It takes no worker. `HotCell::DiagnosticsController` also sends `health.echo` and `health.reopen` on the work socket. It takes a worker for each round trip. It returns each result as JSON. Its default superclass, `ActionController::Base`, has no authentication. `hotcell-client` does not define routes for these controllers. See the README's "Rails healthcheck".
 
 #### Fixed
 
