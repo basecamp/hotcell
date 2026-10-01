@@ -20,6 +20,9 @@ require_relative "support/cell"
 class ActiveStorageHotCellTest < Minitest::Test
   FIXTURES = File.expand_path("fixtures", __dir__)
 
+  # ImageMagick 7 runs `magick identify`; ImageMagick 6 has `identify` and no `magick`.
+  IDENTIFY = system("magick", "-version", out: File::NULL, err: File::NULL) ? %w[ magick identify ] : %w[ identify ]
+
   private
     def fixture(name)
       File.join FIXTURES, name
@@ -51,7 +54,7 @@ class ActiveStorageHotCellTest < Minitest::Test
     # One line per frame, and a format string is repeated once per frame too — which is how the first version of
     # this read a frame count out of the wrong token and blamed the operation for it.
     def identify(path)
-      lines = `magick identify -format '%w %h %m\n' #{path.shellescape} 2>/dev/null`.lines
+      lines = `#{IDENTIFY.shelljoin} -format '%w %h %m\n' #{path.shellescape} 2>/dev/null`.lines
       skip "ImageMagick is not installed" if lines.empty?
 
       width, height, format = lines.first.split

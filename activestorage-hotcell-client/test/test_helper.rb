@@ -21,6 +21,9 @@ class ActiveStorageHotCellClientTest < Minitest::Test
 
   FIXTURES = File.expand_path("../../activestorage-hotcell-server/test/fixtures", __dir__)
 
+  # ImageMagick 7 runs `magick identify`; ImageMagick 6 has `identify` and no `magick`.
+  IDENTIFY = system("magick", "-version", out: File::NULL, err: File::NULL) ? %w[ magick identify ] : %w[ identify ]
+
   def setup
     HotCell.reset_registrations!
     HotCell.logger = Logger.new(File::NULL)
@@ -96,7 +99,7 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     end
 
     def identify(path)
-      lines = `magick identify -format '%w %h %m\n' #{path.shellescape} 2>/dev/null`.lines
+      lines = `#{IDENTIFY.shelljoin} -format '%w %h %m\n' #{path.shellescape} 2>/dev/null`.lines
       skip "ImageMagick is not installed" if lines.empty?
 
       width, height, format = lines.first.split

@@ -269,7 +269,7 @@ class PreviewersTest < ActiveStorageHotCellTest
     # Mean intensity over the whole image, 0 black to 1 white, from ImageMagick so the claim does not come
     # from the toolchain that produced the bytes.
     def brightness(path)
-      value = `magick identify -format '%[fx:mean]' #{path.shellescape} 2>/dev/null`
+      value = `#{IDENTIFY.shelljoin} -format '%[fx:mean]' #{path.shellescape} 2>/dev/null`
       skip "ImageMagick is not installed" if value.empty?
 
       Float(value)

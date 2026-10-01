@@ -34,8 +34,10 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
   # The premise. Handed the same variable, `magick` in this process does refuse the fixture — so the
   # assertion above cannot pass because the policy was ineffective.
   def test_the_policy_does_refuse_a_magick_that_reads_it
+    skip "ImageMagick is not installed" unless magick_installed?
+
     with_refusing_policy_in_the_environment do |directory|
-      refused = system({ "MAGICK_CONFIGURE_PATH" => directory }, "magick", "identify", fixture("colour.png"),
+      refused = system({ "MAGICK_CONFIGURE_PATH" => directory }, *IDENTIFY, fixture("colour.png"),
                        out: File::NULL, err: File::NULL)
 
       refute refused, "the policy did not refuse PNG, so this test proves nothing"
@@ -176,14 +178,12 @@ class MagickEnvironmentTest < ActiveStorageHotCellTest
     # Both sides start from no bound at all: a runner holding one of its own would otherwise compare a
     # bounded pool against a bounded pool.
     def magick_installed?
-      system "magick", "-version", out: File::NULL, err: File::NULL
-    rescue Errno::ENOENT
-      false
+      system(*IDENTIFY, "-version", out: File::NULL, err: File::NULL)
     end
 
     def magick_thread_resource(environment)
       environment = { "OMP_NUM_THREADS" => nil, "OMP_THREAD_LIMIT" => nil }.merge(environment)
-      output = IO.popen([ environment, "magick", "-list", "resource" ], &:read)
+      output = IO.popen([ environment, *IDENTIFY, "-list", "resource" ], &:read)
 
       Integer(output[/Thread: (\d+)/, 1])
     rescue Errno::ENOENT
