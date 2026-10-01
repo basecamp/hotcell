@@ -71,9 +71,9 @@ and not only `/run/hotcell`. Docker creates a missing last level as root, and th
 socket in it. The installed Dockerfile does this. The application's image needs nothing at its own mount
 point.
 
-**Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately. A skew between the
-client the app loads and the server the cell runs answers `protocol` on every request. While either tracks
-a branch rather than a released version, assert in a test that both lockfiles name the same revision.
+**Keep the app's and the cell's lockfiles in step.** They resolve hotcell separately.
+`HotCell.describe_cells` warns at boot when the cell's `hotcell-server` version differs from the app's
+`hotcell-client` version.
 
 
 ### Bringing your own container
@@ -422,7 +422,7 @@ HotCell.register "images",
 | `timeout:` | `30` | Seconds this caller waits for an answer to a work request. It must clear the cell's `answer_within`. A positive, finite number: `register` raises `ConfigurationError` on anything else, including `nil`, which stops the boot rather than leaving the wait for a cell to decide. |
 | `control_timeout:` | `5` | Seconds this caller waits for `describe` or `metrics`. The supervisor answers both inline, with no fork and no queue, so this is short on purpose and must not be raised toward `timeout`. It is what bounds app boot when a cell accepts connections and never answers, and what lets a health check report a wedged cell instead of waiting out a work timeout. Bounded like `timeout:`, and refused the same way. |
 | `permanent:`, `transient:` | the gem's classes | The exception classes the application raises for each side of the split. `transient` must not descend from `permanent`, and the client refuses to start if it does. |
-| `on_contract_skew:` | — | Called when a cell answers `protocol`, so a version mismatch is visible to an application that rescues broadly. |
+| `on_contract_skew:` | — | Called when a cell answers `protocol`, so a protocol version mismatch is visible to an application that rescues broadly. |
 
 ### The socket's file mode
 

@@ -5,8 +5,7 @@
 
 source "https://rubygems.org"
 
-# Pinned to the client that installed it: the two are halves of one wire contract, and a skew between
-# them answers `protocol` on every request.
+# Keep this at the application's hotcell-client version; HotCell.describe_cells warns at boot otherwise.
 gem "hotcell-server", "<%= HotCell::Client::VERSION %>"
 
 # Gems your operations need go here. For example:

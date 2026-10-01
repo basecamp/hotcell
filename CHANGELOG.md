@@ -38,6 +38,7 @@ Some actions that application developers should consider taking when upgrading f
 
 #### Added
 
+* `HotCell.describe_cells` warns at boot when a cell's `hotcell-server` version differs from the application's `hotcell-client` version. (#21)
 * `HotCell::LogSubscriber` writes one `info` line to the Rails log for each call. The line contains the cell, the operation, the outcome and both durations. It also contains the byte counts when the client measures them. The railtie attaches the subscriber. See the README's "Application logs".
 * `HotCell::HealthController` and `HotCell::DiagnosticsController` check each registered cell. `HotCell::HealthController` uses only the control socket and returns `OK` or `FAIL`. It takes no worker. `HotCell::DiagnosticsController` also sends `health.echo` and `health.reopen` on the work socket. It takes a worker for each round trip. It returns each result as JSON. To use the controllers, add a route for each to the application. Put the diagnostics route behind authentication. To do this, set `HotCell.diagnostics_controller_parent` in an initializer to the name of an authenticated controller class. Alternatively, subclass `HotCell::DiagnosticsController`, authenticate in the subclass, and route to the subclass. See the README's "Rails healthcheck".
 
