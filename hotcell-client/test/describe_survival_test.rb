@@ -78,6 +78,17 @@ class DescribeSurvivalTest < HotCellClientTest
     end
   end
 
+  def test_a_cell_cannot_forge_a_log_line_through_its_version
+    forged = %(ERROR -- : hotcell test: everything is fine)
+
+    with_cell_describing(%({"server_version":"0.0.1\\n#{forged}"})) do |cell|
+      warnings = capturing_warnings { cell.describe }
+
+      assert_match "0.0.1", warnings
+      assert_equal 1, warnings.lines.grep(/hotcell test/).size, "the cell wrote a line of its own: #{warnings}"
+    end
+  end
+
   def test_one_unusable_cell_does_not_stop_the_others_being_read
     Dir.mktmpdir "hc" do |root|
       answering root, "hostile", %({"answer_within":"attacker-controlled"})

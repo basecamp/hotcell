@@ -239,6 +239,30 @@ class IntegrationTest < HotCellClientTest
     end
   end
 
+  def test_describe_is_quiet_when_the_cell_runs_this_clients_version
+    with_cell do
+      refute_match "reports hotcell-server", capturing_warnings { HotCell.describe_cells }
+    end
+  end
+
+  def test_describe_warns_when_the_cell_runs_another_version
+    register_describing server_version: "0.0.1"
+
+    warnings = capturing_warnings { HotCell.describe_cells }
+
+    assert_match %(this client is #{HotCell::Client::VERSION} and the cell reports hotcell-server "0.0.1"), warnings
+  end
+
+  def test_describe_reads_and_warns_about_a_cell_too_old_to_report_its_version
+    register_describing operations: [ "test.echo" ]
+
+    described = nil
+    warnings = capturing_warnings { described = HotCell.describe_cells }
+
+    assert_equal [ "test.echo" ], described["test"][:operations]
+    assert_match "this client is #{HotCell::Client::VERSION} and the cell reports hotcell-server nil", warnings
+  end
+
   # Counts lag responses — the worker answers the caller before the supervisor reads its idle report and
   # increments the counter — so the wait is the assertion, exactly as in the server suite's metrics test.
   def test_metrics_come_back_through_the_registration
@@ -277,6 +301,12 @@ class IntegrationTest < HotCellClientTest
   end
 
   private
+    def register_describing(result)
+      HotCell.root = "/nowhere"
+      HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable,
+                               transport: ->(*) { HotCell::Response.ok(result: result, timing: {}) }
+    end
+
     # A gid this process cannot be holding, so the check has something unambiguous to fail on.
     def unheld_group
       @unheld_group ||= ((1..65_000).to_a - Process.groups - [ Process.gid, Process.egid ]).last

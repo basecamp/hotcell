@@ -41,8 +41,6 @@ class InstallTest < HotCellClientTest
     assert_empty templates - spec.files, "an installer template the published gem would not carry"
   end
 
-  # The Gemfile template is ERB rather than a copy, because the cell's server and this client are halves of
-  # one wire contract: a skew between them answers `protocol` on every request.
   def test_install_pins_the_cell_to_the_installing_clients_version
     Dir.mktmpdir do |root|
       HotCell::Install.call(root, out: StringIO.new)

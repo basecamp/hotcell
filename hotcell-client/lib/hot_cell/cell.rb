@@ -74,7 +74,7 @@ module HotCell
     # deployment rather than a broken one, and an application that refuses to start because its thumbnail
     # cell is restarting is worse than one that serves placeholders. So this warns and carries on.
     #
-    # Nor when a cell answers something this client cannot read. The two warnings below reach into the
+    # Nor when a cell answers something this client cannot read. The warnings below reach into the
     # description without checking types, so a cell that sends the wrong ones raises here — and the README
     # calls `describe_cells` from `after_initialize`, where that is not a failed check but an application
     # that does not boot. The process that wrote the description is the one that runs untrusted content.
@@ -88,6 +88,7 @@ module HotCell
       response.result.tap do |described|
         warn_about_timeout described
         warn_about_group_skew described
+        warn_about_version_skew described
       end
     rescue StandardError => error
       HotCell.logger.warn "hotcell #{name}: this cell's description could not be read and is being " \
@@ -220,6 +221,14 @@ module HotCell
         HotCell.logger.warn "hotcell #{name}: HotCell.group is #{HotCell.group} and this cell runs in " \
                             "#{carried.inspect}, so it cannot open a file this application hands it and " \
                             "every operation that gives a tool a filename will fail with EACCES."
+      end
+
+      def warn_about_version_skew(described)
+        reported = described[:server_version]
+        return if reported == Client::VERSION
+
+        HotCell.logger.warn "hotcell #{name}: this client is #{Client::VERSION} and the cell reports " \
+                            "hotcell-server #{Failure.one_line reported.inspect}."
       end
 
       # A `nil` timeout reaches `Transport::Socket#receive` as `deadline: nil`, and reading with no deadline
