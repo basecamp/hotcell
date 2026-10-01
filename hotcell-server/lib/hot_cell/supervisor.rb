@@ -872,18 +872,23 @@ module HotCell
       # the sweep must not signal it. An empty group is the common case, so ESRCH is expected. It is safe to
       # kill the group by the leader's pid even though the leader is reaped, because the supervisor is single
       # threaded and mints group leaders only in `spawn`, which cannot run between the `wait2` above and here.
+      #
+      # macOS answers EPERM rather than ESRCH for a group whose only members are zombies, and a tool killed
+      # with its worker stays one until launchd reaps it. Raised, it unwound `run` and ended the cell before
+      # this reap answered the caller. EPERM means no member received the signal, the same outcome as ESRCH.
       def sweep_group(child)
         Process.kill :KILL, -child.pid
-      rescue Errno::ESRCH
+      rescue Errno::ESRCH, Errno::EPERM
         nil
       end
 
       # The whole process group, which is the worker and everything it started. Negative pid is the group.
       # Falls back to the worker alone if the group is already gone, so a worker that died between the check
-      # and the signal is not an error.
+      # and the signal is not an error. A group answering EPERM falls back as well, for the reason
+      # `sweep_group` gives; the bare pid does not, because macOS signals a zombie pid without complaint.
       def kill_group(child)
         Process.kill :KILL, -child.pid
-      rescue Errno::ESRCH
+      rescue Errno::ESRCH, Errno::EPERM
         begin
           Process.kill :KILL, child.pid
         rescue Errno::ESRCH

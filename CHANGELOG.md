@@ -34,6 +34,10 @@ Some actions that application developers should consider taking when upgrading f
 
 * A request that finds an idle worker no longer waits for `fork`. The supervisor forks a worker into each free slot at boot, and forks a replacement as soon as it reaps a worker that served a request. A request that waits in the queue still waits for `fork`. The supervisor runs `Process.warmup` once, at boot, before the first fork.
 
+#### Fixed
+
+* A cell on macOS no longer stops when it kills a worker that started another process. Previously, `Process.kill` on the worker's process group could raise `Errno::EPERM` while that process was a zombie. The supervisor did not rescue the error, so the cell stopped and the caller received no response.
+
 ### HotCell::Client
 
 #### Added

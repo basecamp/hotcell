@@ -59,6 +59,27 @@ class SchedulingTest < HotCellServerTest
     ENV.delete "HOTCELL_SPAWNED_PID_PATH"
   end
 
+  # macOS refuses a signal to a process group whose only members are zombies, with EPERM rather than ESRCH.
+  # A killed worker's tool is one such zombie until launchd reaps it, so the reap's sweep raised, unwound the
+  # run loop and ended the cell, and the caller read end of stream instead of the verdict.
+  def test_a_deadline_kill_is_answered_when_the_reap_sweep_is_refused
+    refuse_group_signals(after: 1) do
+      TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
+        assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), cause: "deadline"
+      end
+    end
+  end
+
+  # The deadline kill meets the same refusal when the worker has exited unreaped. Refused, it falls back to
+  # the worker's own pid. Here the worker is still alive, so the fallback is what kills it.
+  def test_a_deadline_kill_is_answered_when_the_group_kill_is_refused
+    refuse_group_signals do
+      TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
+        assert_failed "killed", cell.call("test.uninterruptible", timeout: 20), cause: "deadline"
+      end
+    end
+  end
+
   # A reused worker is not one operation. Serving A, then B, then A left the shared library configured by B
   # while A ran, because the memo asked "has this ever booted" rather than "is this what it is set up for".
   def test_a_reused_worker_reconfigures_when_the_operation_changes
@@ -259,5 +280,23 @@ class SchedulingTest < HotCellServerTest
       true
     rescue Errno::ESRCH
       false
+    end
+
+    # The cell forks from this process, so a stub installed here is inherited by the supervisor.
+    def refuse_group_signals(after: 0)
+      original = Process.method(:kill)
+      allowed = after
+      Process.define_singleton_method(:kill) do |signal, *pids|
+        if pids.any?(&:negative?)
+          raise Errno::EPERM, "induced" if allowed.zero?
+
+          allowed -= 1
+        end
+
+        original.call signal, *pids
+      end
+      yield
+    ensure
+      Process.define_singleton_method(:kill, original)
     end
 end
