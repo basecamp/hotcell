@@ -3,7 +3,7 @@
 module ActiveStorage
   module HotCell
     module Server
-      VERSION = "0.6.0.dev"
+      VERSION = "0.6.0"
     end
   end
 end

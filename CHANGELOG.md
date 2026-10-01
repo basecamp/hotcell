@@ -12,7 +12,7 @@ This changelog covers these gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
-## next / unreleased
+## v0.6.0 / 2026-10-01
 
 ### Upgrading
 
