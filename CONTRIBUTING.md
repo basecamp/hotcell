@@ -214,7 +214,7 @@ One configuration for every gem, because the style is one style. It runs in CI a
 
 ## Writing it down
 
-[docs/DESIGN.md](docs/DESIGN.md) holds the threat model, the numbered invariants, and the facts that were
+[docs/design/](docs/design/index.md) holds the threat model, the numbered invariants, and the facts that were
 established by experiment rather than by reasoning — the fork hazard, what `RLIMIT_DATA` charges, what
 `/proc` gives a sibling away. Read it before changing anything a limit or an isolation claim rests on. It
 deliberately does not describe behavior: that is the code's job, and a duplicate description rots.

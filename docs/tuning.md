@@ -5,32 +5,6 @@ numbers for your own workload.
 
 The short version: ship the defaults, instrument first, and tighten in one direction only.
 
-## Instrument before you tune
-
-You cannot tune what you cannot see, and two signals are independent of each other. Get both in before you
-change any number.
-
-**The `perform.hot_cell` notification.** It fires on every call, success or failure, and carries the
-operation, the cell, the failure's `code`, `cause`, `signal` and `permanent`, `bytes_in`, `bytes_out`,
-`perform_ms` and the full timing. It is the only signal that survives a dead cell — an unreachable socket
-arrives here as `unavailable`, so the primary alarm belongs on this and not on the cell's own metrics.
-
-Classify by `permanent`, not by `code`. A `killed` is permanent for `fsize` and `memory` and transient
-for `deadline` and `crashed`, so the code alone cannot say which side of the split a kill is on;
-`permanent` is the cell's own answer, and `cause` is why.
-
-**The cell's `metrics`, on its control socket.** Poll it on a schedule. It answers while the work socket is
-saturated, and it is host-local, so the poller has to be a process on the cell's own host. It reports
-`running`, `queued`, `queue_high_water`, `cancelled`, the request counts by code, and `killed_by` broken
-down by cause.
-
-`killed_by` is what workers reported, not what the supervisor observed. A worker decides its own `memory`
-and `fsize` — the supervisor cannot tell either from a wait status without believing a signal a sibling
-could have sent — and reports the cause when it reports itself idle. So the count arrives just after the
-caller has its answer rather than before, it is lost if the worker dies in the window between the two, and
-a compromised worker can report a cause its request never had. Size limits by it; do not read it as
-evidence about any particular document.
-
 ## Which number comes from which measurement
 
 | Setting | Where the number comes from |
@@ -71,50 +45,6 @@ operation outside the cell — run it on your largest inputs and read its peak.
 
 `deadline` needs none of this care. It is transient, so a value that is too low costs a retry.
 
-### Why those two are different
-
-A permanent verdict is only irreversible if the application writes it down. In the shipped Active Storage
-integration, analysis does and nothing else does.
-
-Rails persists a blob's analysis like this:
-
-```ruby
-# ActiveStorage::Blob::Analyzable
-def analyze
-  update! metadata: metadata.merge(extract_metadata_via_analyzer)
-end
-
-def extract_metadata_via_analyzer
-  analyzer.metadata.merge(analyzed: true)
-end
-```
-
-`analyzed: true` is merged whatever the analyzer returned, including an empty hash. Rails never asks
-whether the analysis worked. So the chain is:
-
-1. The blob is attached. Rails enqueues `ActiveStorage::AnalyzeJob`, once.
-2. The analyzer calls the cell and gets `killed: memory`, which the client raises as the application's
-   permanent class.
-3. `Analyzers::Analyzing#metadata` rescues that class, logs it, and returns `{}`.
-4. Rails merges `analyzed: true` and writes the row.
-
-The blob's `metadata` is now `{"identified"=>true, "analyzed"=>true}` — analyzed, with no dimensions.
-Nothing re-enqueues the job, because `analyze_later` runs once at first attachment.
-
-A transient failure is not rescued at step 3. It escapes into the job, which retries it, and `analyzed`
-stays false.
-
-Undoing a permanent one is a backfill:
-
-```ruby
-blob.update!(metadata: blob.metadata.except("analyzed"))
-blob.analyze_later
-```
-
-**Previews and variants write no durable failure record.** `Preview#processed?` is `image.attached?`, and a
-variant is recorded by its `active_storage_variant_records` row. A failure attaches nothing and creates
-nothing, so the job simply retries. Only analysis needs the generous-first treatment.
-
 ## Make the timeouts agree
 
 The defaults do not agree with each other, and this is the first thing you will hit.
@@ -136,18 +66,55 @@ Which way to fix it depends on the caller:
 Both outcomes are transient, so neither choice misclassifies anything. That is the only reason this is
 safe to decide per caller.
 
-## What to watch
+### Sizing the numbers
 
-| Signal | What it means |
-| --- | --- |
-| `killed_by` by cause | the only legitimate reason to tighten a limit |
-| `queued_ms` p95 rising, `perform_ms` p95 flat | the cell needs more workers, not faster ones |
-| `perform_ms` p95 rising | the work got more expensive; check for a library upgrade |
-| `queued` near `queue_size`, or `queue_high_water` rising toward it | no headroom left; `queue_high_water` resets only at boot |
-| `capacity` above zero in steady state | under-provisioned |
-| `unavailable` | the cell is down, restarting, or unreachable |
-| `unreadable` rate | worth watching after a toolchain upgrade |
-| `worker.crashed` in the log | should be zero; anything else is a bug worth reporting |
+These numbers are arithmetic against the container flags under "Container settings". Against the
+`cpus: 2`, `memory: 2g`, `size=512m` accessory there: `concurrency: 4` because a request spends much of
+its life off the CPU, so twice `cpus` is where to start; `file_size: 48MB` because that bounds what one
+worker writes; and `memory: 1536MB` because that is the measured working value for `RLIMIT_DATA`.
+
+**Size the cell to its most demanding operation.** An operation's own `limits` are clamped to the cell's,
+so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
+set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
+`file_size: 128MB`. A cell configured with the 30 seconds and 48MB above kills every video preview, and
+nothing else, which is a hard failure to place.
+
+Some guidelines for reading those numbers:
+
+**`memory` does not multiply by `concurrency`.** It is an address-space charge on one worker. About 620MB
+of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
+`RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount an input may consume.
+The cgroup limit is what bounds real memory across the cell.
+
+**An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
+place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
+`file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
+charges that copy exactly as it charges an output. Size `file_size` from the largest thing your operations
+write, and count a staged input as one of them.
+
+**A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and it
+is proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's own
+operations need is paid on every request for the life of the deployment.
+
+## Making the numbers agree
+
+Nothing checks these for you.
+
+- The client's `timeout` must be more than the cell's `answer_within`, which is
+  `queue_wait + deadline + 1`. Below it, a saturated cell reaches the caller as a transport failure
+  instead of as `capacity` or `killed`. The client warns at boot, and `describe` reports the number.
+- The cell's `memory` must be less than the container's `memory`. At equal values the cgroup fires
+  first, and a cgroup kill is a `SIGKILL` with no diagnostic.
+- `file_size × concurrency` must be no more than the scratch. Above it, concurrent workers fill the
+  scratch and requests fail with `ENOSPC` instead of with a limit verdict. On the default accessory the
+  scratch is the tmpfs, and its `size=` is the number to fit.
+- `concurrency × (MAGICK_DISK_LIMIT + everything else one worker writes on scratch)` must be no more
+  than the scratch. Above it, concurrent ImageMagick processes fill the scratch before any of them
+  refuses a frame, and `file_size` cannot prevent that, because it bounds each cache file and not their
+  sum. See [docs/IMAGEMAGICK.md](IMAGEMAGICK.md).
+
+Three things are fixed and cannot be configured: the one-second grace between the signal to a worker and
+the kill of its process group, the absence of an `RLIMIT_CPU`, and the socket file mode.
 
 ## Where `bin/load` fits
 

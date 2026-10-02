@@ -37,7 +37,7 @@ module HotCell
   # uid and `0700` is the owner's own mode, so a concurrent sibling — or a `setsid` descendant of a finished
   # request, which process groups do not contain — can still write into a home the moment it exists. The
   # slot directory itself can be renamed aside and replaced, and `chmod` follows what it finds. Both are the
-  # residuals `docs/DESIGN.md` records under worker isolation, and neither is closed here.
+  # residuals `docs/design/worker-isolation.md` records, and neither is closed here.
   #
   # There is one directory per request and not two. A request's staged inputs and outputs are named inside
   # `$HOME` rather than in a scratch directory of their own, because the two had the same lifetime and the

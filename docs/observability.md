@@ -1,3 +1,174 @@
+# Observability
+
+## Observability
+
+Use these signals to monitor HotCell: the cell's log, the counters that the cell reports on its control
+socket, and the application's record of each call. Set the alerts below. The sections after the alerts
+tell where each signal comes from.
+
+### Recommended alerts
+
+- **Cell availability.** Alert when the `up` gauge is 0 or absent for any cell on any host. It reads 0
+  first when a deploy missed a role, when the application lacks the cell's group, or when the supervisor is
+  dead. On a host without `HOTCELL_ROOT`, the gauge is absent. Calls on that host raise
+  `HotCell::CellNotConfigured`.
+- **Failed calls.** Alert on the `requests` counter by `code`. The application records `unavailable`
+  when the cell is down, restarting, or unreachable. Any shift away from `ok` is an early warning.
+- **Queue headroom.** Alert when `queued` nears the cell's `queue_size`, when `queue_high_water` rises
+  toward it, or when `capacity` appears in steady state. Each means the cell is under-provisioned.
+  `queue_size` is configuration, not a metric. `queue_high_water` resets only at boot, so alert on its
+  rise. A rising `cancelled` means callers gave up waiting.
+- **Scratch space.** Alert on free space on the scratch of each host. For a disk-backed scratch, use
+  `node_filesystem_avail_bytes` from the node exporter. For a tmpfs, compare the container's memory usage
+  with the tmpfs `size=`. A full scratch fails every request that needs it. A write that fails inside libvips
+  gets `unreadable` from the cell, a permanent verdict against the file (see
+  [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md)).
+  [Where scratch lives](docs/DEPLOYMENT.md#where-scratch-lives) covers the layouts.
+- **Cell errors.** Alert on any `ERROR` event in the cell log, such as `worker.crashed` or
+  `worker.unforkable`, which should never happen. Alert on a rise in the `killed` gauge by cause: a
+  single kill for `memory` or `fsize` is the cell rejecting a hostile file.
+
+[What to watch](docs/TUNING.md#what-to-watch) lists the signals for tuning a cell's limits.
+
+### Cell logs
+
+The cell writes one JSON object per event to stdout, so whatever ships your container logs ships
+these too. [docs/LOGS.md](docs/LOGS.md) lists every event and field.
+
+### Application logs
+
+In a Rails application, `HotCell::LogSubscriber` writes one `info` line per call to the Rails log:
+
+```
+  HotCell (41.2ms) {"cell":"images","operation":"active_storage.transformers.image.vips","code":"ok","perform_ms":38,"duration_ms":41.2,"bytes_in":20480,"bytes_out":8192}
+```
+
+For a failed call, the line adds `cause` and `stderr` when they exist. For a call interrupted by an
+exception, such as the application's own request timeout, the line has the exception's class in place of
+the code. To turn the line off, call `HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
+Without Rails, require `hot_cell/log_subscriber`. Then call `HotCell::LogSubscriber.attach_to :hot_cell`.
+Then set `ActiveSupport::LogSubscriber.logger`.
+
+### Metrics collection
+
+The `yabeda-hotcell` gem records HotCell metrics in [Yabeda](https://github.com/yabeda-rb/yabeda). Add
+the gem to the application's `Gemfile`. Call `Yabeda::HotCell.install!` once at boot:
+
+```ruby
+# Gemfile
+gem "yabeda-hotcell"
+
+# config/initializers/hotcell.rb
+Yabeda::HotCell.install!
+```
+
+The metrics are in the `hotcell` group. The `requests` counter counts each call by `cell`, `operation`,
+`code` and `cause`. The `perform` histogram measures the time that the cell used. On each scrape, the
+gem gets `cell.metrics` from each registered cell. It sets these gauges: `up`, `running`, `queued`,
+`queue_high_water`, `cancelled`, `killed` (by `cause`), and `uptime_seconds`.
+
+The control socket answers when the work socket is saturated. The control socket is local to its host.
+Thus the scraped process must be on the same host as the cell.
+
+### Per-call telemetry
+
+The application sends the `perform.hot_cell` Active Support Notification for each call, successful or
+failed. Thus the notification reports a dead cell: an unreachable socket gives the code `unavailable`.
+`HotCell::LogSubscriber` and `yabeda-hotcell` subscribe to it. To record other data, subscribe to it.
+
+### Container healthcheck
+
+The installed Dockerfile wires `hotcell-health` up as the Docker `HEALTHCHECK`. It probes the
+supervisor's control socket from inside the container, where `network: none` does not apply. Healthy
+means the supervisor answers, not that a worker is free. If you're using your own container,
+remember to use this.
+
+### Rails healthcheck
+
+`hotcell-client` defines two controllers, `HotCell::HealthController` and `HotCell::DiagnosticsController`.
+Add a route for each to the application's `config/routes.rb`, as the example below shows.
+
+`HotCell::HealthController` asks each registered cell for `describe` and `metrics` over its control socket.
+It returns `OK` with a 200 when at least one cell is registered and each cell answers. Otherwise, it
+returns `FAIL` with a 503. These calls take no worker. Thus you can make the endpoint public, like `/up`.
+
+`HotCell::DiagnosticsController` returns the result of every check as JSON, with a 503 if any check fails.
+Along with `describe` and `metrics`, it sends `health.echo` and `health.reopen` over the work socket. Each
+round trip takes a worker. Put this endpoint behind authentication.
+
+Of the cell's two sockets, only the work socket carries file descriptors. Thus `describe` and `metrics`
+succeed when the application cannot use the work socket. Only the round trips test the work socket. A
+cell without the shared group passes `health.echo` and fails `health.reopen` with `EACCES`. Add
+`require "hot_cell/health_operations"` to one of the cell's operation files. Without it, the cell
+answers `unsupported` for both operations.
+
+Set the diagnostics controller's superclass in an initializer. Then add the routes:
+
+```ruby
+# config/initializers/hotcell.rb
+HotCell.diagnostics_controller_parent = "Admin::BaseController"
+
+# config/routes.rb
+get "up/hotcell" => "hot_cell/health#show", as: :hotcell_health_check
+
+constraints subdomain: "admin" do
+  get "hotcell" => "hot_cell/diagnostics#show", as: :hotcell_diagnostics
+end
+```
+
+If your authentication is a concern, subclass the controller instead:
+
+```ruby
+# app/controllers/hotcell_diagnostics_controller.rb
+class HotcellDiagnosticsController < HotCell::DiagnosticsController
+  include StaffOnly
+end
+
+# config/routes.rb
+get "up/hotcell/diagnostics" => "hotcell_diagnostics#show"
+```
+
+From a console, `HotCell.diagnose(work: true).as_json` returns the same checks.
+
+## Instrument before you tune
+
+You cannot tune what you cannot see, and two signals are independent of each other. Get both in before you
+change any number.
+
+**The `perform.hot_cell` notification.** It fires on every call, success or failure, and carries the
+operation, the cell, the failure's `code`, `cause`, `signal` and `permanent`, `bytes_in`, `bytes_out`,
+`perform_ms` and the full timing. It is the only signal that survives a dead cell — an unreachable socket
+arrives here as `unavailable`, so the primary alarm belongs on this and not on the cell's own metrics.
+
+Classify by `permanent`, not by `code`. A `killed` is permanent for `fsize` and `memory` and transient
+for `deadline` and `crashed`, so the code alone cannot say which side of the split a kill is on;
+`permanent` is the cell's own answer, and `cause` is why.
+
+**The cell's `metrics`, on its control socket.** Poll it on a schedule. It answers while the work socket is
+saturated, and it is host-local, so the poller has to be a process on the cell's own host. It reports
+`running`, `queued`, `queue_high_water`, `cancelled`, the request counts by code, and `killed_by` broken
+down by cause.
+
+`killed_by` is what workers reported, not what the supervisor observed. A worker decides its own `memory`
+and `fsize` — the supervisor cannot tell either from a wait status without believing a signal a sibling
+could have sent — and reports the cause when it reports itself idle. So the count arrives just after the
+caller has its answer rather than before, it is lost if the worker dies in the window between the two, and
+a compromised worker can report a cause its request never had. Size limits by it; do not read it as
+evidence about any particular document.
+
+## What to watch
+
+| Signal | What it means |
+| --- | --- |
+| `killed_by` by cause | the only legitimate reason to tighten a limit |
+| `queued_ms` p95 rising, `perform_ms` p95 flat | the cell needs more workers, not faster ones |
+| `perform_ms` p95 rising | the work got more expensive; check for a library upgrade |
+| `queued` near `queue_size`, or `queue_high_water` rising toward it | no headroom left; `queue_high_water` resets only at boot |
+| `capacity` above zero in steady state | under-provisioned |
+| `unavailable` | the cell is down, restarting, or unreachable |
+| `unreadable` rate | worth watching after a toolchain upgrade |
+| `worker.crashed` in the log | should be zero; anything else is a bug worth reporting |
+
 # Log lines
 
 The cell writes one JSON object per line to stdout. Field names follow

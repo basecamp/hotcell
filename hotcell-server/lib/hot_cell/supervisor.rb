@@ -281,7 +281,7 @@ module HotCell
       # `Codes` already relies on when it refuses to attribute a signal to the input a worker was holding.
       # The premise is that handling TERM is not optional — it is how an orchestrator stops a cell without
       # killing requests in flight — and that denial of service against a cell is out of scope per
-      # docs/DESIGN.md.
+      # docs/design/threat-model.md.
       def trap_signals
         @signals, @signal_writer = IO.pipe
         trap("CHLD") { @signal_writer.write_nonblock "C", exception: false }
@@ -527,9 +527,9 @@ module HotCell
         # capability and so survives `cap-drop ALL`, and neither the deadline kill nor the reap sweep reaches
         # it afterwards. It then runs untimed until `pids-limit` or the cgroup ends it.
         #
-        # It reaches further than that, so this is not the denial of service docs/DESIGN.md puts out of
+        # It reaches further than that, so this is not the denial of service docs/design/threat-model.md puts out of
         # scope. A stolen listener needs a live process to hold it, and this escape is the only way one
-        # outlives the reap — so it is what turns the socket theft under "Worker isolation" from a dead
+        # outlives the reap — so it is what turns the socket theft in docs/design/worker-isolation.md from a dead
         # socket path into a cell that intercepts every later request.
         #
         # The premise is that nothing in this process prevents it. A process group is the only bound the
@@ -546,7 +546,7 @@ module HotCell
         # for it: a warning written from inside libvips is a `write(2)` in a C call Ruby cannot interrupt, so
         # the conversion would wait on the supervisor's scheduling — nearest exactly when the host is under
         # pressure and the supervisor is scheduled least. That trade is refused; the conversion path must
-        # never wait on the supervisor. What non-blocking loses instead is in docs/LOGS.md, and a test pins
+        # never wait on the supervisor. What non-blocking loses instead is in docs/observability.md, and a test pins
         # the flag so that a well-meaning fix has to argue with it.
         stderr_reader.close
         stderr_writer.fcntl Fcntl::F_SETFL, stderr_writer.fcntl(Fcntl::F_GETFL) | Fcntl::O_NONBLOCK
