@@ -1,3 +1,15 @@
+---
+type: Reference
+title: "Request lifecycle"
+description: "What happens between a call to perform_in_hotcell and its answer, step by step."
+sources:
+  - hotcell-client/lib/hot_cell/client.rb
+  - hotcell-client/lib/hot_cell/transport.rb
+  - hotcell-server/lib/hot_cell/supervisor.rb
+  - hotcell-server/lib/hot_cell/worker.rb
+  - hotcell-core/lib/hot_cell/descriptors.rb
+---
+
 # Request lifecycle
 
 This page describes what happens between a call to `perform_in_hotcell` and its answer. For the terms

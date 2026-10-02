@@ -1,3 +1,15 @@
+---
+type: Reference
+title: "Operation API"
+description: "HotCell::Operation's class and instance methods, run_tool, and the Input and Output descriptors that perform receives."
+sources:
+  - hotcell-server/lib/hot_cell/operation.rb
+  - hotcell-server/lib/hot_cell/server/errors.rb
+  - hotcell-core/lib/hot_cell/descriptors.rb
+  - hotcell-core/lib/hot_cell/naming.rb
+  - hotcell-core/lib/hot_cell/declarations.rb
+---
+
 # Operation API
 
 This page describes `HotCell::Operation`, the class that you subclass to write work that runs in a cell,

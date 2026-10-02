@@ -1,3 +1,9 @@
+---
+type: Design
+title: "Why descriptors rather than a shared volume"
+description: "The argument for passing file descriptors instead of sharing a directory, and what it costs."
+---
+
 # Why descriptors rather than a shared volume
 
 The obvious alternative is a directory mounted into both containers: the app writes an input file and

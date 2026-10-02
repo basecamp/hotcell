@@ -1,3 +1,20 @@
+---
+type: Reference
+title: "Observability"
+description: "Recommended alerts, the perform.hot_cell notification, the application log line, Yabeda metrics, cell metrics, the cell log schema, and the healthchecks."
+sources:
+  - hotcell-server/lib/hot_cell/log.rb
+  - hotcell-server/lib/hot_cell/counters.rb
+  - hotcell-server/lib/hot_cell/control.rb
+  - hotcell-server/lib/hot_cell/health_operations.rb
+  - hotcell-server/exe/hotcell-health
+  - hotcell-client/lib/hot_cell/client.rb
+  - hotcell-client/lib/hot_cell/log_subscriber.rb
+  - hotcell-client/lib/hot_cell/health_controller.rb
+  - hotcell-client/lib/hot_cell/diagnostics_controller.rb
+  - yabeda-hotcell/lib
+---
+
 # Observability
 
 This page describes the signals that HotCell produces and the alerts to set on them. The signals are as

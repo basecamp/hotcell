@@ -1,3 +1,14 @@
+---
+type: Reference
+title: "Tuning"
+description: "Which measurement sets each cell number, the constraints between the numbers, and how to use bin/load."
+sources:
+  - hotcell-server/lib/hot_cell/configuration.rb
+  - hotcell-client/lib/hot_cell/cell.rb
+  - bin/load
+  - examples/load
+---
+
 # Tuning
 
 This page describes how to choose a cell's numbers for your workload: which measurement sets each one,

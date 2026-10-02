@@ -1,3 +1,9 @@
+---
+type: Design
+title: "Threat model"
+description: "What HotCell is, the problem it solves, and what a cell is defended against."
+---
+
 # Threat model
 
 This page states what HotCell is, the problem it exists to solve, and what a cell is defended against.

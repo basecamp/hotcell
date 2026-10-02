@@ -12,6 +12,12 @@ This changelog covers these gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
+### Documentation
+
+* The README is a short introduction and quick start, and the details are in a reference manual with one topic per page, starting at [docs/index.md](docs/index.md). `docs/DESIGN.md`, `docs/DEPLOYMENT.md`, `docs/TUNING.md` and `docs/LOGS.md` are gone. Their content is in [docs/design/](docs/design/index.md), [docs/container.md](docs/container.md), [docs/cell-settings.md](docs/cell-settings.md), [docs/client-api.md](docs/client-api.md), [docs/tuning.md](docs/tuning.md), [docs/scratch.md](docs/scratch.md) and [docs/observability.md](docs/observability.md).
+
 ## v0.6.0 / 2026-10-01
 
 ### Upgrading

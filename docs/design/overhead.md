@@ -1,3 +1,9 @@
+---
+type: Design
+title: "What the overhead measures at"
+description: "Where the fixed cost of a call comes from, and the candidates that were ruled out."
+---
+
 # What the overhead measures at
 
 Read this page for its negative results rather than its numbers. The numbers came off a laptop from a

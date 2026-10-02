@@ -1,3 +1,14 @@
+---
+type: Reference
+title: "Scratch"
+description: "Where a cell stages files: the tmpfs, named volume, and host-mount layouts, and the boot sweep."
+sources:
+  - hotcell-server/lib/hot_cell/supervisor.rb
+  - hotcell-server/lib/hot_cell/filesystem.rb
+  - hotcell-server/lib/hot_cell/slot.rb
+  - hotcell-server/lib/hot_cell/sweeper.rb
+---
+
 # Scratch
 
 This page describes the cell's scratch, the filesystem where requests stage their files, and the layouts

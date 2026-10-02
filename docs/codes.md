@@ -1,3 +1,15 @@
+---
+type: Reference
+title: "Response codes"
+description: "Every failure code and kill cause, whether each is permanent or transient, the exception classes the client raises, and what Active Storage records."
+sources:
+  - hotcell-core/lib/hot_cell/codes.rb
+  - hotcell-core/lib/hot_cell/failure.rb
+  - hotcell-client/lib/hot_cell/failures.rb
+  - hotcell-server/lib/hot_cell/worker.rb
+  - activestorage-hotcell-client/lib/active_storage/hot_cell/client/analyzers/analyzing.rb
+---
+
 # Response codes
 
 Every failed call carries a code, and every code is permanent or transient. This page lists the codes, the

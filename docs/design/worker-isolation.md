@@ -1,3 +1,9 @@
+---
+type: Design
+title: "Worker isolation"
+description: "What one worker can and cannot reach of another, and the residuals that remain."
+---
+
 # Worker isolation
 
 Workers in a cell are siblings under one UID in one PID namespace, so another worker's `/proc` entries are

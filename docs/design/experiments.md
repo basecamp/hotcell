@@ -1,3 +1,9 @@
+---
+type: Design
+title: "Established by experiment"
+description: "The numbered facts that were measured rather than reasoned about. Code and docs cite them by number."
+---
+
 # Established by experiment
 
 Each of these was measured, not reasoned about. A specification cannot derive them, getting them wrong

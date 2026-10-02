@@ -81,7 +81,8 @@ yabeda-hotcell/               Yabeda metrics for the application side
 
 examples/                     one cell's worth of sample operations and the battery that drives them
 bin/                          the container checks: example-image, conformance, load
-docs/                         the design document, the deployment guide, the tuning guide
+docs/                         the reference manual, one topic per page, and design/ for the rationale
+rakelib/                      rake docs:index, docs:check and docs:stale
 adr/                          decisions that were argued rather than obvious
 ```
 
@@ -217,7 +218,11 @@ One configuration for every gem, because the style is one style. It runs in CI a
 [docs/design/](docs/design/index.md) holds the threat model, the numbered invariants, and the facts that were
 established by experiment rather than by reasoning — the fork hazard, what `RLIMIT_DATA` charges, what
 `/proc` gives a sibling away. Read it before changing anything a limit or an isolation claim rests on. It
-deliberately does not describe behavior: that is the code's job, and a duplicate description rots.
+deliberately does not describe behavior.
+
+The rest of [docs/](docs/index.md) does describe behavior, and a change to the code can make it wrong.
+[AGENTS.md](AGENTS.md#keep-the-docs-current) says how to keep it current: `rake docs:stale` names the pages
+whose sources a branch changed, and `rake docs:check` holds the frontmatter and the indexes.
 
 The invariants are numbered, and code comments across three gems cite them by number. Do not renumber them.
 

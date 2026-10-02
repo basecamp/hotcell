@@ -1,3 +1,12 @@
+---
+type: Reference
+title: "Active Storage operations"
+description: "The Active Storage client classes, the cell operations that serve them, how their failures are retried, and the limits each declares."
+sources:
+  - activestorage-hotcell-client/lib
+  - activestorage-hotcell-server/lib
+---
+
 # Active Storage operations
 
 This page describes the `activestorage-hotcell-client` and `activestorage-hotcell-server` gems, which run

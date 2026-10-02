@@ -1,3 +1,9 @@
+---
+type: Design
+title: "Invariants"
+description: "The numbered properties the design exists to hold. Code and tests cite them by number."
+---
+
 # Invariants
 
 These are the design properties the whole thing exists to hold. They are not a test plan. Most are

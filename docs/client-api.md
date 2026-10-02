@@ -1,3 +1,17 @@
+---
+type: Reference
+title: "Client API"
+description: "HotCell.register and its options, HotCell::Client, the errors a bad call raises, the boot checks, diagnosis, and the group the application shares with a cell."
+sources:
+  - hotcell-client/lib/hot_cell/cells.rb
+  - hotcell-client/lib/hot_cell/cell.rb
+  - hotcell-client/lib/hot_cell/client.rb
+  - hotcell-client/lib/hot_cell/diagnosis.rb
+  - hotcell-client/lib/hot_cell/failures.rb
+  - hotcell-core/lib/hot_cell/errors.rb
+  - hotcell-core/lib/hot_cell/payload.rb
+---
+
 # Client API
 
 This page describes the application side of HotCell: registering cells with `HotCell.register`, writing

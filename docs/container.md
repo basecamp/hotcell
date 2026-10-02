@@ -1,3 +1,13 @@
+---
+type: Reference
+title: "Container"
+description: "Building the cell's image, every container flag and what it does, bounding OpenMP, and checking an accessory before and after a deploy."
+sources:
+  - hotcell-client/lib/hot_cell/install
+  - hotcell-client/test/install_test.rb
+  - bin/conformance
+---
+
 # Container
 
 This page describes the cell's container: how to build its image, what each container flag does, how to

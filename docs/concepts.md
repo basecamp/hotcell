@@ -1,3 +1,17 @@
+---
+type: Glossary
+title: "Concepts"
+description: "The terms the HotCell documentation uses: cell, supervisor, worker, slot, operation, client, tool, payload, inputs and outputs, and codes."
+sources:
+  - hotcell-server/lib/hot_cell/supervisor.rb
+  - hotcell-server/lib/hot_cell/worker.rb
+  - hotcell-server/lib/hot_cell/slot.rb
+  - hotcell-server/lib/hot_cell/operation.rb
+  - hotcell-client/lib/hot_cell/client.rb
+  - hotcell-core/lib/hot_cell/descriptors.rb
+  - hotcell-core/lib/hot_cell/naming.rb
+---
+
 # Concepts
 
 This page defines the terms that the rest of the HotCell documentation uses. The

@@ -105,7 +105,7 @@ task :rubocop do
   sh "rubocop"
 end
 
-task default: [ :test, :rubocop ]
+task default: [ :test, :rubocop, "docs:check" ]
 
 # markdown-toc is optional: a machine without it skips regeneration rather than failing.
 desc "Regenerate the table of contents in CONTRIBUTING.md"

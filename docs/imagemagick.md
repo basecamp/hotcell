@@ -1,3 +1,12 @@
+---
+type: Reference
+title: "ImageMagick"
+description: "ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them."
+sources:
+  - activestorage-hotcell-server/lib/active_storage/hot_cell/server/magick_operation.rb
+  - activestorage-hotcell-server/lib/active_storage/hot_cell/server/operation.rb
+---
+
 # ImageMagick
 
 This page describes ImageMagick's resource limits and how to set them in a cell. ImageMagick bounds itself

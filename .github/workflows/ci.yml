@@ -48,6 +48,27 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubocop
 
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@762794c140bbeda0f1224786aa33b4b46783a6c1 # v1.326.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - run: bundle exec rake docs:check
+      # A warning on each page whose sources this pull request changed while the page did not.
+      - if: github.event_name == 'pull_request'
+        run: bundle exec rake docs:stale
+        env:
+          BASE: origin/${{ github.base_ref }}
+
   # No converters installed here, on purpose. The three hotcell gems claim to be testable with no toolchain and
   # no container, and a job that installed libvips would stop that claim from being checked.
   hotcell:

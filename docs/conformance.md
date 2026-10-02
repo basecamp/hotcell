@@ -1,3 +1,14 @@
+---
+type: Reference
+title: "Conformance"
+description: "What bin/conformance checks about a cell image, and what it cannot check."
+sources:
+  - bin/conformance
+  - bin/example-image
+  - examples/conformance
+  - examples/lib
+---
+
 # Conformance
 
 This page describes `bin/conformance`, which checks whether a container image can run a cell, and what it

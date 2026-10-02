@@ -1,3 +1,15 @@
+---
+type: Reference
+title: "Cell settings"
+description: "HotCell.limits: the scheduling settings and request limits with their defaults, the environment variables, the load order, and development mode."
+sources:
+  - hotcell-server/lib/hot_cell/configuration.rb
+  - hotcell-server/lib/hot_cell/limits.rb
+  - hotcell-server/lib/hot_cell/server.rb
+  - hotcell-server/exe/hotcell
+  - hotcell-client/lib/hot_cell/install/Dockerfile.tt
+---
+
 # Cell settings
 
 This page lists the settings that a cell reads at boot: its scheduling settings, its request limits, the
