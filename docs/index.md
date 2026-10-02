@@ -9,8 +9,9 @@ description: "One page for each part of HotCell, for agents and for readers who 
 This manual describes HotCell one topic per page. For an introduction and a quick start, see the
 [README](../README.md).
 
-Each page starts with [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
-frontmatter:
+Each page starts with
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+(OKF) frontmatter:
 
 - `type`: `Reference` for a page that describes behavior, `Glossary` for the terms, and `Design` for the
   rationale.

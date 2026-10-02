@@ -6,8 +6,8 @@ Securely run untrusted code on untrusted inputs. HotCell moves that work out of 
 an unprivileged sibling container: no network, no credentials, and nothing on its filesystem worth
 stealing.
 
-Inputs and outputs travel as file descriptors over a UNIX socket on a shared volume. Your application
-calls an ordinary Ruby method. HotCell forwards the arguments to the container, runs the work in a forked
+Inputs and outputs travel as file descriptors over a UNIX socket on a shared volume. Each call is a remote
+procedure call (RPC): your application calls an ordinary Ruby method. HotCell forwards the arguments to the container, runs the work in a forked
 worker process under strict limits, and returns the result or writes it to the output file.
 
 ## Status
@@ -35,16 +35,25 @@ credentials, your session secret, and a route to every network service that the 
 HotCell gives that work its own container and its own forked process, holding nothing an attacker wants.
 Remove libvips and ffmpeg from your application image and keep them in the cell. Code execution there
 gets an attacker a read-only input descriptor, a write-only output descriptor, and the scratch of whatever
-else the cell is converting.
+else the cell is converting. The blast radius is much smaller than if that attack succeeded in your
+application code.
 
 For Rails, HotCell ships drop-in replacements for the Active Storage analyzers, transformers, and
 previewers, so adopting it takes configuration changes, not code changes. In our environment, HotCell adds
 about 8 milliseconds per call and one more container on each host. We think that's a very good trade for
 the improved security posture.
 
-HotCell isn't limited to media. You can write your own operations, run several cells on a host, pass
-several input and output files, and set each cell's limits. If something puts your application at risk,
-such as ZIP handling or a CPU-heavy computation, move it into a cell.
+HotCell isn't limited to media conversion:
+
+- You can configure several cells on each host.
+- A call can pass several input and output files.
+- Custom operations have a simple `#perform` API, like Active Job's.
+- Cell limits are configurable: memory, wall-clock time, disk usage, and more.
+- You can bring your own container image, checked by the included conformance test.
+- You can set how often workers are forked again, to trade isolation for performance.
+
+So you could use HotCell for ZIP files, or for compute that might hog the CPU. If something puts your
+trusted application at risk, move it into a cell.
 
 ## The gems
 
@@ -80,7 +89,7 @@ gem "activestorage-hotcell-client"
 ```
 
 Run `bin/rails hotcell:install`. It creates a `hotcell/` directory in the application root that holds
-everything about the cell:
+everything about the cell, separate from the client configuration and the application code:
 
 - `hotcell/Gemfile`: the gems that the operations need.
 - `hotcell/Dockerfile`: the recipe for the cell's image.
@@ -144,10 +153,10 @@ install the library or tool. You can mix these classes with Rails' own. See
 
 ### 3. Run it in development
 
-Run the cell as a plain process beside the Rails server. A containerized cell works only on Linux, because
-descriptor passing doesn't cross the VM that runs containers on macOS. The resource limits and the
-deadline apply either way. The cell keeps its own bundle, from the same `hotcell/Gemfile` that the image
-build copies.
+Run the cell as a plain process, managed by foreman beside the Rails server. A containerized cell works
+only on Linux, because descriptor passing doesn't cross the VM that runs containers on macOS. The resource
+limits and the deadline apply either way. The cell keeps its own bundle, from the same `hotcell/Gemfile`
+that the image build copies, so the two sides stay separate in development as they are in production.
 
 Add the cell to `Procfile.dev`:
 
@@ -294,7 +303,8 @@ end
 Register the `images` cell in the application's initializer, as in
 [Configure the application](#2-configure-the-application). The cell's `Gemfile` names `hotcell-server`
 directly, plus whatever gems the operation uses. Put the operation's file in `hotcell/operations/`, and
-install the tools that it runs in the `Dockerfile`.
+install the tools that it runs in the `Dockerfile`. `config.rb` doesn't change: the operation's own
+`limits` come with its class, clamped to the cell's.
 
 [Operation API](docs/operation-api.md) and [Client API](docs/client-api.md) cover the rest.
 

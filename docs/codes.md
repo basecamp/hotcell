@@ -33,7 +33,7 @@ The definitions live in [`hotcell-core/lib/hot_cell/codes.rb`](../hotcell-core/l
 | `invalid` | Permanent | The request is malformed, or a descriptor failed its access-mode check. |
 | `failed` | Transient | The operation raised an exception that nothing classified. |
 | `unsupported` | Transient | The cell doesn't carry the requested operation. |
-| `protocol` | Transient | The two sides speak different protocol versions. It heals when the accessory reboots. |
+| `protocol` | Transient | The two sides speak different protocol versions. It heals when the accessory reboots on an image with the application's protocol version. |
 | `capacity` | Transient | The cell's queue is full, or a queued request waited longer than `queue_wait`. |
 | `unavailable` | Transient | The client couldn't connect, or the connection closed with no response. The client also reports `unavailable` when a cell reports success and writes no bytes to a non-empty set of outputs. |
 | `timeout` | Transient | The client's own `timeout` passed before the cell answered. |

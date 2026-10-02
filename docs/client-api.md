@@ -23,7 +23,8 @@ The code lives in [`hotcell-client/lib/hot_cell/`](../hotcell-client/lib/hot_cel
 
 ## Configure HotCell
 
-Configure HotCell in an initializer:
+Configure HotCell in an initializer. Pass exception classes that fit your domain; your own base classes
+can be useful when you wrap an existing library.
 
 ```ruby
 HotCell.root = ENV["HOTCELL_ROOT"]              # unset turns every cell off

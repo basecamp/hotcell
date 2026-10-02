@@ -42,7 +42,7 @@ limit.
 | `concurrency` | `4` | Workers that run at once, and the number of slots. Start at twice `cpus`. See [Settings that trade isolation](#settings-that-trade-isolation). |
 | `queue_size` | `8` | Connections that can wait for a worker. When `running + queued` reaches `concurrency + queue_size`, the cell answers `capacity`. To refuse instead of queueing, use `0`. |
 | `queue_wait` | `10` | Seconds that a queued connection can wait before the cell answers `capacity`. A saturated cell then answers with a verdict instead of holding the caller until the caller's own timeout. |
-| `max_requests_per_worker` | `1` | Requests that one worker serves before the cell discards it. `1` forks for each request. `:unlimited` keeps a worker for the life of the cell. See [Settings that trade isolation](#settings-that-trade-isolation). |
+| `max_requests_per_worker` | `1` | Requests that one worker serves before the cell discards it. `1` forks for each request. `:unlimited` keeps a worker for the life of the cell. A reused worker skips the copy-on-write cost of a new fork, which is a performance setting with an isolation cost. See [Settings that trade isolation](#settings-that-trade-isolation). |
 | `control_deadline` | `5` | Seconds that a control connection can take to send its request. |
 | `sweep_interval` | `10` | How often, in seconds, the supervisor looks for the directories that killed requests left behind. When it finds one, it forks a sweeper process to delete them. The sweeper runs under `deadline` like a worker, so the supervisor and the requests in flight never wait on the deletion. |
 
