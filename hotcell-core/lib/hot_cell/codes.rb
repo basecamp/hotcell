@@ -89,7 +89,7 @@ module HotCell
     # It removes the supervisor as an instrument: a sibling's signal no longer travels through a wait status
     # into someone else's blob. It does nothing about a cell that has been compromised outright and answers
     # a connection itself — `from_wire` believes a `permanent` boolean off the wire, and a worker that stole
-    # `work.sock` writes whatever it likes. That is the socket-theft residual `docs/DESIGN.md` records, and
+    # `work.sock` writes whatever it likes. That is the socket-theft residual `docs/design/worker-isolation.md` records, and
     # it is not closed here.
     PERMANENT_BY_CAUSE = {
       FSIZE    => true,

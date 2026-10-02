@@ -12,6 +12,12 @@ This changelog covers these gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
+### Documentation
+
+* The README is a short introduction and quick start, and the details are in a reference manual with one topic per page, starting at [docs/index.md](docs/index.md). `docs/DESIGN.md`, `docs/DEPLOYMENT.md`, `docs/TUNING.md` and `docs/LOGS.md` are gone. Their content is in [docs/design/](docs/design/index.md), [docs/container.md](docs/container.md), [docs/cell-settings.md](docs/cell-settings.md), [docs/client-api.md](docs/client-api.md), [docs/tuning.md](docs/tuning.md), [docs/scratch.md](docs/scratch.md) and [docs/observability.md](docs/observability.md).
+
 ## v0.6.0 / 2026-10-01
 
 ### Upgrading
@@ -113,7 +119,7 @@ Some actions that application developers should consider taking when upgrading f
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
 * Log `stderr` from the `perform.hot_cell` event in the client Rails application. This improves observability and provides forensic evidence about cell crashes.
-* Set `MAGICK_MEMORY_LIMIT`, `MAGICK_MAP_LIMIT` and `MAGICK_DISK_LIMIT` in a cell image that installs ImageMagick. See [docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md).
+* Set `MAGICK_MEMORY_LIMIT`, `MAGICK_MAP_LIMIT` and `MAGICK_DISK_LIMIT` in a cell image that installs ImageMagick. See [docs/imagemagick.md](docs/imagemagick.md).
 
 ### HotCell::Client
 
@@ -192,7 +198,7 @@ Some actions that application developers should consider taking when upgrading f
 
 #### Added
 
-* `request`, `request.abandoned`, `worker.crashed`, `worker.killed` and `worker.undispatchable` carry `hotcell.op`, the operation the line is about. A cell runs several operations at once and they do not share limits, so `worker.killed cause=fsize` on a host serving three PDF operations named none of them, and no join was available elsewhere: the response carries no operation, and `hotcell_killed` is tagged `cell` and `cause` only. The worker parses the name out of the request; the supervisor, which never reads one, learns it from the worker's report and holds it, because a killed worker cannot write its own `worker.killed`. Where the name is not known the field is `null` rather than an earlier request's name. See [docs/LOGS.md](docs/LOGS.md).
+* `request`, `request.abandoned`, `worker.crashed`, `worker.killed` and `worker.undispatchable` carry `hotcell.op`, the operation the line is about. A cell runs several operations at once and they do not share limits, so `worker.killed cause=fsize` on a host serving three PDF operations named none of them, and no join was available elsewhere: the response carries no operation, and `hotcell_killed` is tagged `cell` and `cause` only. The worker parses the name out of the request; the supervisor, which never reads one, learns it from the worker's report and holds it, because a killed worker cannot write its own `worker.killed`. Where the name is not known the field is `null` rather than an earlier request's name. See [docs/observability.md](docs/observability.md#cell-log).
 
 * `worker.undispatchable` is the one line where the supervisor reads a request, since the worker died before the dispatch write and nothing else has read it. It peeks rather than reads, taking neither the bytes nor the caller's descriptors off the connection, and never waits for a request that has not arrived.
 

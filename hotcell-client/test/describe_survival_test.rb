@@ -4,7 +4,7 @@ require "test_helper"
 
 # `describe` is the one call a cell answers before the application is serving, and the README puts it in
 # `after_initialize`, where an exception is not a failed check but a Rails application that does not boot.
-# The process answering runs untrusted content, and `docs/DESIGN.md` records the socket theft that lets a
+# The process answering runs untrusted content, and `docs/design/worker-isolation.md` records the socket theft that lets a
 # compromised worker be the thing that answers — so nothing it sends may raise out of `describe`.
 class DescribeSurvivalTest < HotCellClientTest
   # Correctly framed responses whose contents this client cannot use. Each raised out of `describe` before

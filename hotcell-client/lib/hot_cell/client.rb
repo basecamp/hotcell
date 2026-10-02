@@ -126,7 +126,7 @@ module HotCell
       # premise is that restoring is worse than carrying it: the cell may still hold the descriptor, undoing
       # it mid-request adds a failure path to the answer, and a caller that could not share the file could
       # not use this at all. Active Storage hands over tempfiles it then unlinks, so nothing survives there.
-      # docs/DEPLOYMENT.md tells anyone writing their own client to pass files they are willing to share.
+      # docs/client-api.md tells anyone writing their own client to pass files they are willing to share.
       def shared(io, mode)
         return io if HotCell.group.nil?
 
