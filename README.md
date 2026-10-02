@@ -2,25 +2,23 @@
 
 # HotCell
 
-Securely run untrusted code on untrusted inputs. HotCell lets you move that work out of your application
-and into an unprivileged sibling container: no network, no credentials, and nothing on its filesystem
-worth stealing.
+Securely run untrusted code on untrusted inputs. HotCell moves that work out of your application and into
+an unprivileged sibling container: no network, no credentials, and nothing on its filesystem worth
+stealing.
 
-Inputs and outputs travel as file descriptors over a UNIX socket on a shared volume. Each call is a
-remote procedure call ("RPC"): your application calls an ordinary Ruby method, the arguments are
-forwarded to the container where the work runs in a forked worker process with strict limits
-applied, and the results are returned or written to the output file.
+Inputs and outputs travel as file descriptors over a UNIX socket on a shared volume. Your application
+calls an ordinary Ruby method. HotCell forwards the arguments to the container, runs the work in a forked
+worker process under strict limits, and returns the result or writes it to the output file.
 
 ## Status
 
-This is still pre-release software! It may break in interesting ways. Use with caution until there's a v1.0 release.
+This is pre-release software. It may break in interesting ways. Use it with caution until the v1.0
+release.
 
-The `activestorage-hotcell-client` gem needs Rails 8.2, which is unreleased: variant processing can only
-be swapped out from [rails/rails#58384](https://github.com/rails/rails/pull/58384)
-([`5ea765e5`](https://github.com/rails/rails/commit/5ea765e5b00085a22f5cbe863c0d2ac765428242)) onward. Track
-`rails/rails` `main` until it ships — see [Using the Active Storage operations](#using-the-active-storage-operations).
+The Active Storage gems need Rails 8.2, which is unreleased. Track `rails/rails` `main` until it ships.
+See [Active Storage operations](docs/active-storage.md).
 
-## "Why would I use this?"
+## Why would I use this?
 
 Your Rails application accepts uploads, so somewhere in it there's a line like this:
 
@@ -28,93 +26,69 @@ Your Rails application accepts uploads, so somewhere in it there's a line like t
 blob.variant(resize_to_limit: [ 800, 600 ]).processed
 ```
 
-If you think about what that line actually does, it's scary. An attacker just handed you a crafted
-file, and Rails is about to hand it to libvips -- a few hundred thousand lines of C whose entire job
-is to guess at file formats it has never seen before and delegate handling to ANOTHER
-format-specific library that you may not even be aware of.
+An attacker just handed you a crafted file, and Rails is about to hand it to libvips: a few hundred
+thousand lines of C whose whole job is to guess at file formats and delegate them to other format-specific
+libraries that you may not know about. libvips, ImageMagick, ffmpeg, and LibreOffice all have long
+histories of memory-safety bugs, and by default each one runs in the container that holds your database
+credentials, your session secret, and a route to every network service that the app uses.
 
-libvips, ImageMagick, ffmpeg and LibreOffice all have long histories of memory-safety bugs, and
-every one of them is running by default in the same container that holds your database credentials,
-your session secret, and a route to every network service the app uses. The potential blast radius
-is large.
+HotCell gives that work its own container and its own forked process, holding nothing an attacker wants.
+Remove libvips and ffmpeg from your application image and keep them in the cell. Code execution there
+gets an attacker a read-only input descriptor, a write-only output descriptor, and the scratch of whatever
+else the cell is converting.
 
-HotCell gives that work its own container and its own forked process, holding nothing an attacker
-wants. Take libvips and ffmpeg out of your application image entirely and keep them isolated in the
-Cell. Code execution in that process buys an attacker a read-only input descriptor, a write-only
-output descriptor, and the scratch of whatever else the cell is converting. The blast radius is much
-smaller than if that attack succeeded in your application code.
+For Rails, HotCell ships drop-in replacements for the Active Storage analyzers, transformers, and
+previewers, so adopting it takes configuration changes, not code changes. In our environment, HotCell adds
+about 8 milliseconds per call and one more container on each host. We think that's a very good trade for
+the improved security posture.
 
-If you're a Rails developer, this project also ships drop-in replacements for the Active Storage
-analyzers, transformers, and previewers so that using HotCell only requires configuration changes,
-not code changes.
-
-In our environment, using HotCell adds about 8 milliseconds per call, and one more container to
-deploy on each host. We think this is a very good trade for the improved security posture.
-
-## Extensibility
-
-HotCell was designed to be flexible and configurable beyond just the media conversion use case:
-
-- multiple cells can be configured per host
-- multiple input and output files are supported
-- custom operations have a simple Active-Job-like `#perform` API
-- cell limits are configurable: memory, wall clock time, disk usage, and more
-- bring your own container by using the included conformance test
-- customize how often workers are re-forked, for performance optimization
-
-So you could try using HotCell for handling ZIP files, or for compute workloads that might be CPU
-hogs. Whatever is putting your trusted core application at risk, move it out!
+HotCell isn't limited to media. You can write your own operations, run several cells on a host, pass
+several input and output files, and set each cell's limits. If something puts your application at risk,
+such as ZIP handling or a CPU-heavy computation, move it into a cell.
 
 ## The gems
 
 | Gem | Runs in | Contains |
 | --- | --- | --- |
-| `hotcell-core` | both sides | The wire protocol, descriptor passing, payload validation, the error taxonomy. |
-| `hotcell-client` | the application | `HotCell::Client`, cell registration, routing, classification, instrumentation. |
-| `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, the container image. |
-| `activestorage-hotcell-client` | the application | The transformer, analyzer, and previewers Rails is configured with. |
-| `activestorage-hotcell-server` | the cell | The `transformers.image.*`, `analyzers.image.*`, `analyzers.media.ffprobe`, and `previewers.*` operations. |
-| `yabeda-hotcell` | the application | Yabeda metrics for every call and for each local cell's counters. |
+| `hotcell-core` | both sides | The wire protocol, descriptor passing, payload validation, and the error taxonomy. |
+| `hotcell-client` | the application | `HotCell::Client`, cell registration, routing, classification, and instrumentation. |
+| `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, and the container image. |
+| `activestorage-hotcell-client` | the application | The transformers, analyzers, and previewers that Rails is configured with. |
+| `activestorage-hotcell-server` | the cell | The Active Storage operations. |
+| `yabeda-hotcell` | the application | Yabeda metrics for every call and for each local cell. |
 
-They are in one repository because they are being developed together today. We may split out the
-Active Storage gems into another repository at a later date.
+The gems are in one repository because they're developed together. The Active Storage gems may move to
+another repository later.
 
-## Usage
+## Using the Active Storage operations
 
-The first section covers using HotCell's Active Storage operations straight out of the box. The
-second section covers writing and using your own custom operations in HotCell.
+This section runs Active Storage's variants, analysis, and previews in a cell. Your application code
+doesn't change, but you deploy a second container beside the application: a Kamal accessory, or your
+infrastructure's equivalent sidecar.
 
-### Using the Active Storage operations
+The examples use libvips, mutool, and ffmpeg. If your application uses `variant_processor = :magick`,
+use the `Magick` classes instead of the `Vips` classes. See
+[Active Storage operations](docs/active-storage.md#classes).
 
-The two `activestorage-hotcell-*` gems run Active Storage's variants, analysis, and previews in a
-cell instead of in the application. You application code doesn't need to change, though you will
-need to deploy a Kamal accessory (or whatever flavor of sidecar container your infrastructure
-supports).
+### 1. Install
 
-#### How to get started
-
-**Install.** Add the client gem to the application:
+Add the client gem to the application:
 
 ```ruby
 # Gemfile -- the application
 gem "activestorage-hotcell-client"
 ```
 
-The Active Storage gems are what need the unreleased Rails 8.2 (see [Status](#status)); the
-`hotcell-*` gems themselves do not require Rails.
+Run `bin/rails hotcell:install`. It creates a `hotcell/` directory in the application root that holds
+everything about the cell:
 
-Then run `bin/rails hotcell:install` which creates:
+- `hotcell/Gemfile`: the gems that the operations need.
+- `hotcell/Dockerfile`: the recipe for the cell's image.
+- `hotcell/config.rb`: the cell's own settings.
+- `hotcell/operations/`: the Ruby files that the cell loads at boot.
 
-- `hotcell/Gemfile` for what the operations need,
-- `hotcell/Dockerfile` that builds the cell's image,
-- `hotcell/config.rb` for the cell's own settings, and
-- `hotcell/operations/` directory of Ruby files the cell loads at boot.
-
-Everything about the cell lives in this `hotcell/` directory in the application root, separate from the
-client configuration and the application code.
-
-Add the server gem to the cell's `Gemfile`, and load the operations that match the classes the
-application will name -- requiring an operation's file is what serves it:
+Add the server gem to the cell's `Gemfile`, and require the operations that match the classes that the
+application uses. Requiring an operation's file is what makes the cell serve it.
 
 ```ruby
 # hotcell/Gemfile -- the cell
@@ -130,27 +104,27 @@ require "active_storage/hot_cell/server/previewers/pdf/mutool"
 require "active_storage/hot_cell/server/previewers/video/ffmpeg"
 ```
 
-💡 This section's examples use libvips, mutool, and ffmpeg; `Transformers::Image::Magick` and
-`Analyzers::Image::Magick` use ImageMagick instead, and `Previewers::Pdf::Poppler` uses Poppler. If
-your application is currently using `variant_processor = :magick` then to retain compatibility you
-should replace references to "vips" or `Vips` with "magick" or `Magick` in this section.
+### 2. Configure the application
 
-**Configure the application.** Register the cell in an initializer, with an application exception
-class for each side of the permanent split:
+Register the cell in an initializer, with one of your exception classes for permanent failures and one
+for transient failures:
 
 ```ruby
 # config/initializers/hotcell.rb
-# These environment variables are set in your deployment configuration
 HotCell.root  = ENV["HOTCELL_ROOT"]  # unset means every cell is off
 HotCell.group = ENV["HOTCELL_GROUP"] # the gid shared between app and cell
 
-# Quick health check at boot. Warns about a cell that is unreachable, slower than this client waits, in the wrong group, or on another hotcell version.
+HotCell.register "active_storage",
+  permanent: MyApp::UnprocessableUpload,
+  transient: MyApp::ConversionTemporarilyUnavailable
+
+# Warns at boot about a cell that is unreachable, slower than this client waits, in the wrong group, or on another hotcell version.
 Rails.application.config.after_initialize { HotCell.describe_cells }
 ```
 
-`HotCell.root` names the directory that holds one subdirectory of sockets per cell, so this cell's
-sockets live at `$HOTCELL_ROOT/active_storage`. Note that omitting `HOTCELL_ROOT` off makes every
-variant, analysis, and preview raise `HotCell::CellNotConfigured` rather than fall back in process.
+The cell's sockets are in `$HOTCELL_ROOT/active_storage`. If `HOTCELL_ROOT` is unset, every variant,
+analysis, and preview raises `HotCell::CellNotConfigured` rather than falling back to the application. See
+[Client API](docs/client-api.md) and [Response codes](docs/codes.md).
 
 Then tell Rails which classes to use:
 
@@ -164,67 +138,45 @@ config.active_storage.previewers = [ ActiveStorage::HotCell::Client::Previewers:
                                      ActiveStorage::HotCell::Client::Previewers::Video::FFmpeg ]
 ```
 
-For every class you name here, the cell must load the matching operation and the cell's image must
-have installed the underlying library or tool.
+For every class that you name, the cell must load the matching operation, and the cell's image must
+install the library or tool. You can mix these classes with Rails' own. See
+[Active Storage operations](docs/active-storage.md).
 
-Rails' own classes mix freely with these in the `analyzers` and `previewers` arrays, so you can
-choose to offload only specific operations to HotCell:
+### 3. Run it in development
 
-```ruby
-# PDF previews handled by HotCell, video previews still in the application
-config.active_storage.previewers = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool,
-                                     ActiveStorage::Previewer::VideoPreviewer ]
-```
+Run the cell as a plain process beside the Rails server. A containerized cell works only on Linux, because
+descriptor passing doesn't cross the VM that runs containers on macOS. The resource limits and the
+deadline apply either way. The cell keeps its own bundle, from the same `hotcell/Gemfile` that the image
+build copies.
 
-**Run it in development.** A cell can run in development either as a container or as a plain,
-uncontainerized process. The container route works only on Linux (on macOS the containers run in a
-VM, and descriptor passing will not work), so we recommend the plain process, managed by foreman
-beside the Rails server. The resource limits and the deadline apply either way. The cell keeps its
-own bundle -- the same `hotcell/Gemfile` the image build copies -- so the two sides stay separate in
-development the way they are in production.
-
-Add an entry for your cell to `Procfile.dev`:
+Add the cell to `Procfile.dev`:
 
 ```procfile
 web: HOTCELL_ROOT=$PWD/tmp/hotcell-sockets bin/rails server
 cell: BUNDLE_GEMFILE=$PWD/hotcell/Gemfile HOTCELL_CONFIG=$PWD/hotcell/config.rb HOTCELL_OPERATIONS=$PWD/hotcell/operations HOTCELL_DIR=$PWD/tmp/hotcell-sockets/active_storage bundle exec hotcell --development
 ```
 
-Then `bin/dev` boots both, and the app finds the sockets under `tmp/hotcell-sockets`. At boot the cell
-empties its `TMPDIR` of every entry its uid owns, and told none it empties the system temporary directory.
-On a developer's machine that is `/tmp`, or on macOS the per-user `TMPDIR` every shell sets, both shared
-with everything else the developer runs. With `--development` the cell never sweeps the directory it is
-given: its scratch is `hotcell-<HOTCELL_DIR with slashes as dashes>` beneath it. `HOTCELL_WORKSPACE`
-defaults under the scratch; pointed elsewhere, its parent is swept too.
+`bin/dev` then boots both, and the app finds the sockets under `tmp/hotcell-sockets`. Keep
+`--development`: without it, the cell empties the system temporary directory at boot. See
+[Development mode](docs/cell-settings.md#development-mode).
 
-#### Configure the cell and operation limits
+### 4. Set the cell's limits
 
-`hotcell/config.rb` loads when the cell boots, before any operation. Declare the cell's limits
-there:
+Declare the cell's limits in `hotcell/config.rb`:
 
 ```ruby
 # hotcell/config.rb
 HotCell.limits concurrency: 4, queue_size: 8, deadline: 60, memory: 1536 * 1024**2
 ```
 
-Each operation declares its own `limits`, clamped to the cell's. To change an operation's default
-limits, set them from an operations file:
+Each operation declares its own limits, and the cell clamps them to its own. See
+[Cell settings](docs/cell-settings.md) for every setting and [Tuning](docs/tuning.md) for how to choose
+the numbers.
 
-```ruby
-# hotcell/operations/zz_limits.rb
-require "active_storage/hot_cell/server/transformers/image/vips"
-ActiveStorage::HotCell::Server::Transformers::Image::Vips.limits file_size: 256 * 1024**2
-```
+### 5. Build and deploy the cell
 
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) explains every setting and how to size the numbers against
-the container's own flags, and [docs/TUNING.md](docs/TUNING.md) covers measuring your own workload.
-
-#### Configure and deploy the HotCell container
-
-There is no published base image. The installed `Dockerfile` is only a base recipe, and you should
-customize it for your application.
-
-Install the system packages your operations require:
+HotCell publishes no base image. Customize the installed `Dockerfile` for your application, starting with
+the system packages that your operations need:
 
 ```dockerfile
 # hotcell/Dockerfile (excerpt)
@@ -233,14 +185,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 ```
 
-Match the `OMP_NUM_THREADS` the installed `Dockerfile` sets to the container's `cpus` below. OpenMP
-reads the host's core count, which a `cpus` quota does not lower, so an unbounded libvips or ImageMagick
-asks a large host for one 8MB thread stack per core and dies on its own memory limit -- see
-[Bound the OpenMP thread pools](docs/DEPLOYMENT.md#bound-the-openmp-thread-pools).
+Match the `OMP_NUM_THREADS` that the `Dockerfile` sets to the container's `cpus`. Without that bound, a
+cell on a large host dies. See [Bound the OpenMP thread pools](docs/container.md#bound-the-openmp-thread-pools).
 
-Build the image from the `hotcell/` directory and deploy it as a second container beside the
-application, on the same host, sharing one volume that holds the sockets. With Kamal, that is one
-accessory per cell:
+Build the image from the `hotcell/` directory, and deploy it as a second container on the same host as the
+application, sharing one volume for the sockets. With Kamal, that's one accessory for each cell:
 
 ```yaml
 # config/deploy.yml -- the cell
@@ -271,7 +220,7 @@ accessories:
         HOTCELL_DIR: /run/hotcell/cell          # where this cell writes its two sockets
 ```
 
-And the application's half, mounting the same volume:
+The application mounts the same volume:
 
 ```yaml
 # config/deploy.yml -- the app
@@ -294,54 +243,79 @@ env:
     HOTCELL_GROUP: 10001                        # must match group-add above
 ```
 
-The two mount paths differ, and only the volume name has to match: a cell always writes its sockets
-to `HOTCELL_DIR`, and the app resolves a cell's name under `HOTCELL_ROOT`. Give each cell its own
-volume -- two accessories sharing one would write `work.sock` over each other.
+The two mount paths differ, and only the volume name must match: a cell writes its sockets to
+`HOTCELL_DIR`, and the app finds a cell by name under `HOTCELL_ROOT`. Give each cell its own volume.
 
-Without Kamal, the same two containers need `--volume hotcell-sockets:/run/hotcell/cell` and the
-security flags above on the cell, and `--volume hotcell-sockets:/run/hotcell/active_storage`,
-`--group-add 10001` and `HOTCELL_ROOT=/run/hotcell` on the app.
+[Container](docs/container.md) explains every flag and how to check a deployed accessory.
+[Scratch](docs/scratch.md) covers moving scratch off the tmpfs. If your image installs ImageMagick, set
+its limits too. See [ImageMagick](docs/imagemagick.md).
 
-Once a file type's processing has moved into the cell, remove its packages (for example `libvips`)
-from the application image -- that removal is the security win. Remove them only after the cell
-handles the type: Rails' own previewers and analyzers look for their tool in `accept?`, so a package
-removed too early turns that processing off without an error.
+### 6. Remove the packages from the application image
 
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) covers all of this in detail: every container flag, how to
-size the numbers, the shared group, bringing your own container, and where scratch lives.
-[docs/IMAGEMAGICK.md](docs/IMAGEMAGICK.md) covers ImageMagick's own resource limits, which an image that
-installs it must size from the same numbers.
+After the cell handles a file type, remove that type's packages, such as libvips, from the application
+image. That removal is the security improvement.
 
-### Using custom operations
+Don't remove a package before the cell handles its file type. Rails' own previewers and analyzers look for
+their tool in `accept?`, so a package removed too early turns that processing off without an error.
 
-Everything above still applies: the same `hotcell/` directory, the same limits, the same container,
-the same deployment. What changes is that you write both sides of the call yourself.
+## Using custom operations
 
-#### Configure the cell
+The `hotcell/` directory, the limits, the container, and the deployment all stay the same. You write both
+sides of the call.
 
-The cell's `Gemfile` names `hotcell-server` directly -- the Active Storage server gem is only needed
-for the shipped operations -- plus whatever gems the operation itself uses:
+In the application, a client names its cell and the operation's routing name:
 
 ```ruby
-# hotcell/Gemfile -- the cell
-gem "hotcell-server"
-gem "my_image_processor"
+class TransformImage < HotCell::Client
+  hotcell "images"
+  operation "images.transform"
+end
+
+result = TransformImage.perform_in_hotcell source, destination, format: "png"
 ```
 
-The operation file goes in `hotcell/operations/`, which the cell requires in sorted order at boot,
-after `config.rb`. The `Dockerfile` installs whatever tools the operation shells out to. `config.rb`
-itself does not change: the cell's limits are declared there, and the operation's own `limits` ride
-its class, clamped to the cell's exactly as the shipped ones are.
+In the cell, an operation answers to the same name, and `perform` receives the descriptors and the
+payload as keyword arguments:
 
-## Development
+```ruby
+class TransformImageOperation < HotCell::Operation
+  operation "images.transform"
+  limits deadline: 30, memory: 1280 * 1024**2
 
-Working on the gems themselves is documented in [CONTRIBUTING.md](CONTRIBUTING.md): how the suites are split,
-how a cell is exercised natively and in a container, and the rules that are not obvious from the code.
+  before_fork { require "my_image_processor" }
 
-## Design
+  def perform(inputs, outputs, format:)
+    MyImageProcessor.convert inputs.first.fd_path, outputs.first.fd_path, format: format
+    { format: format }
+  end
+end
+```
 
-[docs/DESIGN.md](docs/DESIGN.md) holds what the code cannot tell you: the threat model, the invariants the
-design exists to hold, why descriptors rather than a shared volume, and the facts that were measured rather
-than reasoned about. Behavior is the code's to describe, and it does.
+Register the `images` cell in the application's initializer, as in
+[Configure the application](#2-configure-the-application). The cell's `Gemfile` names `hotcell-server`
+directly, plus whatever gems the operation uses. Put the operation's file in `hotcell/operations/`, and
+install the tools that it runs in the `Dockerfile`.
 
-[adr/](adr/README.md) describes some decisions that we arrived at during development.
+[Operation API](docs/operation-api.md) and [Client API](docs/client-api.md) cover the rest.
+
+## Running HotCell in production
+
+Set these alerts. [Observability](docs/observability.md) explains each signal.
+
+- **Cell availability:** the `up` gauge is 0 or absent for any cell on any host.
+- **Failed calls:** the `requests` counter shifts away from `ok`, especially toward `unavailable`.
+- **Queue headroom:** `queued` nears `queue_size`, `queue_high_water` rises, or `capacity` appears in
+  steady state.
+- **Scratch space:** free space on each host's scratch runs low.
+- **Cell errors:** any `ERROR` event in the cell log, or a rise in the `killed` gauge.
+
+## Documentation
+
+The [reference manual](docs/index.md) describes every part of HotCell, one topic per page. It's written
+for agents and for readers who want the details.
+
+The [design pages](docs/design/index.md) hold what the code can't tell you: the threat model, the
+invariants that the design exists to hold, and the facts that were measured rather than reasoned about.
+[`adr/`](adr/README.md) records decisions that were argued rather than obvious.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers working on the gems themselves.

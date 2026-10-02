@@ -1,7 +1,5 @@
 # Established by experiment
 
-## Established by experiment
-
 Each of these was measured, not reasoned about. A specification cannot derive them, getting them wrong
 produces failures that are hard to diagnose, and several constrain the architecture rather than the
 implementation.

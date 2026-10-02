@@ -1,7 +1,5 @@
 # Invariants
 
-## The invariants
-
 These are the design properties the whole thing exists to hold. They are not a test plan. Most are
 verifiable by reading the code, and a test that restates what an obvious ten-line method plainly does buys
 nothing but maintenance. Test the ones where inspection is not enough — where the behaviour is the
@@ -26,7 +24,7 @@ them, and mark one withdrawn rather than removing it.
 7. A cell cannot reach another cell's socket.
 8. A worker cannot read another **request's** memory. Conditional on two things:
    `kernel.yama.ptrace_scope >= 1`, a host setting no container flag can supply, and
-   `max_requests_per_worker: 1`. Not files — see "Worker isolation".
+   `max_requests_per_worker: 1`. Not files — see [Worker isolation](worker-isolation.md).
 9. A tool subprocess sees only the environment its operation wrote for it.
 
 Invariant 2 is the awkward one. "A cell holds no application credentials" is a negative over a whole

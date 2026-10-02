@@ -1,5 +1,7 @@
 # Threat model
 
+This page states what HotCell is, the problem it exists to solve, and what a cell is defended against.
+
 ## What this is
 
 HotCell moves untrusted work out of a privileged application process into an unprivileged,
@@ -50,5 +52,5 @@ would drag operation review and dependency policy into a document about a transp
 The minimum requirement is a PID and mount namespace exposing only the input and output, with no `/proc`
 and no application filesystem. HotCell meets the namespace requirement by being a separate container, and
 **exceeds the input/output part**: descriptors mean there is no path in the cell to expose or to traverse,
-rather than a narrowed set of bind mounts. The `/proc` requirement is treated separately under "Worker
-isolation", because it is the one part a container boundary does not give us for free.
+rather than a narrowed set of bind mounts. The `/proc` requirement is treated separately in
+[Worker isolation](worker-isolation.md), because it is the one part a container boundary does not give us for free.

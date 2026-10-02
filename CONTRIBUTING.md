@@ -103,8 +103,8 @@ readable and pure Ruby with no external toolchain — which is also what lets th
 converters and Docker are absent.
 
 `echo` is also meant to be copied into a real cell and kept there. It is the only cheap way to prove the
-work socket answers, because `describe` and `metrics` cross the control socket instead. See "Rails
-healthcheck" in the [README](README.md#rails-healthcheck).
+work socket answers, because `describe` and `metrics` cross the control socket instead. See
+[Rails healthcheck](docs/observability.md#rails-healthcheck).
 
 | op | behavior | what it proves |
 | --- | --- | --- |

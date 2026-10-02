@@ -1,10 +1,8 @@
-# Overhead
+# What the overhead measures at
 
-## What the overhead measures at
-
-Read this section for its negative results rather than its numbers. The numbers came off a laptop from a
+Read this page for its negative results rather than its numbers. The numbers came off a laptop from a
 prototype; the things that were ruled out are properties of the design. For the reuse trade specifically,
-[ADR 0001](../adr/0001-reuse-workers-across-requests.md) supersedes this with measurements taken in the
+[ADR 0001](../../adr/0001-reuse-workers-across-requests.md) supersedes this with measurements taken in the
 deployed artifact.
 
 Three arms, each producing a 256×256 PNG with `resize_to_fill`: in process, a native cell over a Unix
@@ -33,7 +31,7 @@ roughly 1.7 µs each.
 **So the cheapest optimisation is the counter-intuitive one: keep the supervisor small, and treat
 `before_fork` as having a per-request price.** The instinct is to preload generously so workers start
 fast. It is backwards here — every megabyte the supervisor holds is partly copied by every worker for the
-rest of the deployment. `before_fork` must still `require`, because of the fork hazard in item 1 above, so
+rest of the deployment. `before_fork` must still `require`, because of the fork hazard in [experiment 1](experiments.md), so
 the resolution is to require only what that cell's own operations need. That is a third argument for one
 cell per toolchain, and a measured reason for `hotcell-server` not to depend on `activesupport`.
 

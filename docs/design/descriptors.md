@@ -1,6 +1,4 @@
-# Descriptors rather than a shared volume
-
-## Why descriptors rather than a shared volume
+# Why descriptors rather than a shared volume
 
 The obvious alternative is a directory mounted into both containers: the app writes an input file and
 names it, the cell writes an output file and names it. It is simpler, and it has one real advantage this
@@ -25,7 +23,7 @@ arrives at descriptor passing anyway, having paid for the volume first.
 **Cross-request isolation is a smaller reason than it first appears.** Under a shared volume every worker
 can read every request's bytes in the directory, including requests not currently running. Under
 descriptors only in-flight requests have bytes inside the cell. That narrower window is the real gain —
-and it is a window, not a wall. See "Worker isolation".
+and it is a window, not a wall. See [Worker isolation](worker-isolation.md).
 
 **Nothing is left at rest.** A volume is persistent and outlives requests, so it holds user content
 somewhere neither side owns, and a crashed worker leaves it there. The socket directory holds a socket and

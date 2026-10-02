@@ -1,9 +1,7 @@
 # Worker isolation
 
-## Worker isolation
-
 Workers in a cell are siblings under one UID in one PID namespace, so another worker's `/proc` entries are
-same-UID reads. Measured, not assumed — items 7 and 8 below:
+same-UID reads. Measured, not assumed — items 7 and 8 of [Established by experiment](experiments.md):
 
 | Target | At `ptrace_scope = 1` | Why |
 | --- | --- | --- |
@@ -22,7 +20,7 @@ to the image, it silently voids the guarantee, and a warning in a log is how a d
 several requests in turn holds each of them in the same address space, so an input that achieves code
 execution can read and tamper with every later request that worker handles — no race to win, and covering
 requests that were never concurrent with it. That is a deliberate setting with a measured payoff; see
-[ADR 0001](../adr/0001-reuse-workers-across-requests.md). It is the only place in this design where the
+[ADR 0001](../../adr/0001-reuse-workers-across-requests.md). It is the only place in this design where the
 isolation between two requests is a configuration value.
 
 **Nothing on disk carries from one request to the next.** A slot holds one directory per request, which is
@@ -32,7 +30,7 @@ an expensive per-user profile warm. That was a hole rather than a trade: what a 
 configuration, and for these toolchains configuration is executable — ImageMagick runs the command lines in
 `delegates.xml` and applies the rights in `policy.xml`, both read from `$HOME/.config/ImageMagick`. So one
 input that achieved code execution could reconfigure every later request on that slot, which is precisely
-the bound `max_requests_per_worker: 1` exists to hold. [ADR 0003](../adr/0003-remove-the-persistent-slot-home.md)
+the bound `max_requests_per_worker: 1` exists to hold. [ADR 0003](../../adr/0003-remove-the-persistent-slot-home.md)
 records the reversal.
 
 The directory carries a fresh unpredictable name for every request, and that is what makes the removal a
@@ -91,7 +89,7 @@ with no capability. Until then this is a known gap, and the containment is the s
 generally — a cell holds no credentials, carries one toolchain, and is replaced rather than repaired.
 
 This corrects an overclaim worth being explicit about, because it is easy to make: fork-per-request buys
-**memory** isolation, not file isolation. The argument for descriptors below is about the boundary between
+**memory** isolation, not file isolation. The argument in [Why descriptors rather than a shared volume](descriptors.md) is about the boundary between
 the application and the cell, and it does not extend to workers inside one cell.
 
 **Environment** is not protected by `ptrace_scope` at all, and cannot be fixed inside the worker. A forked
