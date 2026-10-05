@@ -63,15 +63,15 @@ GIT
 PATH
   remote: activestorage-hotcell-client
   specs:
-    activestorage-hotcell-client (0.6.0)
+    activestorage-hotcell-client (1.0.0)
       activestorage (>= 8.2.0.alpha)
-      hotcell-client (= 0.6.0)
+      hotcell-client (= 1.0.0)
 
 PATH
   remote: activestorage-hotcell-server
   specs:
-    activestorage-hotcell-server (0.6.0)
-      hotcell-server (= 0.6.0)
+    activestorage-hotcell-server (1.0.0)
+      hotcell-server (= 1.0.0)
       image_processing (>= 2.2.0)
       mini_magick (>= 5.4.0)
       ruby-vips (>= 2.2.1)
@@ -79,26 +79,26 @@ PATH
 PATH
   remote: hotcell-client
   specs:
-    hotcell-client (0.6.0)
+    hotcell-client (1.0.0)
       activesupport (>= 7.1)
-      hotcell-core (= 0.6.0)
+      hotcell-core (= 1.0.0)
 
 PATH
   remote: hotcell-core
   specs:
-    hotcell-core (0.6.0)
+    hotcell-core (1.0.0)
 
 PATH
   remote: hotcell-server
   specs:
-    hotcell-server (0.6.0)
-      hotcell-core (= 0.6.0)
+    hotcell-server (1.0.0)
+      hotcell-core (= 1.0.0)
 
 PATH
   remote: yabeda-hotcell
   specs:
-    yabeda-hotcell (0.6.0)
-      hotcell-client (= 0.6.0)
+    yabeda-hotcell (1.0.0)
+      hotcell-client (= 1.0.0)
       yabeda (>= 0.12)
 
 GEM
@@ -315,8 +315,8 @@ CHECKSUMS
   activemodel (8.2.0.alpha)
   activerecord (8.2.0.alpha)
   activestorage (8.2.0.alpha)
-  activestorage-hotcell-client (0.6.0)
-  activestorage-hotcell-server (0.6.0)
+  activestorage-hotcell-client (1.0.0)
+  activestorage-hotcell-server (1.0.0)
   activesupport (8.2.0.alpha)
   anyway_config (2.8.1) sha256=541842b25117fac3e277670c32dc09d3b715b20404826a6538ac35527583624f
   ast (2.4.3) sha256=954615157c1d6a382bc27d690d973195e79db7f55e9765ac7c481c60bdb4d383
@@ -355,9 +355,9 @@ CHECKSUMS
   herb (0.11.0-x86_64-darwin) sha256=2eb9db026a1949cb2ad8cfa1944ef8402feab784c7d37a35c48575a9e0d79912
   herb (0.11.0-x86_64-linux-gnu) sha256=aba19094bc1618e1bc0fb59db52ba251c93a24598f5228815616b282f10bb8a0
   herb (0.11.0-x86_64-linux-musl) sha256=e27a08fe72304c8043e851b568ed30eaa45f06b5333d151939a7834e936c01aa
-  hotcell-client (0.6.0)
-  hotcell-core (0.6.0)
-  hotcell-server (0.6.0)
+  hotcell-client (1.0.0)
+  hotcell-core (1.0.0)
+  hotcell-server (1.0.0)
   i18n (1.15.2) sha256=00f9eb62412fe593b2a65a97daa75300d37abb8f7202ec748e94b6d46a9dd1b5
   image_processing (2.2.0) sha256=e0cb9892a4395ac2b7bb2fac5c6f5bc63361f2f18ed08773e21fce5b111c6974
   io-console (0.9.4) sha256=a403304f32928ee85e56d457b4612ca43f2703b561a3258844992bd24085fbb1
@@ -421,7 +421,7 @@ CHECKSUMS
   uri (1.1.1) sha256=379fa58d27ffb1387eaada68c749d1426738bd0f654d812fcc07e7568f5c57c6
   useragent (0.16.11) sha256=700e6413ad4bb954bb63547fa098dddf7b0ebe75b40cc6f93b8d54255b173844
   yabeda (0.16.0) sha256=7f6e51acd7d9a51d850ea8c3844f72a24882f1312b3fc3836052bcd63d384cba
-  yabeda-hotcell (0.6.0)
+  yabeda-hotcell (1.0.0)
   zeitwerk (2.8.3) sha256=2c85125a8467ce069e20123d1e709a08955c9d29c118c25b46b7b7fafdbb92e5
 
 BUNDLED WITH
