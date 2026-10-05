@@ -68,7 +68,7 @@ and never widen it, because the cell's values are the ceiling. See
 it is Ruby's own reservation. See [Tuning](tuning.md#sizing-guidelines).
 
 On macOS, `RLIMIT_DATA` can't be set, so a cell there runs with `memory` unenforced and warns once. Every
-other limit is enforced on both platforms. See [experiment 17](development/experiments.md).
+other limit is enforced on both platforms. See [experiment 17](contributing/experiments.md).
 
 ### Values that you can't configure
 

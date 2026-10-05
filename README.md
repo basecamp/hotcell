@@ -327,5 +327,5 @@ for agents and for readers who want the details.
 The [design pages](docs/design/index.md) hold what the code can't tell you: the threat model, the
 invariants that the design exists to hold.
 
-[Developing Hot Cell](docs/development/index.md) covers working on the gems themselves, the facts that were
+[Contributing to Hot Cell](docs/contributing/index.md) covers working on the gems themselves, the facts that were
 measured rather than reasoned about, and the decisions that were argued rather than obvious.

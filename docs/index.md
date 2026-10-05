@@ -14,12 +14,12 @@ Each page starts with
 (OKF) frontmatter:
 
 - `type`: `Reference` for a page that describes behavior, `Glossary` for the terms, `Design` for the
-  rationale, and `Guide` for a contributor's how-to.
+  rationale, and `Contributing` for the pages about working on Hot Cell itself.
 - `title` and `description`: the page's name and one-line summary, which this index lists.
 - `order`: optional. An index lists the pages that have an `order` first, in that order, and the rest by
   file name.
 - `sources`: the code that the page describes. When that code changes, the page might need to change too.
-  See [Keep the docs current](development/docs.md).
+  See [Keep the docs current](contributing/docs.md).
 
 <!-- index -->
 
@@ -38,7 +38,7 @@ Each page starts with
 | [Conformance](conformance.md) | What bin/conformance checks about a cell image, and what it cannot check. |
 | [Active Storage operations](active-storage.md) | The Active Storage client classes, the cell operations that serve them, how their failures are retried, and the limits each declares. |
 | [ImageMagick](imagemagick.md) | ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them. |
+| [Contributing to Hot Cell](contributing/index.md) | Working on the gems themselves: setup, tests, releases, keeping the docs current, the experiments and measurements the design rests on, and the decision records. |
 | [Design](design/index.md) | The intent behind Hot Cell's design: the threat model, the invariants, worker isolation, and passing file descriptors. |
-| [Developing Hot Cell](development/index.md) | Working on the gems themselves: setup, tests, releases, keeping the docs current, the experiments and measurements the design rests on, and the decision records. |
 
 <!-- indexstop -->

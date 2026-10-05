@@ -1,6 +1,7 @@
 ---
-type: Guide
-title: "Contributing"
+type: Contributing
+title: "Working on the gems"
+order: 1
 description: "Setting up, running the tests, the repository layout, how a cell gets exercised, style, the changelog, CI, and making a release."
 sources:
   - Rakefile
@@ -8,7 +9,7 @@ sources:
   - .github/workflows
 ---
 
-# Contributing to Hot Cell
+# Working on the gems
 
 This is a guide to working on the gems themselves. If you are building *on* Hot Cell — writing operations for
 your own application — start with [README.md](../../README.md) instead.

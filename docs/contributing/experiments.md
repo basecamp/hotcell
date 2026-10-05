@@ -1,6 +1,7 @@
 ---
-type: Design
+type: Contributing
 title: "Established by experiment"
+order: 4
 description: "The numbered facts that were measured rather than reasoned about. Code and docs cite them by number."
 ---
 

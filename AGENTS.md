@@ -11,12 +11,12 @@ you can pick the page you need without opening the others. Each page's frontmatt
 describes, under `sources`.
 
 The numbered invariants in [`docs/design/invariants.md`](docs/design/invariants.md) and the numbered
-experiments in [`docs/development/experiments.md`](docs/development/experiments.md) are cited by number from code,
+experiments in [`docs/contributing/experiments.md`](docs/contributing/experiments.md) are cited by number from code,
 tests, and docs. Never renumber them.
 
 ## Keep the docs current
 
-@docs/development/docs.md
+@docs/contributing/docs.md
 
 ## Write the docs
 
@@ -27,8 +27,8 @@ tests, and docs. Never renumber them.
   tense, active voice, sentence-case headings, numbered lists for steps, and tables for settings.
 - Keep one topic on each page, and keep each fact on one page. Link to it from everywhere else.
 - The pages in `docs/design/` record rationale, not behavior. Change them when a decision changes. Record a
-  decision that was argued in [`adr/`](docs/development/decisions.md).
+  decision that was argued in [`adr/`](docs/contributing/decisions.md).
 
-## How to develop this project
+## Working on the gems
 
-@docs/development/contributing.md
+@docs/contributing/guide.md

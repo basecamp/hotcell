@@ -1,4 +1,4 @@
 # Contributing to Hot Cell
 
-See [Contributing](docs/development/contributing.md) in the [Developing Hot Cell](docs/development/index.md)
+See [Working on the gems](docs/contributing/guide.md) in the [Contributing to Hot Cell](docs/contributing/index.md)
 section of the docs.

@@ -8,7 +8,7 @@ description: "What one worker can and cannot reach of another, and the residuals
 # Worker isolation
 
 Workers in a cell are siblings under one UID in one PID namespace, so another worker's `/proc` entries are
-same-UID reads. Measured, not assumed — items 7 and 8 of [Established by experiment](../development/experiments.md):
+same-UID reads. Measured, not assumed — items 7 and 8 of [Established by experiment](../contributing/experiments.md):
 
 | Target | At `ptrace_scope = 1` | Why |
 | --- | --- | --- |

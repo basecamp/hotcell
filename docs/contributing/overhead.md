@@ -1,6 +1,7 @@
 ---
-type: Design
+type: Contributing
 title: "Cell overhead"
+order: 5
 description: "The fixed time that a cell adds to each call, what causes it, and the causes that tests ruled out."
 ---
 

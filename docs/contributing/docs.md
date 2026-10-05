@@ -1,6 +1,7 @@
 ---
-type: Guide
+type: Contributing
 title: "Keep the docs current"
+order: 2
 description: "The rake docs tasks, the order to run them in before a pull request, and the tests that hold tables to the code."
 sources:
   - rakelib/docs.rake

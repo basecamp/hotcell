@@ -1,6 +1,7 @@
 ---
-type: Design
+type: Contributing
 title: "Architecture decision records"
+order: 3
 description: "The decisions that were argued rather than obvious, each with what it was decided against and what it costs."
 sources:
   - adr

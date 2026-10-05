@@ -129,7 +129,7 @@ which is a hard failure to place. See [Active Storage operations](active-storage
   of it is reserved and never touched, and about 450MB of that is Ruby's own reservation, which
   `RLIMIT_DATA` charges in full. Subtract 450MB before you read `memory` as the amount that an input can
   consume. The cgroup limit is what bounds real memory across the cell. See
-  [experiments 11 and 12](development/experiments.md).
+  [experiments 11 and 12](contributing/experiments.md).
 - **An input is charged only when an operation asks for its path.** A descriptor that an operation reads in
   place costs no tmpfs and no `file_size`, so a multi-gigabyte upload can be analyzed under a small
   `file_size`. An operation that needs a filename copies the input onto scratch first, and the kernel
@@ -138,7 +138,7 @@ which is a hard failure to place. See [Active Storage operations](active-storage
 - **A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and
   it's proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's
   own operations need is paid on every request for the life of the deployment. See
-  [Cell overhead](development/overhead.md).
+  [Cell overhead](contributing/overhead.md).
 
 ## Check the queue with `bin/load`
 
