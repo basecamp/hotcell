@@ -106,14 +106,3 @@ task :rubocop do
 end
 
 task default: [ :test, :rubocop, "docs:check" ]
-
-# markdown-toc is optional: a machine without it skips regeneration rather than failing.
-desc "Regenerate the table of contents in CONTRIBUTING.md"
-task :toc do
-  require "mkmf"
-  if find_executable0("markdown-toc")
-    sh "markdown-toc --maxdepth=3 -i CONTRIBUTING.md"
-  else
-    puts "WARN: cannot find markdown-toc, skipping. Install it with 'npm install -g markdown-toc'."
-  end
-end

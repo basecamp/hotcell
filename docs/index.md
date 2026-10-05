@@ -13,11 +13,11 @@ Each page starts with
 [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
 (OKF) frontmatter:
 
-- `type`: `Reference` for a page that describes behavior, `Glossary` for the terms, and `Design` for the
-  rationale.
+- `type`: `Reference` for a page that describes behavior, `Glossary` for the terms, `Design` for the
+  rationale, and `Guide` for a contributor's how-to.
 - `title` and `description`: the page's name and one-line summary, which this index lists.
 - `sources`: the code that the page describes. When that code changes, the page might need to change too.
-  See [Keep the docs current](../AGENTS.md#keep-the-docs-current).
+  See [Keep the docs current](development/docs.md).
 
 <!-- index -->
 
@@ -36,6 +36,7 @@ Each page starts with
 | [Request lifecycle](request-lifecycle.md) | What happens between a call to perform_in_hotcell and its answer, step by step. |
 | [Scratch](scratch.md) | Where a cell stages files: the tmpfs, named volume, and host-mount layouts, and the boot sweep. |
 | [Tuning](tuning.md) | Which measurement sets each cell number, the constraints between the numbers, and how to use bin/load. |
-| [Design](design/index.md) | The threat model, the invariants, worker isolation, and the facts established by experiment: what the code cannot tell you. |
+| [Design](design/index.md) | The threat model, the invariants, worker isolation, and why descriptors: what the code cannot tell you. |
+| [Developing HotCell](development/index.md) | Working on the gems themselves: setup, tests, releases, keeping the docs current, the experiments and measurements the design rests on, and the decision records. |
 
 <!-- indexstop -->

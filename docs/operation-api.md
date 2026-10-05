@@ -116,10 +116,10 @@ Registers a block that runs once, in the supervisor, at boot. Use it to require 
 
 **Caution:** A `before_fork` block must never evaluate an image. libvips can't survive `fork` after it
 evaluates an image: every worker forked after that deadlocks. See
-[experiment 1](design/experiments.md).
+[experiment 1](development/experiments.md).
 
 Every megabyte that the supervisor holds is partly copied by every worker, so require only what this
-cell's own operations need. See [Overhead](design/overhead.md).
+cell's own operations need. See [Overhead](development/overhead.md).
 
 ### `before_worker_boot { ... }`
 

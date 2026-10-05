@@ -78,7 +78,7 @@ accessories:
 Docker creates the volume on first boot and initializes it from the image's own `/tmp`, both the content
 and the permissions, which are `1777` on the Debian base. So the cell's uid can write to it with no host
 work: no `mkdir`, no `chown`, and no fstab line. The socket volume depends on the same rule, and the
-installed `Dockerfile` records it. See [experiment 4](design/experiments.md).
+installed `Dockerfile` records it. See [experiment 4](development/experiments.md).
 
 You give up the size cap and the security flags, because Docker can set neither on a named volume. A
 runaway write is then bounded only by the `file_size` limit on each file and by deadline × disk
