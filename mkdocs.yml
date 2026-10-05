@@ -13,7 +13,7 @@ site_dir: tmp/site/build
 
 theme:
   name: material
-  logo: docs/hotcell-logo.png
+  logo: docs/radioactive.svg
   favicon: docs/hotcell-logo.png
   features:
     - navigation.instant
