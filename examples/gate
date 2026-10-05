@@ -12,7 +12,7 @@
 #      rejects a non-empty capability set, a cleared no-new-privileges bit, a root uid, and — crucially —
 #      a nil for any of them, the shape a cell that cannot report a flag would return.
 #
-#   2. bin/conformance and bin/load must supply no `--ulimit stack`. docs/DEPLOYMENT.md forbids it: a
+#   2. bin/conformance and bin/load must supply no `--ulimit stack`. docs/container.md forbids it: a
 #      lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
 #      verdict the caller retries against a limit that will fail it again, so a helper that set it would
 #      measure a shape operators are told not to deploy.

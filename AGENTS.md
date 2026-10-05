@@ -1,12 +1,39 @@
-# HotCell
+# Hot Cell
 
-This project includes a set of core gems used to isolate untrusted code or handling untrusted input:
-hotcell-core, hotcell-server, and hotcell-client.
+This repository holds the core gems that isolate untrusted code and untrusted input (`hotcell-core`,
+`hotcell-server`, and `hotcell-client`), the Active Storage gems built on them
+(`activestorage-hotcell-client` and `activestorage-hotcell-server`), and `yabeda-hotcell`.
 
-It also includes a set of gems that build on the HotCell gems to provide drop-in replacement for
-Active Storage analyzers, transformers, and previewers: activestorage-hotcell-client and
-activestorage-hotcell-server.
+## Find your way around
 
-## How to develop this project.
+The docs are in sibling sections, and each section's index lists its pages with a one-line description, so
+you can pick the page you need without opening the others:
 
-@CONTRIBUTING.md
+- [`docs/index.md`](docs/index.md): the reference manual, which describes behavior.
+- [`docs/design/index.md`](docs/design/index.md): the design rationale.
+- [`docs/contributing/index.md`](docs/contributing/index.md): working on the gems.
+
+Each page's frontmatter names the code it describes, under `sources`.
+
+The numbered invariants in [`docs/design/invariants.md`](docs/design/invariants.md) and the numbered
+experiments in [`docs/contributing/experiments.md`](docs/contributing/experiments.md) are cited by number from code,
+tests, and docs. Never renumber them.
+
+## Keep the docs current
+
+@docs/contributing/docs.md
+
+## Write the docs
+
+- The README is the introduction for people: what Hot Cell is, and a quick start. Keep it short, and link
+  to a reference page for details instead of repeating them.
+- The pages in `docs/` are a reference manual, written for agents first and readable by people. Write them
+  in [Google developer documentation style](https://developers.google.com/style): second person, present
+  tense, active voice, sentence-case headings, numbered lists for steps, and tables for settings.
+- Keep one topic on each page, and keep each fact on one page. Link to it from everywhere else.
+- The pages in `docs/design/` record rationale, not behavior. Change them when a decision changes. Record a
+  decision that was argued in [`adr/`](docs/contributing/decisions.md).
+
+## Working on the gems
+
+@docs/contributing/guide.md

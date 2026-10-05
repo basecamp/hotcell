@@ -57,7 +57,7 @@ module HotCell
       # class's own declaration, or of the nearest ancestor's when this class has none yet. That is what
       # lets a subclass narrow a single number, and what lets an operator give a shipped operation a
       # different budget from an operations file, after the operation loads, without editing the gem. The
-      # cell's own limits still clamp whatever is declared. docs/DEPLOYMENT.md, "Changing a shipped
+      # cell's own limits still clamp whatever is declared. docs/operation-api.md, "Changing a shipped
       # operation's limits".
       def limits(**values)
         return inherited_value(:@limits) || Limits.new if values.empty?

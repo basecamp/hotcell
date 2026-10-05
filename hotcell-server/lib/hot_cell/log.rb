@@ -12,7 +12,7 @@ module HotCell
   # This is the channel for everything no response can carry: deadline kills, reaps that found a signal,
   # boot checks, and queue high-water.
   #
-  # Lines follow docs/LOGS.md: ECS field names, domain fields under the hotcell namespace. The fleet's
+  # Lines follow docs/observability.md: ECS field names, domain fields under the hotcell namespace. The fleet's
   # collector routes on service.name, takes the record timestamp from @timestamp, and severity from
   # log.level, so those three are load-bearing: renaming any of them silently drops or mislabels every
   # cell log line in production.

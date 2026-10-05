@@ -6,7 +6,7 @@ require "fcntl"
 # The log sink is a pipe to the container runtime, and the supervisor writes to it inside the loop that
 # enforces every request's deadline. A runtime that stops draining must not be able to park that loop.
 #
-# The line format is the schema in docs/LOGS.md. The fleet's log collector routes on service.name,
+# The line format is the schema in docs/observability.md. The fleet's log collector routes on service.name,
 # takes the record timestamp from @timestamp, and severity from log.level, so those three are
 # load-bearing: a rename silently drops or mislabels every cell log line in production.
 class LogTest < HotCellServerTest
