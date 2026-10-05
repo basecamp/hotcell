@@ -8,9 +8,9 @@ sources:
   - .github/workflows
 ---
 
-# Contributing to HotCell
+# Contributing to Hot Cell
 
-This is a guide to working on the gems themselves. If you are building *on* HotCell — writing operations for
+This is a guide to working on the gems themselves. If you are building *on* Hot Cell — writing operations for
 your own application — start with [README.md](../../README.md) instead.
 
 ## Setting up

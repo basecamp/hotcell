@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Active Storage operations"
+order: 12
 description: "The Active Storage client classes, the cell operations that serve them, how their failures are retried, and the limits each declares."
 sources:
   - activestorage-hotcell-client/lib
@@ -71,7 +72,7 @@ application image. That removal is the security improvement.
 **Caution:** Remove a package only after the cell handles that file type. Rails' own previewers and
 analyzers look for their tool in `accept?`: `MuPDFPreviewer.accept?` calls `mutool_exists?`, and
 `VideoPreviewer.accept?` calls `ffmpeg_exists?`. A package removed too early turns that processing off,
-with no error and nothing in a log. The HotCell previewers' `accept?` doesn't look for a binary.
+with no error and nothing in a log. The Hot Cell previewers' `accept?` doesn't look for a binary.
 
 ## Failures
 

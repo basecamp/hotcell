@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Scratch"
+order: 7
 description: "Where a cell stages files: the tmpfs, named volume, and host-mount layouts, and the boot sweep."
 sources:
   - hotcell-server/lib/hot_cell/supervisor.rb

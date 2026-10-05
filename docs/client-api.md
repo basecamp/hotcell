@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Client API"
+order: 3
 description: "HotCell.register and its options, HotCell::Client, the errors a bad call raises, the boot checks, diagnosis, and the group the application shares with a cell."
 sources:
   - hotcell-client/lib/hot_cell/cells.rb
@@ -21,9 +22,9 @@ For the cell side of the call, see [Operation API](operation-api.md).
 The code lives in [`hotcell-client/lib/hot_cell/`](../hotcell-client/lib/hot_cell/), mainly `cells.rb`,
 `cell.rb`, and `client.rb`.
 
-## Configure HotCell
+## Configure Hot Cell
 
-Configure HotCell in an initializer. Pass exception classes that fit your domain; your own base classes
+Configure Hot Cell in an initializer. Pass exception classes that fit your domain; your own base classes
 can be useful when you wrap an existing library.
 
 ```ruby
@@ -47,7 +48,7 @@ HotCell.register "images",
 ### Turn cells off
 
 When `HotCell.root` is unset and a cell has no `dir:`, the cell is off: `enabled?` returns `false`, and
-`perform_in_hotcell` raises `HotCell::CellNotConfigured`. HotCell has no automatic in-process fallback.
+`perform_in_hotcell` raises `HotCell::CellNotConfigured`. Hot Cell has no automatic in-process fallback.
 A caller that wants one checks `enabled?` and takes its old path. This is how an application rolls out a
 cell as a configuration change rather than a release.
 

@@ -1,10 +1,10 @@
 ---
 type: Design
-title: "What the overhead measures at"
-description: "Where the fixed cost of a call comes from, and the candidates that were ruled out."
+title: "Cell overhead"
+description: "The fixed time that a cell adds to each call, what causes it, and the causes that tests ruled out."
 ---
 
-# What the overhead measures at
+# Cell overhead
 
 Read this page for its negative results rather than its numbers. The numbers came off a laptop from a
 prototype; the things that were ruled out are properties of the design. For the reuse trade specifically,

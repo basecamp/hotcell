@@ -1,6 +1,7 @@
 ---
 type: Design
 title: "Invariants"
+order: 2
 description: "The numbered properties the design exists to hold. Code and tests cite them by number."
 ---
 

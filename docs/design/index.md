@@ -1,28 +1,21 @@
 ---
 title: "Design"
-description: "The threat model, the invariants, worker isolation, and why descriptors: what the code cannot tell you."
+description: "The intent behind Hot Cell's design: the threat model, the invariants, worker isolation, and passing file descriptors."
 ---
 
 # Design
 
-These pages hold the parts of HotCell's design that reading the code can't give you: why the work moves
-out of the application process at all, what a cell is defended against, and the invariants that the whole
-design exists to hold.
-
-The gems' APIs and behavior are in the reference pages in [`docs/`](../index.md). Each of those lists
-the code that it describes in its `sources`, so that a change to that code flags the page. See
-[Keep the docs current](../development/docs.md).
+These pages describe the intent behind Hot Cell's design and implementation: why the work moves out of your
+application's process, what a cell defends against, and the properties that the whole design exists to
+hold. For how to use the gems, see the [reference manual](../index.md).
 
 <!-- index -->
 
 | Page | Description |
 | --- | --- |
-| [Why descriptors rather than a shared volume](descriptors.md) | The argument for passing file descriptors instead of sharing a directory, and what it costs. |
+| [Threat model](threat-model.md) | What Hot Cell is, the problem it solves, and what a cell is defended against. |
 | [Invariants](invariants.md) | The numbered properties the design exists to hold. Code and tests cite them by number. |
-| [Threat model](threat-model.md) | What HotCell is, the problem it solves, and what a cell is defended against. |
 | [Worker isolation](worker-isolation.md) | What one worker can and cannot reach of another, and the residuals that remain. |
+| [Passing file descriptors](descriptors.md) | The argument for passing file descriptors instead of sharing a directory, and what it costs. |
 
 <!-- indexstop -->
-
-The facts that were measured rather than reasoned about, and the decision records, are in
-[Developing HotCell](../development/index.md).

@@ -1,7 +1,8 @@
 ---
 type: Glossary
 title: "Concepts"
-description: "The terms the HotCell documentation uses: cell, supervisor, worker, slot, operation, client, tool, payload, inputs and outputs, and codes."
+order: 1
+description: "The terms the Hot Cell documentation uses: cell, supervisor, worker, slot, operation, client, tool, payload, inputs and outputs, and codes."
 sources:
   - hotcell-server/lib/hot_cell/supervisor.rb
   - hotcell-server/lib/hot_cell/worker.rb
@@ -14,7 +15,7 @@ sources:
 
 # Concepts
 
-This page defines the terms that the rest of the HotCell documentation uses. The
+This page defines the terms that the rest of the Hot Cell documentation uses. The
 [design overview](design/threat-model.md#what-this-is) explains the "hot" and "cold" vocabulary.
 
 ## Cell

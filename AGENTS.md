@@ -1,4 +1,4 @@
-# HotCell
+# Hot Cell
 
 This repository holds the core gems that isolate untrusted code and untrusted input (`hotcell-core`,
 `hotcell-server`, and `hotcell-client`), the Active Storage gems built on them
@@ -20,7 +20,7 @@ tests, and docs. Never renumber them.
 
 ## Write the docs
 
-- The README is the introduction for people: what HotCell is, and a quick start. Keep it short, and link
+- The README is the introduction for people: what Hot Cell is, and a quick start. Keep it short, and link
   to a reference page for details instead of repeating them.
 - The pages in `docs/` are a reference manual, written for agents first and readable by people. Write them
   in [Google developer documentation style](https://developers.google.com/style): second person, present

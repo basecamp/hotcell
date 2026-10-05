@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Request lifecycle"
+order: 2
 description: "What happens between a call to perform_in_hotcell and its answer, step by step."
 sources:
   - hotcell-client/lib/hot_cell/client.rb

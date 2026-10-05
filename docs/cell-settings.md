@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Cell settings"
+order: 8
 description: "HotCell.limits: the scheduling settings and request limits with their defaults, the environment variables, the load order, and development mode."
 sources:
   - hotcell-server/lib/hot_cell/configuration.rb

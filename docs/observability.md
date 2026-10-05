@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Observability"
+order: 10
 description: "Recommended alerts, the perform.hot_cell notification, the application log line, Yabeda metrics, cell metrics, the cell log schema, and the healthchecks."
 sources:
   - hotcell-server/lib/hot_cell/log.rb
@@ -17,7 +18,7 @@ sources:
 
 # Observability
 
-This page describes the signals that HotCell produces and the alerts to set on them. The signals are as
+This page describes the signals that Hot Cell produces and the alerts to set on them. The signals are as
 follows:
 
 - The `perform.hot_cell` notification, which the application publishes for each call.
@@ -118,7 +119,7 @@ To use the line without Rails, do the following:
 
 ## Metrics
 
-The `yabeda-hotcell` gem records HotCell metrics in [Yabeda](https://github.com/yabeda-rb/yabeda). To
+The `yabeda-hotcell` gem records Hot Cell metrics in [Yabeda](https://github.com/yabeda-rb/yabeda). To
 install it, add the gem to the application's `Gemfile` and call `Yabeda::HotCell.install!` once at boot:
 
 ```ruby
@@ -172,7 +173,7 @@ ships these too.
 
 Field names follow [ECS](https://www.elastic.co/guide/en/ecs/current/index.html), the schema that the
 rest of the fleet's structured logs use. Every field that ECS has no name for is in the `hotcell`
-namespace, so no future ECS field can collide with a HotCell field.
+namespace, so no future ECS field can collide with a Hot Cell field.
 
 ### Envelope
 
@@ -181,7 +182,7 @@ Every line carries these fields:
 | Field | Type | Description |
 | --- | --- | --- |
 | `@timestamp` | string | When the event happened. UTC, ISO 8601, millisecond precision. |
-| `service.name` | string | Always `"hotcell"`. This is the routing key: the log collector selects HotCell lines by it. |
+| `service.name` | string | Always `"hotcell"`. This is the routing key: the log collector selects Hot Cell lines by it. |
 | `event.action` | string | Which event this is. See [Events](#events). |
 | `log.level` | string | `"INFO"`, `"WARN"`, or `"ERROR"`. The cell decides severity, not the collector, so adding an event never requires a collector change. |
 | `process.pid` | integer | The process that the event is about: the worker's pid for `worker.*` events, the supervisor's own for `cell.*` events. Absent where no process is the subject. |
@@ -203,7 +204,7 @@ Where ECS has a name, the cell uses it:
 | `event.duration.ms` | number | Wall time of the thing that ended. This is the fleet's dialect (Rails logs use `event.duration.ms`), not stock ECS (`event.duration` in nanoseconds). |
 | `process.exit_code` | integer | The worker's exit status, on `worker.reaped`. |
 
-### HotCell fields
+### Hot Cell fields
 
 Every other field is in the `hotcell` namespace:
 

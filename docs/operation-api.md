@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Operation API"
+order: 4
 description: "HotCell::Operation's class and instance methods, run_tool, and the Input and Output descriptors that perform receives."
 sources:
   - hotcell-server/lib/hot_cell/operation.rb
@@ -119,12 +120,12 @@ evaluates an image: every worker forked after that deadlocks. See
 [experiment 1](development/experiments.md).
 
 Every megabyte that the supervisor holds is partly copied by every worker, so require only what this
-cell's own operations need. See [Overhead](development/overhead.md).
+cell's own operations need. See [Cell overhead](development/overhead.md).
 
 ### `before_worker_boot { ... }`
 
 Registers a block that runs in the worker after the fork and before the worker serves a request. Use it
-to size a library, for example `Vips.concurrency_set`. HotCell doesn't size libraries for you: size them
+to size a library, for example `Vips.concurrency_set`. Hot Cell doesn't size libraries for you: size them
 against the cell's own `cpus` and `concurrency`.
 
 Configure libraries here rather than in `before_fork`, because library configuration is global. Two
@@ -158,7 +159,7 @@ also calls `abstract_operation`.
 
 ### `perform(inputs, outputs, **payload)`
 
-Does the work. HotCell calls `perform` on a new instance for each request, so nothing in an instance
+Does the work. Hot Cell calls `perform` on a new instance for each request, so nothing in an instance
 variable survives into the next request that a reused worker serves.
 
 - `inputs` is an `Array` of `Input` objects, and `outputs` is an `Array` of `Output` objects, in the

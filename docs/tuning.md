@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Tuning"
+order: 9
 description: "Which measurement sets each cell number, the constraints between the numbers, and how to use bin/load."
 sources:
   - hotcell-server/lib/hot_cell/configuration.rb
@@ -137,7 +138,7 @@ which is a hard failure to place. See [Active Storage operations](active-storage
 - **A large supervisor makes every request slower.** A worker's fixed cost is copy-on-write settling, and
   it's proportional to the supervisor's resident heap. A `before_fork` that requires more than the cell's
   own operations need is paid on every request for the life of the deployment. See
-  [Overhead](development/overhead.md).
+  [Cell overhead](development/overhead.md).
 
 ## Check the queue with `bin/load`
 

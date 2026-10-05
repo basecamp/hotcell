@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Container"
+order: 6
 description: "Building the cell's image, every container flag and what it does, bounding OpenMP, and checking an accessory before and after a deploy."
 sources:
   - hotcell-client/lib/hot_cell/install
@@ -24,7 +25,7 @@ that you built yourself, see [Conformance](conformance.md).
 
 ## Build an image
 
-HotCell publishes no base image. `bin/rails hotcell:install` writes a `hotcell/` directory into the
+Hot Cell publishes no base image. `bin/rails hotcell:install` writes a `hotcell/` directory into the
 application that holds a complete `Dockerfile`, the cell's `Gemfile`, its `config.rb`, and an
 `operations/` directory. That `Dockerfile` is the whole recipe, and you can customize it. Build it from
 its own directory:
@@ -45,7 +46,7 @@ Keep the following in mind:
   `/run/hotcell/cell`, not only `/run/hotcell`. Docker creates a missing last level as root, and the cell
   then can't create a socket in it. The installed `Dockerfile` does this. The application's image needs
   nothing at its own mount point.
-- **Keep the application's and the cell's lockfiles in step.** They resolve HotCell separately.
+- **Keep the application's and the cell's lockfiles in step.** They resolve Hot Cell separately.
   `HotCell.describe_cells` warns at boot when the cell's `hotcell-server` version differs from the
   application's `hotcell-client` version.
 

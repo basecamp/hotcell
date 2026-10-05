@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "ImageMagick"
+order: 13
 description: "ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them."
 sources:
   - activestorage-hotcell-server/lib/active_storage/hot_cell/server/magick_operation.rb

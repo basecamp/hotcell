@@ -1,13 +1,13 @@
 ![hotcell-logo](docs/hotcell-logo.png)
 
-# HotCell
+# Hot Cell
 
-Securely run untrusted code on untrusted inputs. HotCell moves that work out of your application and into
+Securely run untrusted code on untrusted inputs. Hot Cell moves that work out of your application and into
 an unprivileged sibling container: no network, no credentials, and nothing on its filesystem worth
 stealing.
 
 Inputs and outputs travel as file descriptors over a UNIX socket on a shared volume. Each call is a remote
-procedure call (RPC): your application calls an ordinary Ruby method. HotCell forwards the arguments to the container, runs the work in a forked
+procedure call (RPC): your application calls an ordinary Ruby method. Hot Cell forwards the arguments to the container, runs the work in a forked
 worker process under strict limits, and returns the result or writes it to the output file.
 
 ## Status
@@ -32,18 +32,18 @@ libraries that you may not know about. libvips, ImageMagick, ffmpeg, and LibreOf
 histories of memory-safety bugs, and by default each one runs in the container that holds your database
 credentials, your session secret, and a route to every network service that the app uses.
 
-HotCell gives that work its own container and its own forked process, holding nothing an attacker wants.
+Hot Cell gives that work its own container and its own forked process, holding nothing an attacker wants.
 Remove libvips and ffmpeg from your application image and keep them in the cell. Code execution there
 gets an attacker a read-only input descriptor, a write-only output descriptor, and the scratch of whatever
 else the cell is converting. The blast radius is much smaller than if that attack succeeded in your
 application code.
 
-For Rails, HotCell ships drop-in replacements for the Active Storage analyzers, transformers, and
-previewers, so adopting it takes configuration changes, not code changes. In our environment, HotCell adds
+For Rails, Hot Cell ships drop-in replacements for the Active Storage analyzers, transformers, and
+previewers, so adopting it takes configuration changes, not code changes. In our environment, Hot Cell adds
 about 8 milliseconds per call and one more container on each host. We think that's a very good trade for
 the improved security posture.
 
-HotCell isn't limited to media conversion:
+Hot Cell isn't limited to media conversion:
 
 - You can configure several cells on each host.
 - A call can pass several input and output files.
@@ -52,7 +52,7 @@ HotCell isn't limited to media conversion:
 - You can bring your own container image, checked by the included conformance test.
 - You can set how often workers are forked again, to trade isolation for performance.
 
-So you could use HotCell for ZIP files, or for compute that might hog the CPU. If something puts your
+So you could use Hot Cell for ZIP files, or for compute that might hog the CPU. If something puts your
 trusted application at risk, move it into a cell.
 
 ## The gems
@@ -184,7 +184,7 @@ the numbers.
 
 ### 5. Build and deploy the cell
 
-HotCell publishes no base image. Customize the installed `Dockerfile` for your application, starting with
+Hot Cell publishes no base image. Customize the installed `Dockerfile` for your application, starting with
 the system packages that your operations need:
 
 ```dockerfile
@@ -308,7 +308,7 @@ install the tools that it runs in the `Dockerfile`. `config.rb` doesn't change: 
 
 [Operation API](docs/operation-api.md) and [Client API](docs/client-api.md) cover the rest.
 
-## Running HotCell in production
+## Running Hot Cell in production
 
 Set these alerts. [Observability](docs/observability.md) explains each signal.
 
@@ -321,11 +321,11 @@ Set these alerts. [Observability](docs/observability.md) explains each signal.
 
 ## Documentation
 
-The [reference manual](docs/index.md) describes every part of HotCell, one topic per page. It's written
+The [reference manual](docs/index.md) describes every part of Hot Cell, one topic per page. It's written
 for agents and for readers who want the details.
 
 The [design pages](docs/design/index.md) hold what the code can't tell you: the threat model, the
 invariants that the design exists to hold.
 
-[Developing HotCell](docs/development/index.md) covers working on the gems themselves, the facts that were
+[Developing Hot Cell](docs/development/index.md) covers working on the gems themselves, the facts that were
 measured rather than reasoned about, and the decisions that were argued rather than obvious.

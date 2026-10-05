@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Conformance"
+order: 11
 description: "What bin/conformance checks about a cell image, and what it cannot check."
 sources:
   - bin/conformance

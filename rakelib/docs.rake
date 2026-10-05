@@ -12,6 +12,7 @@ module HotCellDocs
     def title = frontmatter["title"]
     def description = frontmatter["description"]
     def sources = Array(frontmatter["sources"])
+    def order = frontmatter["order"].is_a?(Integer) ? frontmatter["order"] : Float::INFINITY
 
     def describes?(file)
       sources.any? { |source| file == source || file.start_with?("#{source.chomp("/")}/") }
@@ -37,10 +38,13 @@ module HotCellDocs
       Dir[File.join(ROOT, "**", INDEX)].sort
     end
 
-    # Each index lists the pages in its own directory, then the indexes of the directories below it.
+    # Each index lists the pages in its own directory, then the indexes of the directories below it. A page with
+    # an `order` comes first, in that order; the rest follow by path.
     def listing(index)
       directory = File.dirname(index)
-      entries = pages.filter_map { |page| [ page.path, page.frontmatter ] if File.dirname(page.path) == directory } +
+      own_pages = pages.select { |page| File.dirname(page.path) == directory }
+        .sort_by.with_index { |page, position| [ page.order, position ] }
+      entries = own_pages.map { |page| [ page.path, page.frontmatter ] } +
         indexes.filter_map { |other| [ other, frontmatter(other) ] if File.dirname(File.dirname(other)) == directory }
 
       rows = entries.map do |path, frontmatter|
@@ -61,6 +65,7 @@ module HotCellDocs
     def page_problems(page)
       %w[ type title description ].reject { |key| page.frontmatter[key].is_a?(String) && !page.frontmatter[key].empty? }
         .map { |key| "#{page.path}: frontmatter has no #{key}" } +
+        (page.frontmatter.fetch("order", 0).is_a?(Integer) ? [] : [ "#{page.path}: order is not an integer" ]) +
         page.sources.reject { |source| File.exist?(source) }.map { |source| "#{page.path}: source #{source} does not exist" }
     end
 

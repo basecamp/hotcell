@@ -1,6 +1,7 @@
 ---
 type: Reference
 title: "Response codes"
+order: 5
 description: "Every failure code and kill cause, whether each is permanent or transient, the exception classes the client raises, and what Active Storage records."
 sources:
   - hotcell-core/lib/hot_cell/codes.rb

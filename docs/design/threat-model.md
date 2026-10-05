@@ -1,16 +1,17 @@
 ---
 type: Design
 title: "Threat model"
-description: "What HotCell is, the problem it solves, and what a cell is defended against."
+order: 1
+description: "What Hot Cell is, the problem it solves, and what a cell is defended against."
 ---
 
 # Threat model
 
-This page states what HotCell is, the problem it exists to solve, and what a cell is defended against.
+This page states what Hot Cell is, the problem it exists to solve, and what a cell is defended against.
 
 ## What this is
 
-HotCell moves untrusted work out of a privileged application process into an unprivileged,
+Hot Cell moves untrusted work out of a privileged application process into an unprivileged,
 resource-capped, network-less sibling container. The application reaches in through a narrow interface.
 The work never reaches out.
 
@@ -33,7 +34,7 @@ either, because the same primitive reads arbitrary files, including a credential
 `config/master.key`.
 
 That leaves two remedies: a bubblewrap or nsjail wrapper inside the application image, or a separate
-conversion service holding no secrets. HotCell is the second. The second also avoids an open question the
+conversion service holding no secrets. Hot Cell is the second. The second also avoids an open question the
 first carries, which is whether an in-image wrapper survives the container runtime it is deployed under.
 That is the verification firejail does not pass.
 
@@ -56,7 +57,7 @@ calls. It is excluded because it is not what this design is *for*, and because t
 would drag operation review and dependency policy into a document about a transport.
 
 The minimum requirement is a PID and mount namespace exposing only the input and output, with no `/proc`
-and no application filesystem. HotCell meets the namespace requirement by being a separate container, and
+and no application filesystem. Hot Cell meets the namespace requirement by being a separate container, and
 **exceeds the input/output part**: descriptors mean there is no path in the cell to expose or to traverse,
 rather than a narrowed set of bind mounts. The `/proc` requirement is treated separately in
 [Worker isolation](worker-isolation.md), because it is the one part a container boundary does not give us for free.

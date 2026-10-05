@@ -1,6 +1,7 @@
 ---
 type: Design
 title: "Worker isolation"
+order: 3
 description: "What one worker can and cannot reach of another, and the residuals that remain."
 ---
 
@@ -88,7 +89,7 @@ with no capability. Until then this is a known gap, and the containment is the s
 generally — a cell holds no credentials, carries one toolchain, and is replaced rather than repaired.
 
 Fork-per-request isolates each request's **memory**. The argument in
-[Why descriptors rather than a shared volume](descriptors.md) is about the boundary between the application
+[Passing file descriptors](descriptors.md) is about the boundary between the application
 and the cell, and it doesn't extend to workers inside one cell.
 
 **Environment** is not protected by `ptrace_scope` at all, and cannot be fixed inside the worker. A forked
