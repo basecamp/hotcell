@@ -17,6 +17,7 @@ gem but are what an operator runs against their own image.
 ### Documentation
 
 * The README is a short introduction and quick start, and the details are in a reference manual with one topic per page, starting at [docs/index.md](docs/index.md). `docs/DESIGN.md`, `docs/DEPLOYMENT.md`, `docs/TUNING.md` and `docs/LOGS.md` are gone. Their content is in [docs/design/](docs/design/index.md), [docs/container.md](docs/container.md), [docs/cell-settings.md](docs/cell-settings.md), [docs/client-api.md](docs/client-api.md), [docs/tuning.md](docs/tuning.md), [docs/scratch.md](docs/scratch.md) and [docs/observability.md](docs/observability.md).
+* The README and the reference manual are published as a site at https://basecamp.github.io/hotcell/.
 
 ## v0.6.0 / 2026-10-01
 
