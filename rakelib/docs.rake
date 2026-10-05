@@ -38,17 +38,14 @@ module HotCellDocs
       Dir[File.join(ROOT, "**", INDEX)].sort
     end
 
-    # Each index lists the pages in its own directory, then the indexes of the directories below it. A page with
-    # an `order` comes first, in that order; the rest follow by path.
+    # Each index lists the pages in its own directory. A page with an `order` comes first, in that order; the rest
+    # follow by path.
     def listing(index)
       directory = File.dirname(index)
       own_pages = pages.select { |page| File.dirname(page.path) == directory }
         .sort_by.with_index { |page, position| [ page.order, position ] }
-      entries = own_pages.map { |page| [ page.path, page.frontmatter ] } +
-        indexes.filter_map { |other| [ other, frontmatter(other) ] if File.dirname(File.dirname(other)) == directory }
-
-      rows = entries.map do |path, frontmatter|
-        "| [#{frontmatter["title"]}](#{path.delete_prefix("#{directory}/")}) | #{frontmatter["description"]} |"
+      rows = own_pages.map do |page|
+        "| [#{page.title}](#{page.path.delete_prefix("#{directory}/")}) | #{page.description} |"
       end
 
       [ "| Page | Description |", "| --- | --- |", *rows ].join("\n")

@@ -25,6 +25,21 @@ part of the change:
 4. Run `rake docs:check`. It fails on a page without `type`, `title`, or `description`, on a source that
    doesn't exist, and on an index that's out of date. CI runs it on every push, and so does `rake`.
 
+## Frontmatter
+
+Each page starts with
+[Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
+(OKF) frontmatter:
+
+- `type`: `Reference` for a page that describes behavior, `Glossary` for the terms, `Design` for the
+  rationale, and `Contributing` for the pages about working on Hot Cell itself.
+- `title` and `description`: the page's name and one-line summary, which the section's index lists.
+- `order`: optional. An index lists the pages that have an `order` first, in that order, and the rest by
+  file name.
+- `sources`: the code that the page describes. When that code changes, the page might need to change too.
+
+## Tables held to the code
+
 Some tables are held to the code by tests, which fail when the two disagree:
 
 | Table | Test |

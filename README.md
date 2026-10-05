@@ -321,11 +321,11 @@ Set these alerts. [Observability](docs/observability.md) explains each signal.
 
 ## Documentation
 
-The [reference manual](docs/index.md) describes every part of Hot Cell, one topic per page. It's written
-for agents and for readers who want the details.
+The docs have these sections:
 
-The [design pages](docs/design/index.md) hold what the code can't tell you: the threat model, the
-invariants that the design exists to hold.
-
-[Contributing to Hot Cell](docs/contributing/index.md) covers working on the gems themselves, the facts that were
-measured rather than reasoned about, and the decisions that were argued rather than obvious.
+- [Reference manual](docs/index.md): every part of Hot Cell, one topic per page, for agents and for
+  readers who want the details.
+- [Design](docs/design/index.md): the intent behind Hot Cell's design, including the threat model and the
+  invariants that the design exists to hold.
+- [Contributing to Hot Cell](docs/contributing/index.md): working on the gems, keeping the docs current,
+  the experiments that the design rests on, and the decision records.

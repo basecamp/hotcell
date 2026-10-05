@@ -6,9 +6,14 @@ This repository holds the core gems that isolate untrusted code and untrusted in
 
 ## Find your way around
 
-Start at [`docs/index.md`](docs/index.md). It lists every reference page with a one-line description, so
-you can pick the page you need without opening the others. Each page's frontmatter names the code it
-describes, under `sources`.
+The docs are in sibling sections, and each section's index lists its pages with a one-line description, so
+you can pick the page you need without opening the others:
+
+- [`docs/index.md`](docs/index.md): the reference manual, which describes behavior.
+- [`docs/design/index.md`](docs/design/index.md): the design rationale.
+- [`docs/contributing/index.md`](docs/contributing/index.md): working on the gems.
+
+Each page's frontmatter names the code it describes, under `sources`.
 
 The numbered invariants in [`docs/design/invariants.md`](docs/design/invariants.md) and the numbered
 experiments in [`docs/contributing/experiments.md`](docs/contributing/experiments.md) are cited by number from code,
