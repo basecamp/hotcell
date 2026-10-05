@@ -82,7 +82,7 @@ accessory, and they aren't recommendations.
 | `cpus` | `2` | The share of the host that this cell can use. Start the cell's `concurrency` at twice this number, and match the image's `OMP_NUM_THREADS` to it. See [Bound the OpenMP thread pools](#bound-the-openmp-thread-pools). |
 | `memory` | `2g` | The cgroup limit, which counts every worker and the tmpfs. Size it from `concurrency × peak RSS` plus the tmpfs. Keep it above the cell's `memory`. On a disk-backed scratch, there's no tmpfs term. See [Scratch](scratch.md). |
 | `memory-swap` | `2g` | Set it equal to `memory`. If you omit it, Docker allows twice `memory` in swap, and the memory limit no longer holds. |
-| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. It pairs with `file_size × concurrency`. Moving scratch onto disk separates it from `memory`. See [Scratch](scratch.md). |
+| `tmpfs` size | `size=512m` | Scratch for all concurrent workers together. Size it from `concurrency` times the most scratch that one request holds. See [Constraints between the numbers](tuning.md#constraints-between-the-numbers). Moving scratch onto disk separates it from `memory`. See [Scratch](scratch.md). |
 | `ulimit: stack` | leave it unset | See [Don't lower the stack limit](#dont-lower-the-stack-limit). |
 
 ### Security flags

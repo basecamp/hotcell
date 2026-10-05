@@ -36,9 +36,10 @@ The supervisor is process 1 in the cell. It does the following:
 - Enforces the wall-clock deadline from outside the worker.
 - Kills and reaps workers.
 
-The supervisor never reads a request and never evaluates image data. It passes the accepted connection
-itself to a worker over `SCM_RIGHTS` and never calls `recvmsg`, so the caller's descriptors are still
-queued on the connection when the worker reads them.
+The supervisor never evaluates image data, and it doesn't read a request that it dispatches. It passes the
+accepted connection itself to a worker over `SCM_RIGHTS` and never calls `recvmsg`, so the caller's
+descriptors are still queued on the connection when the worker reads them. When a dispatch fails, the
+supervisor peeks at the request to name its operation in the `worker.undispatchable` event.
 
 ## Worker
 
@@ -51,7 +52,7 @@ touches the socket, serves `max_requests_per_worker` requests, and then exits wi
 ## Slot
 
 A slot is the numbered workspace that a worker borrows. A slot holds one directory for each request. That
-directory is the request's `$HOME`, and the request's staged files are in its `scratch` subdirectory.
+directory is the request's `$HOME`, and the request's staged files are in it.
 
 The worker creates the directory when the request starts and removes it before the caller receives the
 answer. Nothing that a tool writes reaches the next request on that slot.

@@ -72,7 +72,7 @@ class TransformImageOperation < HotCell::Operation
 
     # The result: one JSON object, which the caller receives as perform_in_hotcell's return value (in
     # addition to the destination file descriptor)
-    { format: format, bytes: File.size(destination.path) }
+    { format: format, bytes: File.size(destination.fd_path) }
   end
 end
 ```

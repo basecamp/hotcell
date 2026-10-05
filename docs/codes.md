@@ -18,8 +18,8 @@ causes of `killed`, and how the Active Storage integration records a permanent f
 
 The permanent or transient split is the only distinction that changes what a caller must do:
 
-- **Permanent:** the same request fails the same way until the input or the code changes. A change in load
-  or deployment doesn't fix it. A caller can record a permanent failure against the input, for example
+- **Permanent:** the same request fails the same way until the input, the code, or the limits change. A
+  change in load doesn't fix it. A caller can record a permanent failure against the input, for example
   against an Active Storage blob, and serve it from a cache.
 - **Transient:** the request might succeed on a retry. A caller must retry a transient failure and must
   never record it.

@@ -98,8 +98,10 @@ Nothing checks these constraints for you, except where noted.
   [Make the timeouts agree](#make-the-timeouts-agree). The client warns at boot.
 - The cell's `memory` must be less than the container's `memory`. At equal values, the cgroup fires first,
   and a cgroup kill is a `SIGKILL` with no diagnostic.
-- `file_size × concurrency` must be no more than the scratch. Above it, concurrent workers fill the
-  scratch, and requests fail with `ENOSPC` instead of with a limit verdict. On the default accessory, the
+- `concurrency × the most scratch that one request holds` must be no more than the scratch. `file_size`
+  limits each file, not their sum, and one request can hold a staged input, an output, and a tool's
+  intermediate files at once. Above it, concurrent workers fill the scratch, and requests fail with
+  `ENOSPC` instead of with a limit verdict. On the default accessory, the
   scratch is the tmpfs, and its `size=` is the number to fit. See [Scratch](scratch.md#what-changes-in-the-numbers).
 - `concurrency × (MAGICK_DISK_LIMIT + everything else that one worker writes on scratch)` must be no more
   than the scratch. Above it, concurrent ImageMagick processes fill the scratch before any of them refuses
@@ -120,8 +122,8 @@ These numbers are arithmetic against the container flags. For the README's acces
 Size the cell to its most demanding operation. The cell clamps each operation's own `limits` to its own,
 so the cell's numbers only ever take away. Read the `limits` that each operation you carry declares, and
 set the cell above the highest of them. The shipped video previewer asks for `deadline: 120` and
-`file_size: 128MB`. A cell configured with 30 seconds and 48MB kills every video preview and nothing else,
-which is a hard failure to place. See [Active Storage operations](active-storage.md#limits).
+`file_size: 128MB`. A cell configured with 30 seconds and 48MB kills each video preview that runs longer than
+30 seconds or writes a file larger than 48MB, and nothing else, which is a hard failure to place. See [Active Storage operations](active-storage.md#limits).
 
 ### Sizing guidelines
 

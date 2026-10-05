@@ -108,8 +108,10 @@ accessories:
 ```
 
 Give it a dedicated filesystem: a partition, a logical volume, or a loopback image file. Its size is then
-the cap, so a fill stays inside scratch and reaches the caller as `Errno::ENOSPC`, which the cell
-classifies as `failed`: transient, retried, and never recorded against a blob. The security flags come
+the cap, so a fill stays inside scratch. A write that fails in staging or writeback raises
+`Errno::ENOSPC`, which the cell classifies as `failed`: transient, retried, and never recorded against a
+blob. A write that fails inside libvips gets `unreadable`, which is permanent. See
+[Observability](observability.md#recommended-alerts). The security flags come
 from the host mount options, and a bind mount carries its source's flags into the container, so
 `scratch_noexec` still reports true.
 
@@ -119,7 +121,7 @@ and adds the `chown` work that a named volume avoids.
 Chown the source. A bind mount keeps the host directory's ownership rather than taking the image's, and
 the cell runs as `10001:10001`. Docker creates a missing source owned by root, and the cell then fails
 every request with `EACCES`. Create and chown the source before the first boot. For example, as a loopback
-image, with no repartitioning, sized from `file_size × concurrency` plus headroom:
+image, with no repartitioning, sized from `concurrency` times the most scratch that one request holds, plus headroom:
 
 ```
 fallocate -l 8G /var/lib/hotcell-scratch.img
@@ -163,20 +165,19 @@ scratch is a directory of its own beneath that directory, named for `HOTCELL_DIR
 
 ## What changes in the numbers
 
-The `file_size × concurrency` constraint in [Tuning](tuning.md#constraints-between-the-numbers) applies
-to every layout:
+The scratch constraint in [Tuning](tuning.md#constraints-between-the-numbers) applies to every layout:
 
 - On a tmpfs, the number to fit is the tmpfs `size=`, and `memory` includes the tmpfs.
 - On either disk layout, `memory` loses its tmpfs term. On a host mount, the number to fit is the host
   filesystem's size. On a named volume, there's no cap to fit inside.
 
-If you also raise or remove `file_size` so that large conversions succeed, a cap is the only bound left on
-what a runaway write consumes. Without a cap, the bound is deadline × disk throughput. An uncapped layout
-with an uncapped `file_size` is the one combination with no bound at all, and a capped filesystem is what
-makes a generous `file_size` safe to run.
+`file_size` limits each file, not the total that a request writes, so a capped filesystem is the only
+bound on what a runaway request writes across many files. Without a cap, the bound is deadline × disk
+throughput. A capped filesystem is also what makes a generous `file_size` safe to run.
 
 Two things don't change on any layout:
 
 - `HOTCELL_WORKSPACE` keeps its default. It's under `Dir.tmpdir`, and the server treats scratch as a plain
   directory without checking the filesystem type.
-- A full scratch still reaches the caller as `failed`, which is transient, as a full tmpfs does.
+- A full scratch reaches the caller as a full tmpfs does: `failed` when staging or writeback fails, and
+  `unreadable` when a write inside libvips fails.

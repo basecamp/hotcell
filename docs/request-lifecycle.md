@@ -23,7 +23,7 @@ sequenceDiagram
     participant Worker as worker<br>(forked ahead of dispatch)
 
     App->>Supervisor: one sendmsg -- JSON request + N descriptors
-    note over Supervisor: never reads the request<br>queues it, or answers capacity
+    note over Supervisor: doesn't read the request<br>queues it, or answers capacity
     Supervisor->>Worker: passes the connection itself over SCM_RIGHTS
     note over Worker: applies the cell's limits before touching the socket<br>reads the request, narrows to the operation's limits
     Worker->>Worker: perform(inputs, outputs, **payload)<br>an input copies to scratch when asked for a path
