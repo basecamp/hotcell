@@ -8,7 +8,7 @@ description: "The argument for passing file descriptors instead of sharing a dir
 
 The obvious alternative is a directory mounted into both containers: the app writes an input file and
 names it, the cell writes an output file and names it. It is simpler, and it has one real advantage this
-design gives up. Recorded here because the reasoning is not obvious and will otherwise be relitigated.
+design gives up.
 
 **It removes a class of bug rather than a bug, and that is the deciding reason.** With a volume the app
 must open a path the cell can write to. The cell creates that path as a symlink to
@@ -35,11 +35,10 @@ and it is a window, not a wall. See [Worker isolation](worker-isolation.md).
 somewhere neither side owns, and a crashed worker leaves it there. The socket directory holds a socket and
 no data.
 
-**What descriptors do not buy, so nobody oversells them.** The bytes are copied to the cell's tmpfs when
+**Descriptors protect naming, and only naming.** The bytes are copied to the cell's tmpfs when
 an operation asks for a path, so the cell has full read and write on its own copy. The output is a file
 the app created and the cell writes arbitrary bytes into it either way, so a compromised cell can return a
-malicious image and the app will publish it. Descriptors protect *naming*. They do not protect or validate
-content.
+malicious image and the app will publish it. Validating content is the application's job.
 
 **The cost, accepted knowingly.** A bind mount crosses Docker Desktop's VM boundary and a descriptor does
 not, so a volume-based design would let macOS developers run the real container with the real hardening.
@@ -50,7 +49,6 @@ each mitigation for it has to be remembered forever.
 **Where a volume wins, and it is not a corner case.** An input larger than the cell's tmpfs cannot be
 posted in at all. Video shows it plainly: a 3GB blob will not spool onto a 512MB tmpfs at any body limit,
 and `ffprobe` reads only a container header, so store-and-forward costs roughly 300× I/O amplification on
-its commonest call. Note carefully what this is *not* an argument against — descriptor passing has no
-such problem, because the descriptor already refers to a file on the application's own filesystem. The amplification comes from the **copy** an input performs when asked for
-its path, not from the transport. So the fix is per-operation and stays inside this design: an operation
+its commonest call. The descriptor itself already refers to a file on the application's own filesystem;
+the amplification comes from the **copy** an input performs when asked for its path. So the fix is per-operation and stays inside this design: an operation
 that can consume a descriptor directly never asks, and never pays.

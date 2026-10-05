@@ -9,10 +9,8 @@ These pages hold the parts of HotCell's design that reading the code can't give 
 out of the application process at all, what a cell is defended against, the invariants that the whole
 design exists to hold, and the facts that were measured rather than reasoned about.
 
-They don't describe the gems' APIs or behavior. An earlier version of this document did, and it went
-stale as soon as the code moved; worse, its errors spread back into the code's own comments. The
-reference pages in [`docs/`](../index.md) describe behavior now, and each one lists the code that it
-describes in its `sources`, so that a change to that code flags the page. See
+The gems' APIs and behavior are in the reference pages in [`docs/`](../index.md). Each of those lists
+the code that it describes in its `sources`, so that a change to that code flags the page. See
 [AGENTS.md](../../AGENTS.md#keep-the-docs-current).
 
 <!-- index -->

@@ -31,21 +31,20 @@ isolation between two requests is a configuration value.
 
 **Nothing on disk carries from one request to the next.** A slot holds one directory per request, which is
 that request's `$HOME` and also where its inputs and outputs are staged, and it is created when the request
-starts and removed before the caller hears the answer. It used to survive across worker processes, to keep
-an expensive per-user profile warm. That was a hole rather than a trade: what a tool reads from `$HOME` is
-configuration, and for these toolchains configuration is executable — ImageMagick runs the command lines in
-`delegates.xml` and applies the rights in `policy.xml`, both read from `$HOME/.config/ImageMagick`. So one
-input that achieved code execution could reconfigure every later request on that slot, which is precisely
-the bound `max_requests_per_worker: 1` exists to hold. [ADR 0003](../../adr/0003-remove-the-persistent-slot-home.md)
-records the reversal.
+starts and removed before the caller hears the answer. A home that outlived its request would carry
+configuration to the next one, and for these toolchains configuration is executable: ImageMagick runs the
+command lines in `delegates.xml` and applies the rights in `policy.xml`, both read from
+`$HOME/.config/ImageMagick`. One input that achieved code execution could then reconfigure every later
+request on that slot, which is the bound `max_requests_per_worker: 1` exists to hold.
+[ADR 0003](../../adr/0003-remove-the-persistent-slot-home.md) records the decision.
 
 The directory carries a fresh unpredictable name for every request, and that is what makes the removal a
 guarantee rather than an intention. A tool that reaches code execution runs as the user that owns the tree,
 so it can `chmod 0500` its own configuration directory and the slot directory around it, and both the
-worker's delete and the supervisor's rename then fail. Under a stable name the next request was handed the
-tree that had just refused to go. A name no earlier request has held is not a name an earlier request could
-have prepared. A mode is also not a permission the process lost, so a cleanup that fails on one is retried
-after putting the mode back, and what a cleanup that still fails costs is disk rather than isolation.
+worker's delete and the supervisor's rename then fail. A fresh name means the next request never receives
+a tree that an earlier request prepared. A mode is also not a permission the process lost, so a cleanup
+that fails on one is retried after putting the mode back, and what a cleanup that still fails costs is disk
+rather than isolation.
 
 **That bounds what a finished request left behind, and not what a live process is doing.** Every worker runs
 as the same uid, and `0700` is that uid's own mode, so a concurrent sibling can write into a home as soon as
@@ -83,20 +82,14 @@ others. The immutable flag needs `CAP_LINUX_IMMUTABLE` and a uid per worker need
 `cap-drop ALL` removes both. An abstract-namespace socket has no name to unlink and cannot be reached
 across `network: none`.
 
-Detection was tried and withdrawn. The supervisor can record each socket's inode and re-check it, and an
-attacker defeats that by hard-linking the original aside, serving from an impostor, and renaming the
-original back before the next check: the inode then matches and the theft leaves no trace. Measured. The
-check also cost more than it bought, because a supervisor that stops on a changed inode will unlink its
-successor's sockets during an overlapping restart.
-
 [Landlock](https://github.com/basecamp/hotcell/issues/13) is the one prevention that fits an unprivileged
 container: a worker gives up write access to the socket directory right after the fork, irreversibly and
 with no capability. Until then this is a known gap, and the containment is the same as for a compromise
 generally — a cell holds no credentials, carries one toolchain, and is replaced rather than repaired.
 
-This corrects an overclaim worth being explicit about, because it is easy to make: fork-per-request buys
-**memory** isolation, not file isolation. The argument in [Why descriptors rather than a shared volume](descriptors.md) is about the boundary between
-the application and the cell, and it does not extend to workers inside one cell.
+Fork-per-request isolates each request's **memory**. The argument in
+[Why descriptors rather than a shared volume](descriptors.md) is about the boundary between the application
+and the cell, and it doesn't extend to workers inside one cell.
 
 **Environment** is not protected by `ptrace_scope` at all, and cannot be fixed inside the worker. A forked
 process's `/proc/self/environ` is the exec-time environment of the process it was forked from, so a worker
@@ -106,10 +99,6 @@ tools to be spawned with `unsetenv_others: true` and an explicitly written envir
 `exec`ed and therefore does get a fresh `/proc/<pid>/environ` — the one thing in this picture that is
 actually under our control.
 
-`hidepid=2` on `/proc` would remove the sysctl dependency by hiding sibling processes entirely, and it is
-not available: Docker rejects Podman's `--security-opt proc-opts=`, and remounting `/proc` inside the
-container needs `CAP_SYS_ADMIN`, which `cap-drop ALL` removes. Revisit only if the runtime changes.
-
-This is the third `/proc` surprise in this design, after `/proc/self/fd/N` laundering a read-only
-descriptor and the environ retargeting that motivated the whole project. `/proc` is where these
-assumptions go to die, and it deserves the attention.
+`hidepid=2` on `/proc` would hide sibling processes entirely and remove the sysctl dependency. Docker
+can't provide it: it rejects Podman's `--security-opt proc-opts=`, and remounting `/proc` inside the
+container needs `CAP_SYS_ADMIN`, which `cap-drop ALL` removes.

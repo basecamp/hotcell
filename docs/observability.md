@@ -308,9 +308,8 @@ libvips would then wait on the supervisor's scheduling, in a C call that Ruby ca
 wait is longest exactly when the host is under pressure.
 
 Only a death is reported. A worker that warns and then answers normally leaves no field on any event. So a
-tool that dies while its worker survives isn't described here. A cell's standard error also no longer
-reaches the container's log driver at all. That loses nothing, because the fleet's OTel collector drops
-complete non-JSON lines at ingest.
+tool that dies while its worker survives isn't described here. A cell's standard error doesn't reach the
+container's log driver.
 
 ### Which operation a line is about
 
