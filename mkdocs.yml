@@ -1,0 +1,92 @@
+---
+site_name: "Hot Cell"
+site_url: https://basecamp.github.io/hotcell/
+site_description: "Run untrusted file conversions in a separate, isolated process."
+repo_name: basecamp/hotcell
+repo_url: https://github.com/basecamp/hotcell
+edit_uri: ""
+copyright: "Copyright © 37signals, LLC"
+
+# `rake site:stage` fills this from README.md and docs/. See rakelib/site.rake.
+docs_dir: tmp/site/staging
+site_dir: tmp/site/build
+
+theme:
+  name: material
+  logo: docs/hotcell-logo.png
+  favicon: docs/hotcell-logo.png
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: lucide/sun-moon
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: lucide/sun
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: lucide/moon
+        name: Switch to system preference
+  icon:
+    repo: fontawesome/brands/github
+
+extra:
+  generator: false
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+      # The docs are written for GitHub and link to its heading anchors, which keep repeated hyphens.
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.highlight
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Reference manual:
+      - docs/index.md
+      - Concepts: docs/concepts.md
+      - Request lifecycle: docs/request-lifecycle.md
+      - Client API: docs/client-api.md
+      - Operation API: docs/operation-api.md
+      - Response codes: docs/codes.md
+      - Container: docs/container.md
+      - Scratch: docs/scratch.md
+      - Cell settings: docs/cell-settings.md
+      - Tuning: docs/tuning.md
+      - Observability: docs/observability.md
+      - Conformance: docs/conformance.md
+      - Active Storage operations: docs/active-storage.md
+      - ImageMagick: docs/imagemagick.md
+  - Design:
+      - docs/design/index.md
+      - Threat model: docs/design/threat-model.md
+      - Invariants: docs/design/invariants.md
+      - Worker isolation: docs/design/worker-isolation.md
+      - Passing file descriptors: docs/design/descriptors.md
+  - Contributing:
+      - docs/contributing/index.md
+      - Working on the gems: docs/contributing/guide.md
+      - Keep the docs current: docs/contributing/docs.md
+      - Architecture decision records: docs/contributing/decisions.md
+      - Established by experiment: docs/contributing/experiments.md
+      - Cell overhead: docs/contributing/overhead.md
