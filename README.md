@@ -18,6 +18,8 @@ release.
 The Active Storage gems need Rails 8.2, which is unreleased. Track `rails/rails` `main` until it ships.
 See [Active Storage operations](docs/active-storage.md).
 
+The reference manual is online at https://basecamp.github.io/hotcell/.
+
 ## Why would I use this?
 
 Your Rails application accepts uploads, so somewhere in it there's a line like this:
