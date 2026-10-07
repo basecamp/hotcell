@@ -16,12 +16,15 @@ client_ruby = ENV.fetch("HOTCELL_CLIENT_RUBY", RbConfig.ruby)
 gem_root = File.expand_path("..", __dir__)
 tests = Dir[File.join(gem_root, "test", "**", "*_test.rb")]
 
-status = HotCell::TestCell.boot(name: "legacy") do |cell|
+# Set inside the block, because TestCell.boot returns the cell rather than the block's value.
+passed = false
+
+HotCell::TestCell.boot(name: "legacy") do |cell|
   environment = { "PATH" => ENV.fetch("PATH"), "HOTCELL_WORK_SOCKET" => File.join(cell.directory, "work.sock") }
   command = [ client_ruby, "-I", File.join(gem_root, "lib"), "-I", File.join(gem_root, "test"),
               "-e", "ARGV.each { |test| require test }", *tests ]
 
-  system environment, *command, unsetenv_others: true
+  passed = system(environment, *command, unsetenv_others: true)
 end
 
-exit status ? 0 : 1
+exit passed ? 0 : 1
