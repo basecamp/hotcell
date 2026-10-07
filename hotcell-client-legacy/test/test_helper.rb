@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 # This file and every test run on Ruby 1.9.3, so they keep to what it has.
+puts "hotcell-client-legacy is under test on #{RUBY_DESCRIPTION}"
+
 require "minitest/autorun"
 require "socket"
 require "tempfile"
