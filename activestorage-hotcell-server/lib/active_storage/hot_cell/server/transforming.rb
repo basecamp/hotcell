@@ -14,13 +14,21 @@ module ActiveStorage
 
           format = format.to_s
 
-          # A scratch path has no extension, so ImageProcessing saves in the `convert` format.
-          pipeline(source, format, operations).call(destination: destination.path)
+          encoded = encoded_path(destination, format)
+          pipeline(source, format, operations).call(destination: encoded)
+          destination.adopt encoded unless encoded == destination.path
 
           describe destination.path, format
         end
 
         private
+          # A scratch path has no extension, so ImageProcessing saves in the `convert` format, straight to the
+          # path post ships. An includer whose toolchain cannot be told every format that way names a suffixed
+          # sibling instead, and it is adopted into place.
+          def encoded_path(destination, _format)
+            destination.path
+          end
+
           # Three `loader` calls, and the order is the point: ImageProcessing merges them key by key, so the
           # last one to write a key wins.
           #

@@ -14,6 +14,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### ActiveStorage::HotCell::Server
+
+#### Fixed
+
+* `transformers.image.magick` transforms a JPEG uploaded as `.jfif`, `.jif` or `.jfi` again, instead of failing it permanently as `unreadable`. The ImageMagick toolchain names its output format by extension again, as before v0.6.0, so a format ImageMagick has no coder for keeps the source's format, as it does under stock Rails. (#84)
+
 ## v1.0.0 / 2026-10-05
 
 ### Documentation

@@ -141,7 +141,8 @@ module HotCell
     # never names one at all.
     #
     # `extension` names a suffixed sibling on the same scratch instead, for a producer that appends an
-    # extension of its own (pdftoppm). The sibling is not what post ships: adopt renames it into place.
+    # extension of its own (pdftoppm) or picks its format from one (the ImageMagick transform). The sibling
+    # is not what post ships: adopt renames it into place.
     def path(extension: nil)
       base = (@path ||= scratch_path)
       extension.nil? ? base : "#{base}.#{extension}"

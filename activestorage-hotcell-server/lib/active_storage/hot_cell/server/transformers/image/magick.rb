@@ -42,6 +42,16 @@ module ActiveStorage
                 { inherit_fds: [ source.to_io ] }
               end
 
+              # ImageMagick takes an explicit format only as a coder name, `jfif:/path`, and it has no coder for
+              # every format Rails asks for: Marcel maps `.jfif`, `.jif` and `.jfi` to image/jpeg, so a JPEG
+              # uploaded under one of them asks for that format, and the prefix reads as a filename that does not
+              # exist (#84). Named by extension instead, ImageMagick picks the coder from a suffix it knows and
+              # keeps the source's format for one it does not, which is what stock Rails gets from the tempfile
+              # ImageProcessing names for it. The vips toolchain keeps the direct write.
+              def encoded_path(destination, format)
+                destination.path(extension: format)
+              end
+
               def describe(path, format)
                 { format: format, content_type: CONTENT_TYPES[format.downcase], bytes: File.size(path) }.compact
               end

@@ -238,7 +238,8 @@ Names the file on scratch that the operation writes, the first time that you cal
 returns, the worker copies that file back through the descriptor and flushes it before it reports success.
 
 With `extension:`, returns a sibling name with that suffix, for a tool that appends its own extension,
-such as `pdftoppm`. Call `adopt(staged)` to rename the sibling onto `path` so that the worker ships it.
+such as `pdftoppm`, or that picks its output format from the extension, such as the ImageMagick transform.
+Call `adopt(staged)` to rename the sibling onto `path` so that the worker ships it.
 
 An operation can instead write directly through the descriptor at `fd_path`. Then nothing is copied, and
 the worker only flushes and measures the file. If the operation fails partway through a direct write, the
