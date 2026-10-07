@@ -9,7 +9,7 @@ class TransportTest < LegacyTest
     client = HotCell::Client::Legacy.new(File.join(Dir.tmpdir, "no-such-cell", "work.sock"))
     error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-    assert_equal "unavailable", error.code
+    assert_equal "unavailable", error.hot_cell_failure.code
   end
 
   # A supervisor that stops calling accept leaves its backlog full, where a blocking connect on Linux would wait
@@ -33,7 +33,7 @@ class TransportTest < LegacyTest
         end
 
         assert call.join(2), "the call waited on a cell whose backlog is full"
-        assert_includes %w[timeout unavailable], call.value.code
+        assert_includes %w[timeout unavailable], call.value.hot_cell_failure.code
       ensure
         call.kill if call
         pending.each { |socket| socket.close }
@@ -49,7 +49,7 @@ class TransportTest < LegacyTest
       error = nil
       took = elapsed { error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] } }
 
-      assert_equal "timeout", error.code
+      assert_equal "timeout", error.hot_cell_failure.code
       assert_operator took, :<, 2
     end
   end
@@ -73,7 +73,7 @@ class TransportTest < LegacyTest
         end
 
         assert call.join(2), "the call waited on a peer that never reads"
-        assert_equal "timeout", call.value.code
+        assert_equal "timeout", call.value.hot_cell_failure.code
       ensure
         call.kill if call
         peer.kill
@@ -87,7 +87,7 @@ class TransportTest < LegacyTest
     with_peer(oversize) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "unavailable", error.code
+      assert_equal "unavailable", error.hot_cell_failure.code
     end
   end
 
@@ -96,7 +96,7 @@ class TransportTest < LegacyTest
     with_peer(partial) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "unavailable", error.code
+      assert_equal "unavailable", error.hot_cell_failure.code
     end
   end
 
@@ -104,7 +104,7 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.close }) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "unavailable", error.code
+      assert_equal "unavailable", error.hot_cell_failure.code
     end
   end
 
@@ -112,7 +112,7 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write "not json\n" }) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "unavailable", error.code
+      assert_equal "unavailable", error.hot_cell_failure.code
     end
   end
 
@@ -120,7 +120,7 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write %({"v":1,"ok":"true","result":{}}\n) }) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "unavailable", error.code
+      assert_equal "unavailable", error.hot_cell_failure.code
     end
   end
 
@@ -129,7 +129,41 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write answer }) do |client|
       error = assert_raises(HotCell::Client::Legacy::PermanentFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal "novel", error.code
+      assert_equal "novel", error.hot_cell_failure.code
+    end
+  end
+
+  def test_the_raised_exception_carries_the_failure_itself
+    answer = %({"v":1,"ok":false,"error":{"code":"killed","permanent":false,"cause":"deadline","signal":"KILL",) +
+             %("class":"Vips::Error","message":"too slow","stderr":"fatal"}}\n)
+    with_peer(lambda { |connection| connection.write answer }) do |client|
+      error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+      failure = error.hot_cell_failure
+
+      assert_equal [ "killed", "deadline", "KILL", "Vips::Error", "too slow", "fatal" ],
+                   [ failure.code, failure.cause, failure.signal, failure.error_class, failure.message, failure.stderr ]
+      assert_equal false, failure.permanent?
+    end
+  end
+
+  def test_a_failure_with_no_code_leaves_it_out_of_the_message
+    answer = %({"v":1,"ok":false,"error":{"cause":"protected","message":"locked"}}\n)
+    with_peer(lambda { |connection| connection.write answer }) do |client|
+      error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+
+      assert_equal "protected: locked", error.message
+    end
+  end
+
+  def test_a_verdict_can_be_rescued_as_one
+    answer = %({"v":1,"ok":false,"error":{"code":"unreadable","permanent":true,"cause":"protected"}}\n)
+    with_peer(lambda { |connection| connection.write answer }) do |client|
+      begin
+        client.perform "test.echo", [], []
+        flunk "expected a raise"
+      rescue HotCell::Client::Legacy::Verdict => error
+        assert_equal "protected", error.hot_cell_failure.cause
+      end
     end
   end
 
@@ -139,7 +173,7 @@ class TransportTest < LegacyTest
       with_peer(lambda { |connection| connection.write answer }) do |client|
         error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-        assert_equal false, error.error[:permanent]
+        assert_equal false, error.hot_cell_failure.permanent?
       end
     end
   end
@@ -169,7 +203,7 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write answer }) do |client|
       error = assert_raises(HotCell::Client::Legacy::PermanentFailure) { client.perform "test.echo", [], [] }
 
-      assert error.error[:message].valid_encoding?
+      assert error.hot_cell_failure.message.valid_encoding?
       assert error.message.valid_encoding?
       assert_match "bad  bytes", error.message
     end
@@ -180,8 +214,8 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write answer }) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal [ :permanent, :code, :cause ], error.error.keys
-      assert error.error[:cause].valid_encoding?
+      assert_equal [ :code, :permanent, :cause ], error.hot_cell_failure.to_h.keys
+      assert error.hot_cell_failure.cause.valid_encoding?
     end
   end
 
@@ -190,9 +224,9 @@ class TransportTest < LegacyTest
     with_peer(lambda { |connection| connection.write answer }) do |client|
       error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
 
-      assert_equal HotCell::Client::Legacy::MAX_FIELD_BYTES, error.error[:message].bytesize
-      assert_equal HotCell::Client::Legacy::MAX_FIELD_BYTES, error.error[:stderr].bytesize
-      assert error.error[:stderr].end_with?("fatal")
+      assert_equal HotCell::Client::Legacy::MAX_FIELD_BYTES, error.hot_cell_failure.message.bytesize
+      assert_equal HotCell::Client::Legacy::MAX_FIELD_BYTES, error.hot_cell_failure.stderr.bytesize
+      assert error.hot_cell_failure.stderr.end_with?("fatal")
     end
   end
 
