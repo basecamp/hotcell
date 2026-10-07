@@ -93,19 +93,8 @@ jobs:
           bundler-cache: true
       - run: bundle exec rake test:hotcell
 
-  # hotcell-client-legacy's suite runs against a real cell, so this job needs two Rubies:
-  #
-  # - The client's Ruby, from the matrix. This is the Ruby under test, as old as 1.9.3.
-  # - Ruby 3.4 for the cell. hotcell-server needs Ruby 3.3 or later, and the repository's bundle does not
-  #   resolve on an older Ruby, so the cell cannot run on the client's Ruby.
-  #
-  # The first setup-ruby step installs the client's Ruby, and the job passes its path to the suite as
-  # HOTCELL_CLIENT_RUBY. The second installs 3.4 and puts it first on the PATH, so `bundle exec rake` runs on
-  # 3.4: hotcell-client-legacy/test/run boots the cell there and runs the tests on HOTCELL_CLIENT_RUBY.
-  #
-  # Each lane names its runner image, because ruby-builder does not publish every Ruby for every image: 1.9.3
-  # exists only for ubuntu-22.04. When a Ruby or an image goes out of support, remove or change its line. An official ruby:X Docker image cannot stand in for the client's step:
-  # ruby:1.9.3 and ruby:2.0 use schema-1 manifests, which Docker refuses to pull.
+  # hotcell-client-legacy's suite runs against a real cell, so this job needs two Rubies: the client's Ruby, which
+  # is the one under test, and Ruby 3.4 for the cell, because hotcell-server needs Ruby 3.3 or later.
   client-legacy:
     name: "hotcell-client-legacy (ruby ${{matrix.ruby}}, ${{matrix.os}})"
     runs-on: ${{matrix.os}}
@@ -115,35 +104,39 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-22.04, ruby: "1.9.3" }
-          - { os: ubuntu-24.04, ruby: "2.0" }
-          - { os: ubuntu-24.04, ruby: "2.1" }
-          - { os: ubuntu-24.04, ruby: "2.2" }
-          - { os: ubuntu-24.04, ruby: "2.3" }
-          - { os: ubuntu-24.04, ruby: "2.4" }
-          - { os: ubuntu-24.04, ruby: "2.5" }
-          - { os: ubuntu-24.04, ruby: "2.6" }
-          - { os: ubuntu-24.04, ruby: "2.7" }
-          - { os: ubuntu-24.04, ruby: "3.0" }
-          - { os: ubuntu-24.04, ruby: "3.1" }
-          - { os: ubuntu-24.04, ruby: "3.2" }
-          - { os: ubuntu-24.04, ruby: "3.3" }
-          - { os: ubuntu-24.04, ruby: "3.4" }
-          - { os: ubuntu-24.04, ruby: "4.0" }
-          - { os: ubuntu-24.04, ruby: "head" }
+          - { ruby: "1.9.3", os: ubuntu-22.04 }
+          - { ruby: "2.0", os: ubuntu-24.04 }
+          - { ruby: "2.1", os: ubuntu-24.04 }
+          - { ruby: "2.2", os: ubuntu-24.04 }
+          - { ruby: "2.3", os: ubuntu-24.04 }
+          - { ruby: "2.4", os: ubuntu-24.04 }
+          - { ruby: "2.5", os: ubuntu-24.04 }
+          - { ruby: "2.6", os: ubuntu-24.04 }
+          - { ruby: "2.7", os: ubuntu-24.04 }
+          - { ruby: "3.0", os: ubuntu-24.04 }
+          - { ruby: "3.1", os: ubuntu-24.04 }
+          - { ruby: "3.2", os: ubuntu-24.04 }
+          - { ruby: "3.3", os: ubuntu-24.04 }
+          - { ruby: "3.4", os: ubuntu-24.04 }
+          - { ruby: "4.0", os: ubuntu-24.04 }
+          - { ruby: "head", os: ubuntu-24.04 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      # The client's Ruby. setup-ruby reports where it installed this Ruby as its `ruby-prefix` output, and
+      # `id: client` is how the last step reads it, as `steps.client.outputs.ruby-prefix`.
       - uses: ruby/setup-ruby@762794c140bbeda0f1224786aa33b4b46783a6c1 # v1.326.0
         id: client
         with:
           ruby-version: "${{matrix.ruby}}"
           bundler: none
+      # The cell's Ruby. This step runs second, so 3.4 comes first on the PATH and `bundle exec rake` runs on it.
       - uses: ruby/setup-ruby@762794c140bbeda0f1224786aa33b4b46783a6c1 # v1.326.0
         with:
           ruby-version: "3.4"
           bundler-cache: true
+      # hotcell-client-legacy/test/run boots the cell on 3.4 and runs the tests on HOTCELL_CLIENT_RUBY.
       - run: bundle exec rake test:gem:hotcell-client-legacy
         env:
           HOTCELL_CLIENT_RUBY: "${{ steps.client.outputs.ruby-prefix }}/bin/ruby"
