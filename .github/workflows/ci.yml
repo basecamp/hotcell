@@ -103,19 +103,34 @@ jobs:
   # HOTCELL_CLIENT_RUBY. The second installs 3.4 and puts it first on the PATH, so `bundle exec rake` runs on
   # 3.4: hotcell-client-legacy/test/run boots the cell there and runs the tests on HOTCELL_CLIENT_RUBY.
   #
-  # 1.9.3 runs on ubuntu-22.04, because ruby-builder publishes 1.9.3 for no later image. An official ruby:X
-  # Docker image cannot stand in for the client's step: ruby:1.9.3 and ruby:2.0 use schema-1 manifests, which
-  # Docker refuses to pull.
+  # Each lane names its runner image, because ruby-builder does not publish every Ruby for every image: 1.9.3
+  # exists only for ubuntu-22.04. When a Ruby or an image goes out of support, remove or change its line. An official ruby:X Docker image cannot stand in for the client's step:
+  # ruby:1.9.3 and ruby:2.0 use schema-1 manifests, which Docker refuses to pull.
   client-legacy:
-    name: "hotcell-client-legacy (ruby ${{matrix.ruby}})"
-    runs-on: ${{ matrix.ruby == '1.9.3' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    name: "hotcell-client-legacy (ruby ${{matrix.ruby}}, ${{matrix.os}})"
+    runs-on: ${{matrix.os}}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        ruby: ["1.9.3", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.7", "3.0", "3.1", "3.2", "3.3", "3.4",
-               "4.0", "head"]
+        include:
+          - { os: ubuntu-22.04, ruby: "1.9.3" }
+          - { os: ubuntu-24.04, ruby: "2.0" }
+          - { os: ubuntu-24.04, ruby: "2.1" }
+          - { os: ubuntu-24.04, ruby: "2.2" }
+          - { os: ubuntu-24.04, ruby: "2.3" }
+          - { os: ubuntu-24.04, ruby: "2.4" }
+          - { os: ubuntu-24.04, ruby: "2.5" }
+          - { os: ubuntu-24.04, ruby: "2.6" }
+          - { os: ubuntu-24.04, ruby: "2.7" }
+          - { os: ubuntu-24.04, ruby: "3.0" }
+          - { os: ubuntu-24.04, ruby: "3.1" }
+          - { os: ubuntu-24.04, ruby: "3.2" }
+          - { os: ubuntu-24.04, ruby: "3.3" }
+          - { os: ubuntu-24.04, ruby: "3.4" }
+          - { os: ubuntu-24.04, ruby: "4.0" }
+          - { os: ubuntu-24.04, ruby: "head" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
