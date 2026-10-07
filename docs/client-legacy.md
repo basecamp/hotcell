@@ -1,21 +1,21 @@
 ---
 type: Reference
 title: "Legacy client"
-description: "HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the failures it raises, and what it leaves out."
+description: "HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the failures it raises, and how it differs from hotcell-client."
 sources:
   - hotcell-client-legacy/lib/hot_cell/client/legacy.rb
 ---
 
 # Legacy client
 
-`hotcell-client-legacy` calls a cell from an application that can't run `hotcell-client`, which needs Ruby 3.3
-or later and Active Support. It's one file that uses only the standard library, and it runs on legacy Ruby
-versions as old as 1.9.3. The cell runs its own Ruby in its own container, so nothing changes on the cell side.
-
-The code is in
-[`hotcell-client-legacy/lib/hot_cell/client/legacy.rb`](../hotcell-client-legacy/lib/hot_cell/client/legacy.rb).
+Use `hotcell-client-legacy` to call a cell from an application on a legacy Ruby version, back to 1.9.3, that
+`hotcell-client` doesn't support. It uses only the standard library.
 
 ## Call a cell
+
+1. Add `hotcell-client-legacy` to your application's Gemfile.
+2. Create a client with the path to the cell's `work.sock`.
+3. Call `perform` with the operation's name, the input and output files, and a payload.
 
 ```ruby
 require "hotcell-client-legacy"
@@ -29,57 +29,57 @@ File.open(source, "rb") do |input|
 end
 ```
 
-`HotCell::Client::Legacy.new(socket_path, options = {})` takes the path to the cell's `work.sock` and these
-options:
+### Options
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `timeout:` | `30` | Seconds that the whole call may take: connecting, sending the request, and reading the answer. It must be more than the cell's `answer_within`. See [Tuning](tuning.md#make-the-timeouts-agree). |
-| `group:` | none | The cell's gid. Before it sends a request, the client puts each input and output in this group and sets mode `0640` on each input and `0620` on each output, as `hotcell-client` does. Leave it unset only where the application and the cell run as one user. See [The shared group](client-api.md#the-shared-group). |
+| `timeout:` | `30` | Seconds to wait for the whole call: connecting, sending, and reading the answer. Set it higher than the cell's `answer_within`. See [Tuning](tuning.md#make-the-timeouts-agree). |
+| `group:` | none | The cell's gid. The client gives each input and output this group, with mode `0640` for inputs and `0620` for outputs. Leave it unset only when the application and the cell run as one user. See [The shared group](client-api.md#the-shared-group). |
 
-`perform(operation, inputs, outputs, payload = {})` sends one request and returns the operation's result, a
-`Hash` with `Symbol` keys. It accepts the following:
+**Caution:** The client doesn't restore a file's group or mode after the call.
 
-- `operation`: the routing name of the operation.
-- `inputs` and `outputs`: one IO, or an `Array` of IOs. Each input must be open read-only and each output
-  write-only, and each must be a regular file not opened with `O_APPEND`.
-- `payload`: a `Hash` that JSON can carry.
+### `perform` arguments
 
-**Caution:** As with `hotcell-client`, the client doesn't restore a file's group or mode after the call.
+| Argument | Description |
+| --- | --- |
+| `operation` | The operation's routing name. |
+| `inputs` | An IO or an `Array` of IOs. Open each one read-only, on a regular file, without `O_APPEND`. |
+| `outputs` | An IO or an `Array` of IOs. Open each one write-only, on a regular file, without `O_APPEND`. |
+| `payload` | Optional. A `Hash` of JSON values. |
 
-## Failures
+`perform` returns the operation's result, a `Hash` with `Symbol` keys.
 
-`perform` raises `HotCell::Client::Legacy::PermanentFailure` when the cell's answer says `permanent: true`, and
-`HotCell::Client::Legacy::TransientFailure` otherwise. For what each side of that split means, see
-[Response codes](codes.md). The two classes share no ancestor but `StandardError`, so rescue each by name.
+## Handle failures
+
+`perform` raises one of these classes. Neither descends from the other, so rescue each one by name.
+
+| Class | Raised when |
+| --- | --- |
+| `HotCell::Client::Legacy::PermanentFailure` | The cell marks the failure permanent. A retry fails the same way. |
+| `HotCell::Client::Legacy::TransientFailure` | Any other failure. A retry might succeed. |
 
 Both classes have these attributes:
 
 | Attribute | Description |
 | --- | --- |
-| `code` | The failure's code, such as `unreadable` or `capacity`. |
-| `error` | The failure's fields from the cell's answer, as a `Hash` with `Symbol` keys: `permanent`, and whichever of `code`, `cause`, `signal`, `class`, `message` and `stderr` the cell sent. |
+| `code` | The failure's code. See [Response codes](codes.md). |
+| `error` | A `Hash` with `permanent` and whichever of `code`, `cause`, `signal`, `class`, `message`, and `stderr` the cell sent. Each value except `permanent` is a `String` of at most 512 bytes, with invalid UTF-8 removed. `stderr` keeps its last 512 bytes. |
 
-The client makes each of those fields but `permanent` a `String`, caps it at 512 bytes, and removes bytes
-that aren't valid UTF-8, as `hotcell-client` does. `stderr` keeps its last 512 bytes, where the fatal line is. The text still comes from
-the cell, so treat it as untrusted.
+The text in `error` comes from the cell. Treat it as untrusted.
 
-A call that gets no usable answer raises `TransientFailure` with one of these codes:
+When the client gets no usable answer, it raises `TransientFailure` with one of these codes:
 
 | Code | Raised when |
 | --- | --- |
-| `timeout` | The deadline passed while the client was connecting, sending, or reading. |
-| `unavailable` | The socket doesn't exist or refuses the connection, the connection closed with no answer, or the answer isn't a valid response. |
+| `timeout` | The deadline passed. |
+| `unavailable` | The socket is missing or refuses the connection, the cell closed the connection without answering, or the answer isn't valid. |
 
-## What the legacy client leaves out
+## Differences from `hotcell-client`
 
-If you need any of the following, use `hotcell-client`:
+Unlike `hotcell-client`, the legacy client doesn't do the following:
 
-- Rails integration, cell registration, Active Storage support, the `perform.hot_cell` notification, and
-  metrics.
-- Your own exception classes. The legacy client raises its own; rescue them and raise yours.
-- Checks before sending. The legacy client doesn't check access modes, payload values, or the request's size.
-  The cell checks the descriptors and the request, and answers `invalid`, which is permanent. `JSON.generate`
-  turns a `Symbol` or a `Time` in the payload into a `String` instead of raising.
-- Refusing an empty output. `hotcell-client` raises a transient failure when a cell reports success and the
-  outputs hold no bytes. The legacy client returns the result.
+- Integrate with Rails or Active Storage, register cells, publish `perform.hot_cell`, or report metrics.
+- Raise your own exception classes. Rescue its classes and raise yours.
+- Check files or the payload before sending. The cell checks the files and answers `invalid`.
+  `JSON.generate` turns a `Symbol` or a `Time` in the payload into a `String`.
+- Treat a success with empty outputs as a failure. The legacy client returns the result.

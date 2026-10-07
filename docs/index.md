@@ -26,6 +26,6 @@ This manual describes Hot Cell one topic per page. For an introduction and a qui
 | [Conformance](conformance.md) | What bin/conformance checks about a cell image, and what it cannot check. |
 | [Active Storage operations](active-storage.md) | The Active Storage client classes, the cell operations that serve them, how their failures are retried, and the limits each declares. |
 | [ImageMagick](imagemagick.md) | ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them. |
-| [Legacy client](client-legacy.md) | HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the failures it raises, and what it leaves out. |
+| [Legacy client](client-legacy.md) | HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the failures it raises, and how it differs from hotcell-client. |
 
 <!-- indexstop -->
