@@ -23,6 +23,21 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # Rails names a web image's variant format after its upload's extension, so a JPEG uploaded as `photo.jfif`
+  # asks for format `jfif` (#84).
+  %w[ jfif JFIF jif jfi ].each do |format|
+    define_method :"test_a_jpeg_uploaded_as_#{format}_comes_back_as_a_jpeg" do
+      with_cell do
+        with_active_storage_setting :web_image_content_types, %w[ image/png image/jpeg image/gif ] do
+          transform({ resize_to_limit: [ 20, 20 ] }, "colour.jpg", format: format) do |output|
+            assert_equal "JPEG", identify(output.path)[:format]
+            assert_operator identify(output.path)[:width], :<=, 20
+          end
+        end
+      end
+    end
+  end
+
   def test_the_tempfile_is_closed_and_unlinked_afterwards
     with_cell do
       leaked = nil

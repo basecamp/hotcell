@@ -14,6 +14,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### ActiveStorage::HotCell::Client
+
+#### Fixed
+
+* A JPEG uploaded as `.jfif`, `.jif` or `.jfi` is transformed instead of failing permanently as `unreadable`. Rails names a web image's variant format after the upload's extension. The ImageMagick transformer has no coder for these extensions, and the Vips transformer has no saver for `.jif` or `.jfi`. The transformers now send the cell the canonical extension of the format's content type, such as `jpg`, which is the extension Rails falls back to. (#84)
+
 ## v1.0.0 / 2026-10-05
 
 ### Documentation

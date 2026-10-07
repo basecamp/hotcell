@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "tempfile"
+require "marcel"
 require "active_storage"
 require "active_support/core_ext/class/attribute"
 require "active_support/core_ext/hash/deep_transform_values"
@@ -33,11 +34,25 @@ module ActiveStorage
               output = Tempfile.new([ "hotcell", ".#{format}" ], binmode: true)
 
               begin
-                convert file, output, format: format.to_s, operations: stringified(transformations)
+                convert file, output, format: canonical(format), operations: stringified(transformations)
                 output.tap(&:rewind)
               rescue StandardError
                 output.close!
                 raise
+              end
+            end
+
+            # Rails names a web image's variant format after its upload's extension, so a JPEG uploaded as
+            # `photo.jfif` asks for `jfif`. ImageMagick has no coder for `jfif`, `jif` or `jfi`, and libvips has no
+            # saver for the last two (#84). So a web image's format crosses as its content type's canonical
+            # extension, the one Rails itself names when the upload's extension does not match.
+            def canonical(format)
+              content_type = Marcel::MimeType.for(extension: format.to_s)
+
+              if ActiveStorage.web_image_content_types.include?(content_type)
+                Marcel::Magic.new(content_type).extensions.first
+              else
+                format.to_s
               end
             end
 
