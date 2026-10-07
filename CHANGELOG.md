@@ -21,6 +21,12 @@ gem but are what an operator runs against their own image.
 
 * An operation can say why it couldn't decode an input: a subclass of `HotCell::UnreadableInput` that defines `self.cause` sends that cause with the `unreadable` failure. `HotCell::Codes::PROTECTED` names the first such cause, `protected`. See `docs/codes.md`.
 
+### HotCell::Client
+
+#### Added
+
+* The exception that the client raises for a failed call carries the `HotCell::Failure`, so an application can read the failure's `code` and `cause` without parsing the message. Call `hot_cell_failure` on the exception, or rescue `HotCell::Verdict`, a module that the client extends onto every such exception, to catch it whatever classes the application registered. See [Response codes](docs/codes.md#exception-classes). (#97)
+
 ### ActiveStorage::HotCell::Client
 
 #### Fixed

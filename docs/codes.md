@@ -109,7 +109,8 @@ message:
   previewers send it for a password-protected PDF.
 
 An operation sends a cause by raising a subclass of `HotCell::UnreadableInput` that defines `self.cause`.
-See [`unreadable(*classes)`](operation-api.md#unreadableclasses).
+See [`unreadable(*classes)`](operation-api.md#unreadableclasses). A caller reads the cause with
+`hot_cell_failure`. See [Exception classes](#exception-classes).
 
 ## Unknown codes and causes
 
@@ -142,6 +143,18 @@ classification.
 
 The exception's message is the failure's `code`, `cause`, error class, and message, joined with `: `, then
 the `stderr` tail in parentheses when it exists. For example, `killed: crashed (libgomp: ...)`.
+
+To read the failure without parsing the message, call `hot_cell_failure` on the exception. It returns the
+`HotCell::Failure`, which has `code`, `cause`, `error_class`, `message`, `signal`, `stderr`, and
+`permanent?`. The client extends every exception that it raises for a failed call with the
+`HotCell::Verdict` module, so you can also rescue `HotCell::Verdict` whatever classes you registered:
+
+```ruby
+rescue HotCell::Verdict => error
+  raise unless error.hot_cell_failure.cause == HotCell::Codes::PROTECTED
+
+  lock_placeholder
+```
 
 ## What Active Storage records
 
