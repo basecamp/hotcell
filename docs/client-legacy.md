@@ -8,8 +8,9 @@ sources:
 
 # Legacy client
 
-Use `hotcell-client-legacy` to call a cell from an application on a legacy Ruby version, back to 1.9.3, that
-`hotcell-client` doesn't support. It uses only the standard library.
+Many legacy Rails applications run a Ruby version that `hotcell-client` doesn't support. To run custom operations
+in a cell from one of those applications, use `hotcell-client-legacy`. It works on legacy Ruby versions, back to
+1.9.3, and uses only the standard library.
 
 ## Call a cell
 
