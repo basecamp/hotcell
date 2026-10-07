@@ -34,6 +34,25 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
     end
   end
 
+  # Rails names a web image's variant format after its upload's extension when Marcel maps that extension to
+  # the blob's content type, so a JPEG uploaded as `photo.jfif` asks for format `jfif`. ImageMagick has no
+  # coder by that name (#84).
+  %w[ jfif jif jfi ].each do |format|
+    define_method :"test_a_jpeg_uploaded_as_#{format}_comes_back_as_a_jpeg" do
+      Cell.boot do |cell|
+        with_output(".#{format}") do |destination|
+          response = cell.call "active_storage.transformers.image.magick",
+                               inputs: [ fixture("colour.jpg") ], outputs: [ destination ],
+                               payload: { format: format, operations: { resize_to_limit: [ 20, 20 ] } }
+
+          assert_ok response
+          assert_equal "JPEG", identify(destination)[:format]
+          assert_operator identify(destination)[:width], :<=, 20
+        end
+      end
+    end
+  end
+
   # An ImageMagick shape the vips path cannot run: coalesce is a real ImageMagick operation. This is the
   # whole reason the ImageMagick operations exist.
   def test_an_imagemagick_only_operation_runs
