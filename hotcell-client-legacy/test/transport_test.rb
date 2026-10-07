@@ -137,9 +137,30 @@ class TransportTest < LegacyTest
     [ %("permanent":"true"), %("permanent":1), %("other":true) ].each do |flag|
       answer = %({"v":1,"ok":false,"error":{"code":"unreadable",#{flag}}}\n)
       with_peer(lambda { |connection| connection.write answer }) do |client|
-        assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+        error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+
+        assert_equal false, error.error[:permanent]
       end
     end
+  end
+
+  # Ruby before 2.2 never frees a Symbol, so a key the cell chooses must not become one.
+  def test_keys_the_cell_chooses_do_not_become_symbols
+    answers = [ %({"v":1,"ok":true,"result":{"result_key_from_the_cell":1}}\n),
+                %({"v":1,"ok":false,"error":{"code":"failed","error_key_from_the_cell":1}}\n) ]
+    answers.each do |answer|
+      with_peer(lambda { |connection| connection.write answer }) do |client|
+        begin
+          client.perform "test.echo", [], []
+        rescue HotCell::Client::Legacy::TransientFailure
+          nil
+        end
+      end
+    end
+
+    names = Symbol.all_symbols.map { |symbol| symbol.to_s }
+    refute_includes names, "result_key_from_the_cell"
+    refute_includes names, "error_key_from_the_cell"
   end
 
   # JSON.parse passes raw bytes that are not UTF-8 straight through, on every json from 1.5 to 3.0.

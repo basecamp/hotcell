@@ -48,7 +48,7 @@ end
 | `outputs` | An IO or an `Array` of IOs. Open each one write-only, on a regular file, without `O_APPEND`. |
 | `payload` | Optional. A `Hash` of JSON values. |
 
-`perform` returns the operation's result, a `Hash` with `Symbol` keys.
+`perform` returns the operation's result, a `Hash` with `String` keys.
 
 ## Handle failures
 
@@ -64,7 +64,7 @@ Both classes have these attributes:
 | Attribute | Description |
 | --- | --- |
 | `code` | The failure's code. See [Response codes](codes.md). |
-| `error` | A `Hash` with `permanent` and whichever of `code`, `cause`, `signal`, `class`, `message`, and `stderr` the cell sent. Each value except `permanent` is a `String` of at most 512 bytes, with invalid UTF-8 removed. `stderr` keeps its last 512 bytes. |
+| `error` | A `Hash` with `permanent`, which is `true` or `false`, and whichever of `code`, `cause`, `signal`, `class`, `message`, and `stderr` the cell sent. Each of those is a `String` of at most 512 bytes, with invalid UTF-8 removed. `stderr` keeps its last 512 bytes. |
 
 The text in `error` comes from the cell. Treat it as untrusted.
 

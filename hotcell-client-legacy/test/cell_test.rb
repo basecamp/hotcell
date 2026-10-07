@@ -10,7 +10,7 @@ class CellTest < LegacyTest
         File.open(destination, "wb") { |output| client.perform "test.uppercase", [ input ], [ output ] }
       end
 
-      assert_equal({ bytes: 24 }, result)
+      assert_equal({ "bytes" => 24 }, result)
       assert_equal "HELLO FROM THE COLD SIDE", File.binread(destination)
     end
   end
@@ -25,10 +25,10 @@ class CellTest < LegacyTest
     end
   end
 
-  def test_a_payload_and_a_result_round_trip_with_symbol_keys
+  def test_a_payload_and_a_result_round_trip_with_string_keys
     result = client.perform("test.echo", [], [], "format" => "png", "resize" => [ 800, 600 ])
 
-    assert_equal({ echoed: { format: "png", resize: [ 800, 600 ] } }, result)
+    assert_equal({ "echoed" => { "format" => "png", "resize" => [ 800, 600 ] } }, result)
   end
 
   def test_a_permanent_failure_raises_permanent_failure

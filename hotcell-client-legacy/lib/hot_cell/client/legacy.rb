@@ -64,7 +64,7 @@ module HotCell
         @group = options[:group]
       end
 
-      # Returns the operation's result, a Hash with Symbol keys. Raises PermanentFailure or TransientFailure
+      # Returns the operation's result, a Hash with String keys. Raises PermanentFailure or TransientFailure
       # according to the `permanent` flag on the cell's answer; a failure with no answer at all is transient.
       def perform(operation, inputs, outputs, payload = {})
         inputs = [ inputs ] unless inputs.is_a?(Array)
@@ -79,12 +79,12 @@ module HotCell
                              "outputs" => outputs.size, "payload" => payload) + "\n"
 
         answer = exchange(line, inputs + outputs)
-        return answer[:result] if answer[:ok]
+        return answer["result"] if answer["ok"]
 
         # Built rather than passed to raise, because Ruby 2.x reads a trailing Hash given to raise as its options
         # and takes `cause` out of it.
-        error = sanitize(answer[:error])
-        raise (error[:permanent] == true ? PermanentFailure : TransientFailure).new(error)
+        error = sanitize(answer["error"])
+        raise (error[:permanent] ? PermanentFailure : TransientFailure).new(error)
       end
 
       private
@@ -182,16 +182,19 @@ module HotCell
 
         # `ok` must be the boolean it says it is, because Ruby would read `"false"`, `0` and `[]` as success, and
         # a garbled answer would become an `ok` carrying no result.
+        #
+        # String keys, because Ruby before 2.2 never frees a Symbol: symbolizing the keys a cell chooses would let a
+        # compromised cell grow this process's memory with every answer.
         def parse(line)
           answer = begin
-            JSON.parse(line, symbolize_names: true)
+            JSON.parse(line)
           rescue StandardError => error
             return unavailable("the cell's answer is not JSON: #{error.class}")
           end
 
           valid = answer.is_a?(Hash) &&
-            ((answer[:ok] == true && answer[:result].is_a?(Hash)) ||
-             (answer[:ok] == false && answer[:error].is_a?(Hash)))
+            ((answer["ok"] == true && answer["result"].is_a?(Hash)) ||
+             (answer["ok"] == false && answer["error"].is_a?(Hash)))
           valid ? answer : unavailable("the cell's answer is not a v#{PROTOCOL_VERSION} response")
         end
 
@@ -200,9 +203,10 @@ module HotCell
         # raise ArgumentError and a log line raise Encoding::CompatibilityError. So every String field is capped
         # and scrubbed, as hotcell-core's Failure does. `stderr` keeps its tail, where the fatal line is.
         def sanitize(error)
-          sanitized = { permanent: error[:permanent] }
+          sanitized = { permanent: error["permanent"] == true }
           FAILURE_FIELDS.each do |key|
-            sanitized[key] = scrub(error[key].to_s, key == :stderr) unless error[key].nil?
+            value = error[key.to_s]
+            sanitized[key] = scrub(value.to_s, key == :stderr) unless value.nil?
           end
           sanitized
         end
@@ -223,7 +227,7 @@ module HotCell
         end
 
         def transient(code, message)
-          { ok: false, error: { code: code, permanent: false, message: message } }
+          { "ok" => false, "error" => { "code" => code, "permanent" => false, "message" => message } }
         end
 
         # Monotonic where the Ruby has it (2.1 and later), so a clock stepped by NTP cannot stretch a deadline.
