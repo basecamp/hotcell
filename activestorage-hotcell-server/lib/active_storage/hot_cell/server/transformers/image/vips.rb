@@ -10,7 +10,8 @@ module ActiveStorage
         module Image
           # What `ActiveStorage::Transformers::ImageProcessingTransformer` does, moved out of the application,
           # and deliberately nothing more: the transformations and the format reach ImageProcessing exactly as
-          # Rails hands them over.
+          # Rails hands them over, except that the client sends a web image's format as its content type's
+          # canonical extension, so `jfif` arrives as `jpg` (#84).
           #
           # There is no allowlist here, and that mirrors Rails: the vips path validates exactly one thing —
           # `combine_options` is refused — and `ActiveStorage.supported_image_processing_methods` is enforced by
