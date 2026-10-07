@@ -65,6 +65,7 @@ bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]
 hotcell-core/                 the wire protocol, descriptors, failures — both sides depend on it
 hotcell-client/               the application side, and the installer that scaffolds a cell
 hotcell-server/               the supervisor, workers, slots, limits, and exe/hotcell
+hotcell-client-legacy/        a dependency-free client for legacy Ruby versions
 activestorage-hotcell-server/ the media operations
 activestorage-hotcell-client/ the Rails transformer, analyzers and previewers
 yabeda-hotcell/               Yabeda metrics for the application side
@@ -275,6 +276,7 @@ first is the action, in the imperative. The second is the rationale, or a link t
 | Job | Runs |
 | --- | --- |
 | `hotcell (ruby …)` | `rake test:hotcell` on 3.3, 3.4, 4.0 and head, on a machine with no tools |
+| `hotcell-client-legacy (ruby …)` | `hotcell-client-legacy`'s suite on each Ruby from 1.9.3 to head, against a cell on 3.4 |
 | `hotcell (macos, ruby 3.4)` | the same, on macOS — advisory, because the runners are slow and bill about ten times the Linux rate |
 | `activestorage (ruby …)` | `rake test:activestorage` with the converters installed |
 | `container conformance` | `bin/example-image` then `bin/conformance` |

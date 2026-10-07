@@ -1,8 +1,8 @@
 # Hot Cell
 
 This repository holds the core gems that isolate untrusted code and untrusted input (`hotcell-core`,
-`hotcell-server`, and `hotcell-client`), the Active Storage gems built on them
-(`activestorage-hotcell-client` and `activestorage-hotcell-server`), and `yabeda-hotcell`.
+`hotcell-server`, and `hotcell-client`), the dependency-free `hotcell-client-legacy`, the Active Storage gems
+built on them (`activestorage-hotcell-client` and `activestorage-hotcell-server`), and `yabeda-hotcell`.
 
 ## Find your way around
 

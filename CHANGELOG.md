@@ -5,6 +5,7 @@ This changelog covers these gems, which release together on the same version:
 - `hotcell-core`
 - `hotcell-client`
 - `hotcell-server`
+- `hotcell-client-legacy`
 - `activestorage-hotcell-client`
 - `activestorage-hotcell-server`
 - `yabeda-hotcell`
@@ -19,6 +20,12 @@ gem but are what an operator runs against their own image.
 #### Fixed
 
 * A JPEG uploaded as `.jfif`, `.jif` or `.jfi` is transformed instead of failing permanently as `unreadable`. Rails names a web image's variant format after the upload's extension. The ImageMagick transformer has no coder for these extensions, and the Vips transformer has no saver for `.jif` or `.jfi`. The transformers now send the cell the canonical extension of the format's content type, such as `jpg`, which is the extension Rails falls back to. (#84)
+
+### HotCell::Client::Legacy
+
+#### Added
+
+* `hotcell-client-legacy` is a new gem that lets an application on a legacy Ruby version call a cell. It has no dependencies, and it speaks the same wire protocol as `hotcell-client` but leaves out Rails integration, Active Storage support and metrics. See [docs/client-legacy.md](docs/client-legacy.md). (#100)
 
 ## v1.0.0 / 2026-10-05
 

@@ -1,0 +1,10 @@
+inherit_from: ../.rubocop.yml
+
+# This gem runs on Ruby 1.9.3, so no cop may ask for syntax it lacks, such as `rescue` in a `do` block.
+# 2.0 is the oldest Ruby that RuboCop analyzes.
+AllCops:
+  TargetRubyVersion: 2.0
+
+# The minitest that Ruby 1.9.3 bundles has no assert_predicate.
+Minitest/AssertPredicate:
+  Enabled: false

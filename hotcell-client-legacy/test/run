@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Boots a cell on this Ruby, which hotcell-server needs to be 3.3 or later, and runs the suite on the Ruby
+# that HOTCELL_CLIENT_RUBY names, which may be as old as 1.9.3. CI sets it to each Ruby the gem supports.
+#
+# The child gets a clean environment, so nothing of this process's bundle reaches a Ruby that could not load
+# it, and so the suite proves the client needs nothing beyond the standard library.
+
+require "bundler/setup"
+require "hot_cell/server"
+require "hot_cell/test_cell"
+require "hot_cell/test_operations"
+
+client_ruby = ENV.fetch("HOTCELL_CLIENT_RUBY", RbConfig.ruby)
+gem_root = File.expand_path("..", __dir__)
+tests = Dir[File.join(gem_root, "test", "**", "*_test.rb")]
+
+status = HotCell::TestCell.boot(name: "legacy") do |cell|
+  environment = { "PATH" => ENV.fetch("PATH"), "HOTCELL_WORK_SOCKET" => File.join(cell.directory, "work.sock") }
+  command = [ client_ruby, "-I", File.join(gem_root, "lib"), "-I", File.join(gem_root, "test"),
+              "-e", "ARGV.each { |test| require test }", *tests ]
+
+  system environment, *command, unsetenv_others: true
+end
+
+exit status ? 0 : 1

@@ -63,6 +63,7 @@ trusted application at risk, move it into a cell.
 | --- | --- | --- |
 | `hotcell-core` | both sides | The wire protocol, descriptor passing, payload validation, and the error taxonomy. |
 | `hotcell-client` | the application | `HotCell::Client`, cell registration, routing, classification, and instrumentation. |
+| `hotcell-client-legacy` | the application | `HotCell::Client::Legacy`, for legacy Ruby versions, with no dependencies. See [Legacy client](docs/client-legacy.md). |
 | `hotcell-server` | the cell | The supervisor, the worker, `HotCell::Operation`, and the container image. |
 | `activestorage-hotcell-client` | the application | The transformers, analyzers, and previewers that Rails is configured with. |
 | `activestorage-hotcell-server` | the cell | The Active Storage operations. |
