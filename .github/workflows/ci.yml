@@ -136,7 +136,7 @@ jobs:
         with:
           ruby-version: "3.4"
           bundler-cache: true
-      # hotcell-client-legacy/test/run boots the cell on 3.4 and runs the tests on HOTCELL_CLIENT_RUBY.
+      # hotcell-client-legacy/bin/test boots the cell on 3.4 and runs the tests on HOTCELL_CLIENT_RUBY.
       - run: bundle exec rake test:gem:hotcell-client-legacy
         env:
           HOTCELL_CLIENT_RUBY: "${{ steps.client.outputs.ruby-prefix }}/bin/ruby"

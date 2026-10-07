@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-# The client against a real cell, which test/run boots on a Ruby new enough for hotcell-server.
+# The client against a real cell, which bin/test boots on a Ruby new enough for hotcell-server.
 class CellTest < LegacyTest
   def test_a_conversion_crosses_the_boundary_and_comes_back
     with_files("hello from the cold side") do |source, destination|

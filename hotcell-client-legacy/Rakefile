@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 # The suite runs on whichever Ruby HOTCELL_CLIENT_RUBY names, which can be one hotcell-server cannot run on, so
-# this boots the cell on the current Ruby and runs the suite in a child. See test/run.
+# this boots the cell on the current Ruby and runs the suite in a child. See bin/test.
 desc "Boot a cell and run the suite on HOTCELL_CLIENT_RUBY, or on this Ruby"
 task :test do
-  ruby "test/run"
+  ruby "bin/test"
 end
 
 task default: :test
