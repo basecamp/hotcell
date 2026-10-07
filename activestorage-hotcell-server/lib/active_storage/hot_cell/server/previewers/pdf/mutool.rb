@@ -22,7 +22,8 @@ module ActiveStorage
               # separate change.
               def render(source, destination, page:, resolution:)
                 run! "mutool", "draw", "-F", "png", "-r", resolution.to_s, "-o", destination.path,
-                     source.fd_path, page.to_s, pass: [ source.to_io ]
+                     source.fd_path, page.to_s, pass: [ source.to_io ],
+                     causes: { /cannot authenticate password/ => ProtectedDocument }
               end
 
               def tool

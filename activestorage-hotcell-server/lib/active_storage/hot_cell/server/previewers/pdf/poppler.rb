@@ -22,7 +22,7 @@ module ActiveStorage
               def render(source, destination, page:, resolution:)
                 run! "pdftoppm", "-png", "-singlefile", "-cropbox", "-r", resolution.to_s,
                      "-f", page.to_s, "-l", page.to_s, source.fd_path, destination.path,
-                     pass: [ source.to_io ]
+                     pass: [ source.to_io ], causes: { /Incorrect password/ => ProtectedDocument }
 
                 destination.adopt destination.path(extension: "png")
               end

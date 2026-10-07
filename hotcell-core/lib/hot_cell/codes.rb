@@ -100,6 +100,10 @@ module HotCell
 
     KILLED = "killed"
 
+    # A cause for `unreadable`, which is permanent whatever its cause: the document demands credentials the
+    # cell does not have. It lets a caller show a locked document differently from a broken one.
+    PROTECTED = "protected"
+
     class << self
       def permanent?(code, cause: nil)
         code = code.to_s

@@ -146,6 +146,10 @@ broke". When `perform` raises one of them, the cell answers `unreadable`, which 
 [permanent](codes.md). `HotCell::UnreadableInput` is always included. A subclass adds to the classes that
 its ancestors declared.
 
+To tell the caller why the input can't be decoded, raise a subclass of `HotCell::UnreadableInput` that
+defines `self.cause`. The cell sends the cause with the `unreadable` failure. See
+[Causes of `unreadable`](codes.md#causes-of-unreadable).
+
 ### `abstract_operation`
 
 Marks a class that exists to be inherited from, not to be dispatched to.

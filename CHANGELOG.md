@@ -15,6 +15,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Server
+
+#### Added
+
+* An operation can say why it couldn't decode an input: a subclass of `HotCell::UnreadableInput` that defines `self.cause` sends that cause with the `unreadable` failure. `HotCell::Codes::PROTECTED` names the first such cause, `protected`. See `docs/codes.md`.
+
 ### ActiveStorage::HotCell::Client
 
 #### Fixed
@@ -26,6 +32,12 @@ gem but are what an operator runs against their own image.
 #### Added
 
 * `hotcell-client-legacy` is a new gem that lets an application on a legacy Ruby version call a cell. It has no dependencies, and it speaks the same wire protocol as `hotcell-client` but leaves out Rails integration, Active Storage support and metrics. See [docs/client-legacy.md](docs/client-legacy.md). (#100)
+
+### ActiveStorage::HotCell::Server
+
+#### Added
+
+* The `mutool` and Poppler PDF previewers answer `unreadable` with cause `protected` for a password-protected PDF. An application that shows a lock placeholder for these PDFs can read the cause instead of matching the tool's error message.
 
 ## v1.0.0 / 2026-10-05
 

@@ -99,15 +99,29 @@ that the supervisor can't see: a cgroup out-of-memory kill chosen on aggregate p
 signalling another, which nothing prevents because workers share a uid. The worker that holds the request
 decides `memory` and `fsize` itself.
 
+## Causes of `unreadable`
+
+An `unreadable` failure is permanent whatever its cause. Most carry no cause. An operation that can tell
+why it couldn't decode the input sends one, so that a caller can act on the reason without parsing the
+message:
+
+- `protected`: the document demands a password that the cell doesn't have. The shipped `mutool` and Poppler PDF
+  previewers send it for a password-protected PDF.
+
+An operation sends a cause by raising a subclass of `HotCell::UnreadableInput` that defines `self.cause`.
+See [`unreadable(*classes)`](operation-api.md#unreadableclasses).
+
 ## Unknown codes and causes
 
-A code or cause that a client doesn't recognize isn't permanent:
+An unknown code, or an unknown cause of `killed`, isn't permanent:
 
 - The `permanent` flag travels on the wire, set by the side that knows. A client that's older than a code
   still disposes of that code correctly.
 - When the wire carries no boolean `permanent`, the client derives it. An unknown code is transient.
 - An unknown `killed` cause is transient. Adding a kill reason to the supervisor without a row in
   `Codes::PERMANENT_BY_CAUSE` can't make it permanent.
+
+A cause of `unreadable` doesn't change its permanence, so an unknown one is still permanent.
 
 Retrying something permanent costs some work. Recording something transient is irreversible.
 
