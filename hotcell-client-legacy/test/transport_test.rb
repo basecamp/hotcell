@@ -19,7 +19,7 @@ class TransportTest < LegacyTest
       path = File.join(directory, "work.sock")
       listener = Socket.new(:UNIX, :STREAM)
       listener.bind Socket.sockaddr_un(path)
-      listener.listen 0
+      listener.listen 1
       pending = fill_backlog(path)
 
       begin
@@ -197,14 +197,15 @@ class TransportTest < LegacyTest
   end
 
   private
+    # Until the kernel refuses a connection, as hotcell-client's ControlTimeoutTest does. A hundred connections
+    # did not fill the backlog on the macOS CI runner.
     def fill_backlog(path)
       pending = []
-      100.times do
+      loop do
         socket = Socket.new(:UNIX, :STREAM)
         pending << socket
         socket.connect_nonblock Socket.sockaddr_un(path)
       end
-      flunk "the backlog never filled"
     rescue Errno::EAGAIN, Errno::ECONNREFUSED
       pending
     end
