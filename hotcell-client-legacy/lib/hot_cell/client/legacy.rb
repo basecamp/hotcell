@@ -29,25 +29,54 @@ module HotCell
       INPUT_MODE = 0o640
       OUTPUT_MODE = 0o620
 
-      # Attributes shared by both failure classes. A shared superclass would let `rescue` catch both under one
-      # name, and the two must never be handled alike: a permanent failure may be written down against a file
-      # forever, and a transient one must be retried.
-      module Failure
-        attr_reader :code, :error
+      # A cell's verdict on a request that did not succeed, with the readers of hotcell-core's HotCell::Failure.
+      class Failure
+        attr_reader :code, :cause, :signal, :error_class, :message, :stderr
 
-        def initialize(error)
-          @error = error
-          @code = error[:code].to_s
-          super([ error[:code], error[:cause], error[:class], error[:message] ].compact.join(": "))
+        def initialize(fields)
+          @permanent = fields[:permanent]
+          @code = fields[:code].to_s
+          @cause = fields[:cause]
+          @signal = fields[:signal]
+          @error_class = fields[:class]
+          @message = fields[:message]
+          @stderr = fields[:stderr]
+        end
+
+        def permanent?
+          @permanent
+        end
+
+        def to_h
+          { code: code, permanent: permanent?, cause: cause, signal: signal, class: error_class, message: message,
+            stderr: stderr }.reject { |_key, value| value.nil? }
+        end
+
+        # A cell that sent no code gets none in the message, rather than a leading ": ".
+        def to_s
+          [ (code unless code.empty?), cause, error_class, message ].compact.join(": ")
+        end
+      end
+
+      # Included in both failure classes, so `rescue Verdict` catches either and `hot_cell_failure` reads the
+      # failure, as with hotcell-client's HotCell::Verdict. The classes share no superclass, so rescuing one by
+      # name never catches the other: a permanent failure may be written down against a file forever, and a
+      # transient one must be retried.
+      module Verdict
+        attr_reader :hot_cell_failure
+
+        def initialize(failure)
+          @hot_cell_failure = failure
+          super(failure.to_s)
         end
       end
 
       class PermanentFailure < StandardError
-        include Failure
+        include Verdict
       end
 
       class TransientFailure < StandardError
-        include Failure
+        include Verdict
       end
 
       class Timeout < StandardError; end
@@ -83,8 +112,8 @@ module HotCell
 
         # Built rather than passed to raise, because Ruby 2.x reads a trailing Hash given to raise as its options
         # and takes `cause` out of it.
-        error = sanitize(answer["error"])
-        raise (error[:permanent] ? PermanentFailure : TransientFailure).new(error)
+        failure = Failure.new(sanitize(answer["error"]))
+        raise (failure.permanent? ? PermanentFailure : TransientFailure).new(failure)
       end
 
       private

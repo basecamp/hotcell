@@ -59,14 +59,17 @@ end
 | `HotCell::Client::Legacy::PermanentFailure` | The cell marks the failure permanent. A retry fails the same way. |
 | `HotCell::Client::Legacy::TransientFailure` | Any other failure. A retry might succeed. |
 
-Both classes have these attributes:
+Both classes include `HotCell::Client::Legacy::Verdict`, so you can rescue `Verdict` to catch either one.
+Call `hot_cell_failure` on the exception to read the failure, as with `hotcell-client`. See
+[Exception classes](codes.md#exception-classes). The failure has these attributes:
 
 | Attribute | Description |
 | --- | --- |
 | `code` | The failure's code. See [Response codes](codes.md). |
-| `error` | A `Hash` with `permanent`, which is `true` or `false`, and whichever of `code`, `cause`, `signal`, `class`, `message`, and `stderr` the cell sent. Each of those is a `String` of at most 512 bytes, with invalid UTF-8 removed. `stderr` keeps its last 512 bytes. |
+| `permanent?` | `true` if the cell marked the failure permanent, and `false` otherwise. |
+| `cause`, `signal`, `error_class`, `message`, `stderr` | The fields that the cell sent, or `nil`. Each is a `String` of at most 512 bytes, with invalid UTF-8 removed. `stderr` keeps its last 512 bytes. |
 
-The text in `error` comes from the cell. Treat it as untrusted.
+The text in the failure comes from the cell. Treat it as untrusted.
 
 When the client gets no usable answer, it raises `TransientFailure` with one of these codes:
 

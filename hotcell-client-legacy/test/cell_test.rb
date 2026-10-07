@@ -34,20 +34,20 @@ class CellTest < LegacyTest
   def test_a_permanent_failure_raises_permanent_failure
     error = assert_raises(HotCell::Client::Legacy::PermanentFailure) { client.perform "test.undecodable", [], [] }
 
-    assert_equal "unreadable", error.code
+    assert_equal "unreadable", error.hot_cell_failure.code
     assert_match "not an image at all", error.message
   end
 
   def test_a_transient_failure_raises_transient_failure
     error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.broken", [], [] }
 
-    assert_equal "failed", error.code
+    assert_equal "failed", error.hot_cell_failure.code
   end
 
   def test_an_operation_the_cell_does_not_carry_is_transient
     error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.nonexistent", [], [] }
 
-    assert_equal "unsupported", error.code
+    assert_equal "unsupported", error.hot_cell_failure.code
   end
 
   # The client checks no access mode, so the cell's own check is what refuses a writable input.
@@ -59,7 +59,7 @@ class CellTest < LegacyTest
         end
       end
 
-      assert_equal "invalid", error.code
+      assert_equal "invalid", error.hot_cell_failure.code
     end
   end
 
@@ -71,7 +71,7 @@ class CellTest < LegacyTest
       end
     end
 
-    assert_equal "timeout", error.code
+    assert_equal "timeout", error.hot_cell_failure.code
     assert_operator took, :<, 2
   end
 
@@ -80,8 +80,8 @@ class CellTest < LegacyTest
       client(timeout: 10).perform "test.impatient", [], []
     end
 
-    assert_equal "killed", error.code
-    assert_equal "deadline", error.error[:cause]
+    assert_equal "killed", error.hot_cell_failure.code
+    assert_equal "deadline", error.hot_cell_failure.cause
   end
 
   def test_the_group_can_read_an_input_and_write_an_output
