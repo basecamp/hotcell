@@ -38,6 +38,18 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # Rails takes a variant's format from the upload's filename only for a web image, so any other format crosses
+  # as Rails named it. `tif` would otherwise cross as `tiff`, the canonical extension for image/tiff.
+  def test_a_format_outside_the_web_image_types_crosses_unchanged
+    transport = with_canned_response failed("unreadable")
+
+    with_active_storage_setting :web_image_content_types, %w[ image/png image/jpeg image/gif ] do
+      assert_raises(Unprocessable) { transform({}, "colour.png", format: "tif") { flunk "no" } }
+    end
+
+    assert_equal "tif", JSON.parse(transport.lines.last).dig("payload", "format")
+  end
+
   def test_the_tempfile_is_closed_and_unlinked_afterwards
     with_cell do
       leaked = nil

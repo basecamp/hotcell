@@ -57,8 +57,10 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     # For the cases about classification, where booting a cell to produce one verdict would be theatre.
     def with_canned_response(response)
       HotCell.root = "/nowhere"
+      transport = CannedTransport.new(response)
       HotCell.register ActiveStorage::HotCell::Client::CELL, permanent: Unprocessable,
-                       transient: TemporarilyUnavailable, transport: CannedTransport.new(response)
+                       transient: TemporarilyUnavailable, transport: transport
+      transport
     end
 
     def failed(code)
@@ -107,11 +109,15 @@ class ActiveStorageHotCellClientTest < Minitest::Test
     end
 
     class CannedTransport
+      attr_reader :lines
+
       def initialize(response)
         @response = response
+        @lines = []
       end
 
-      def call(_cell, _line, _descriptors, socket: nil, timeout: nil)
+      def call(_cell, line, _descriptors, socket: nil, timeout: nil)
+        @lines << line
         @response
       end
     end
