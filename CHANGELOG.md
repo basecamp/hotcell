@@ -37,7 +37,7 @@ gem but are what an operator runs against their own image.
 
 #### Added
 
-* The `mutool` PDF previewer answers `unreadable` with cause `protected` for a password-protected PDF. An application that shows a lock placeholder for these PDFs can read the cause instead of matching `mutool`'s error message.
+* The `mutool` and Poppler PDF previewers answer `unreadable` with cause `protected` for a password-protected PDF. An application that shows a lock placeholder for these PDFs can read the cause instead of matching the tool's error message.
 
 ## v1.0.0 / 2026-10-05
 

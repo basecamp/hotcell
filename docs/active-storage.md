@@ -85,8 +85,8 @@ The client raises the cell's `permanent:` or `transient:` class. See [Response c
   `ActiveStorage::CreateVariantsJob`, `ActiveStorage::PreviewImageJob`, and `ActiveStorage::TransformJob`,
   for each one that this Rails version has. Each registered cell that a shipped client names contributes
   its transient class. A cell that isn't registered yet contributes nothing.
-- **`Previewers::Pdf::Mutool`** answers `unreadable` with cause `protected` for a password-protected PDF.
-  See [Causes of `unreadable`](codes.md#causes-of-unreadable).
+- **`Previewers::Pdf::Mutool`** and **`Previewers::Pdf::Poppler`** answer `unreadable` with cause `protected`
+  for a password-protected PDF. See [Causes of `unreadable`](codes.md#causes-of-unreadable).
 
 ## Limits
 

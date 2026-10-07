@@ -105,8 +105,8 @@ An `unreadable` failure is permanent whatever its cause. Most carry no cause. An
 why it couldn't decode the input sends one, so that a caller can act on the reason without parsing the
 message:
 
-- `protected`: the document demands a password that the cell doesn't have. The shipped `mutool` PDF
-  previewer sends it for a password-protected PDF.
+- `protected`: the document demands a password that the cell doesn't have. The shipped `mutool` and Poppler PDF
+  previewers send it for a password-protected PDF.
 
 An operation sends a cause by raising a subclass of `HotCell::UnreadableInput` that defines `self.cause`.
 See [`unreadable(*classes)`](operation-api.md#unreadableclasses).
