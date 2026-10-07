@@ -5,7 +5,7 @@
 # real files and need libvips, mutool, ffmpeg and ffprobe installed. That split is a design property rather
 # than an accident, so the tasks keep it visible: `test:hotcell` is what CI runs on a machine with nothing
 # installed, and on macOS.
-HOTCELL = %w[ hotcell-core hotcell-client hotcell-server yabeda-hotcell ].freeze
+HOTCELL = %w[ hotcell-core hotcell-client hotcell-server hotcell-client-legacy yabeda-hotcell ].freeze
 ACTIVE_STORAGE = %w[ activestorage-hotcell-server activestorage-hotcell-client ].freeze
 GEMS = (HOTCELL + ACTIVE_STORAGE).freeze
 
@@ -15,6 +15,7 @@ GEMS = (HOTCELL + ACTIVE_STORAGE).freeze
 VERSION_FILES = %w[
   hotcell-core/lib/hot_cell/core/version.rb
   hotcell-client/lib/hot_cell/client/version.rb
+  hotcell-client-legacy/lib/hot_cell/client/legacy.rb
   hotcell-server/lib/hot_cell/server/version.rb
   activestorage-hotcell-client/lib/active_storage/hot_cell/client/version.rb
   activestorage-hotcell-server/lib/active_storage/hot_cell/server/version.rb
