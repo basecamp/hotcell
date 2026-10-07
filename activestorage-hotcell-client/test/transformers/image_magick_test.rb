@@ -26,6 +26,21 @@ class TransformersImageMagickTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # Rails names a web image's variant format after its upload's extension, so a JPEG uploaded as `photo.jfif`
+  # asks for format `jfif` (#84).
+  %w[ jfif JFIF jif jfi ].each do |format|
+    define_method :"test_a_jpeg_uploaded_as_#{format}_comes_back_as_a_jpeg" do
+      with_cell do
+        with_active_storage_setting :web_image_content_types, %w[ image/png image/jpeg image/gif ] do
+          transform({ resize_to_limit: [ 20, 20 ] }, "colour.jpg", format: format) do |output|
+            assert_equal "JPEG", identify(output.path)[:format]
+            assert_operator identify(output.path)[:width], :<=, 20
+          end
+        end
+      end
+    end
+  end
+
   # Rails' ImageMagick allowlist runs here, in the application, before anything reaches the cell: a method
   # outside supported_image_processing_methods raises the same error Rails raises, and no request is sent.
   def test_a_transformation_outside_rails_allowlist_is_refused_before_the_cell
