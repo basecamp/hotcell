@@ -9,9 +9,9 @@ Gem::Specification.new do |spec|
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/basecamp/hotcell"
-  spec.summary     = "Run a HotCell: the supervisor, the worker, and the operation API."
+  spec.summary     = "Run a Hot Cell: the supervisor, the worker, and the operation API."
   spec.description = <<~TEXT
-    Runs a HotCell container. A supervisor listens on two Unix sockets, forks a worker for each request,
+    Runs a Hot Cell container. A supervisor listens on two Unix sockets, forks a worker for each request,
     and enforces a wall clock deadline and resource limits on it. Write the work as a subclass of
     HotCell::Operation.
   TEXT

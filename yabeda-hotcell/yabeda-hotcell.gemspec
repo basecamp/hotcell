@@ -9,9 +9,9 @@ Gem::Specification.new do |spec|
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/basecamp/hotcell"
-  spec.summary     = "Yabeda metrics for HotCell."
+  spec.summary     = "Yabeda metrics for Hot Cell."
   spec.description = <<~TEXT
-    Yabeda metrics for an application that calls HotCell cells: a counter and a histogram for every call,
+    Yabeda metrics for an application that calls Hot Cell cells: a counter and a histogram for every call,
     and gauges polled from each local cell's control socket.
   TEXT
 

@@ -12,9 +12,6 @@ worker process under strict limits, and returns the result or writes it to the o
 
 ## Status
 
-This is pre-release software. It may break in interesting ways. Use it with caution until the v1.0
-release.
-
 The Active Storage gems need Rails 8.2, which is unreleased. Track `rails/rails` `main` until it ships.
 See [Active Storage operations](docs/active-storage.md).
 
@@ -130,7 +127,7 @@ HotCell.register "active_storage",
   permanent: MyApp::UnprocessableUpload,
   transient: MyApp::ConversionTemporarilyUnavailable
 
-# Warns at boot about a cell that is unreachable, slower than this client waits, in the wrong group, or on another hotcell version.
+# Warns at boot about a cell that is unreachable, slower than this client waits, in the wrong group, or on another Hot Cell version.
 Rails.application.config.after_initialize { HotCell.describe_cells }
 ```
 

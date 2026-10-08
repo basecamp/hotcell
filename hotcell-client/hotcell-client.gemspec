@@ -9,9 +9,9 @@ Gem::Specification.new do |spec|
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/basecamp/hotcell"
-  spec.summary     = "Call a HotCell from an application."
+  spec.summary     = "Call a Hot Cell from an application."
   spec.description = <<~TEXT
-    Call operations that run in a HotCell container. Register a cell, subclass HotCell::Client to name
+    Call operations that run in a Hot Cell container. Register a cell, subclass HotCell::Client to name
     an operation, and call it with open file descriptors and a payload. Failures arrive classified as
     permanent or transient, as exception classes your application supplies.
   TEXT

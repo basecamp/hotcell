@@ -47,7 +47,7 @@ Rails' own classes mix freely with these in the `analyzers` and `previewers` arr
 some work into a cell:
 
 ```ruby
-# PDF previews handled by HotCell, video previews still in the application
+# PDF previews handled by Hot Cell, video previews still in the application
 config.active_storage.previewers = [ ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool,
                                      ActiveStorage::Previewer::VideoPreviewer ]
 ```

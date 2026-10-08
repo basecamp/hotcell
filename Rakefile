@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The hotcell gems and yabeda-hotcell need no tools and no container: their suites run on fixture operations in
+# The `hotcell-*` gems and yabeda-hotcell need no tools and no container: their suites run on fixture operations in
 # a few seconds, and so does the development cell the battery drives. The two activestorage-hotcell gems convert
 # real files and need libvips, mutool, ffmpeg and ffprobe installed. That split is a design property rather
 # than an accident, so the tasks keep it visible: `test:hotcell` is what CI runs on a machine with nothing

@@ -75,7 +75,7 @@ module HotCell
       # does not survive fork and the child waits on a pool with no threads. Not the first worker — every
       # worker. A later change that pre-warms the pool to save the fork cost is exactly what this forbids.
       #
-      # Note that a hotcell forks per request, continuously, so "before the fork" and "at boot" are not
+      # Note that a cell forks per request, continuously, so "before the fork" and "at boot" are not
       # the same moment the way they are in Puma. This runs once.
       def before_fork(&block)
         return collected(:@before_fork) if block.nil?

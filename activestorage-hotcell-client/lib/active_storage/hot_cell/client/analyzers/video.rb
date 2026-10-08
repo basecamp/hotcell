@@ -10,7 +10,7 @@ module ActiveStorage
     module Client
       module Analyzers
         # Rails' VideoAnalyzer shells out to ffprobe inside the application process. Moving ffprobe into a
-        # cell means this has to move with it, or an application that adopts hotcell still analyzes media in
+        # cell means this has to move with it, or an application that adopts Hot Cell still analyzes media in
         # its own process and cannot take ffprobe out of its image — the incomplete move for exactly the
         # media type a cell exists to isolate.
         #

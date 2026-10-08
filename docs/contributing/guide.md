@@ -20,8 +20,8 @@ your own application — start with [README.md](../../README.md) instead.
 bundle install
 ```
 
-That is enough for the hotcell gems and for the example cell. It is deliberately enough: **the
-hotcell gems need no container and no tool installed**, and `rake test:hotcell` is what keeps that honest —
+That is enough for the `hotcell-*` gems and for the example cell. It is deliberately enough: **the
+`hotcell-*` gems need no container and no tool installed**, and `rake test:hotcell` is what keeps that honest —
 CI runs it on a machine with nothing on it. Fixture operations stand in for the work, so the protocol, the
 fork, the descriptor passing, the limits and the reap are all exercised in milliseconds.
 
@@ -55,7 +55,7 @@ The container checks are scripts rather than rake tasks, because they need Docke
 
 ```
 bin/example-image           # install the cell scaffold and build what it wrote
-bin/conformance IMAGE       # does this image support hotcell?
+bin/conformance IMAGE       # does this image support Hot Cell?
 bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]
 ```
 
@@ -124,7 +124,7 @@ of `rake test:hotcell`, so it runs with the rest of the suite, on Linux and macO
 
 It is Docker-free on purpose. See "Cells run uncontainerized in development" below.
 
-### `bin/conformance IMAGE` — does this image support hotcell?
+### `bin/conformance IMAGE` — does this image support Hot Cell?
 
 The real use case is somebody building their own cell image and wanting to know whether it works. It boots
 `IMAGE` with the accessory's real flags — `network: none`, `cap-drop ALL`, a read-only root, a `noexec`
