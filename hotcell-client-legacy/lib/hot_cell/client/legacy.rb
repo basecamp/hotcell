@@ -14,7 +14,7 @@ module HotCell
     #
     # Written for Ruby 1.9.3, so it uses no keyword arguments, `&.`, `String#b` or `IO#wait_readable`.
     class Legacy
-      VERSION = "1.0.0"
+      VERSION = "1.1.0"
 
       PROTOCOL_VERSION = 1
       MAX_RESPONSE_BYTES = 65_536
