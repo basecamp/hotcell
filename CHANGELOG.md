@@ -1,4 +1,4 @@
-# HotCell changelog
+# Hot Cell changelog
 
 This changelog covers these gems, which release together on the same version:
 
@@ -58,9 +58,9 @@ gem but are what an operator runs against their own image.
 
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
-* Replace the application's Yabeda integration for HotCell with the `yabeda-hotcell` gem. The README's "Metrics collection" lists the gem's metrics for comparison with the application's dashboards and alerts.
-* Remove the log line that the application writes for each HotCell call, in a `perform.hot_cell` subscriber or in its Yabeda integration. `HotCell::LogSubscriber` writes this line now; see the README's "Application logs".
-* Replace the application's HotCell health endpoints with `HotCell::HealthController` and `HotCell::DiagnosticsController`. The README's "Rails healthcheck" shows the routes and the authentication for the diagnostics route.
+* Replace the application's Yabeda integration for Hot Cell with the `yabeda-hotcell` gem. The README's "Metrics collection" lists the gem's metrics for comparison with the application's dashboards and alerts.
+* Remove the log line that the application writes for each Hot Cell call, in a `perform.hot_cell` subscriber or in its Yabeda integration. `HotCell::LogSubscriber` writes this line now; see the README's "Application logs".
+* Replace the application's Hot Cell health endpoints with `HotCell::HealthController` and `HotCell::DiagnosticsController`. The README's "Rails healthcheck" shows the routes and the authentication for the diagnostics route.
 * Replace the cell's copies of `examples/operations/echo.rb` and `reopen.rb` with `require "hot_cell/health_operations"`, and change the application's clients to call `health.echo` and `health.reopen`. See the README's "Rails healthcheck".
 
 ### HotCell::Server

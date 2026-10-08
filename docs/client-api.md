@@ -15,7 +15,7 @@ sources:
 
 # Client API
 
-This page describes the application side of HotCell: registering cells with `HotCell.register`, writing
+This page describes the application side of Hot Cell: registering cells with `HotCell.register`, writing
 `HotCell::Client` subclasses, the boot checks, and the group that the application shares with each cell.
 For the cell side of the call, see [Operation API](operation-api.md).
 

@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.homepage    = "https://github.com/basecamp/hotcell"
   spec.summary     = "The operations a cell runs on behalf of Active Storage."
   spec.description = <<~TEXT
-    The HotCell operations behind activestorage-hotcell-client: image transformation with libvips or
+    The Hot Cell operations behind activestorage-hotcell-client: image transformation with libvips or
     ImageMagick, image and media analysis, PDF previews with mutool or poppler, and video previews with
     ffmpeg. Install it in the cell, with the tools the operations you load require.
   TEXT

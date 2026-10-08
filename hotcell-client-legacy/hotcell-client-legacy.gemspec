@@ -11,8 +11,8 @@ Gem::Specification.new do |spec|
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/basecamp/hotcell"
-  spec.summary     = "Call a HotCell from a legacy Ruby version, with no dependencies."
-  spec.description = "Call an operation in a HotCell container from an application that cannot run " \
+  spec.summary     = "Call a Hot Cell from a legacy Ruby version, with no dependencies."
+  spec.description = "Call an operation in a Hot Cell container from an application that cannot run " \
                      "hotcell-client. One file, the standard library only, and legacy Ruby versions."
 
   spec.required_ruby_version = ">= 1.9.3"

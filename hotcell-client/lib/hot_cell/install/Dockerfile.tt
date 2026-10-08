@@ -1,4 +1,4 @@
-# The cell's image. HotCell installed this file once; it is yours to customize, and nothing inherits
+# The cell's image. Hot Cell installed this file once; it is yours to customize, and nothing inherits
 # from a published base image — this is the whole recipe.
 #
 # A cell carries a Ruby runtime and every gem in its loaded graph, all inside the blast radius, so treat

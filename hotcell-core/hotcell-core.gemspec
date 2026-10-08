@@ -9,9 +9,9 @@ Gem::Specification.new do |spec|
   spec.email       = [ "mike@37signals.com" ]
   spec.license     = "MIT"
   spec.homepage    = "https://github.com/basecamp/hotcell"
-  spec.summary     = "The wire protocol shared by both sides of a HotCell."
+  spec.summary     = "The wire protocol shared by both sides of a Hot Cell."
   spec.description = <<~TEXT
-    The wire protocol between an application and a HotCell container: the request and response format,
+    The wire protocol between an application and a Hot Cell container: the request and response format,
     file descriptor passing over SCM_RIGHTS, payload validation, and the error taxonomy. Both
     hotcell-client and hotcell-server depend on it. Install one of those rather than this.
   TEXT

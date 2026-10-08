@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Does this image actually support hotcell? Boots IMAGE as a cell with the accessory's real flags —
+# Does this image actually support Hot Cell? Boots IMAGE as a cell with the accessory's real flags —
 # network: none, cap-drop ALL, a read-only root, a noexec tmpfs — with the example operations mounted and
 # HOTCELL_DIR pointed somewhere non-default, then drives the shared battery from a second container over
 # a named volume. The socket appearing where HOTCELL_DIR said proves the env contract; the descriptor
