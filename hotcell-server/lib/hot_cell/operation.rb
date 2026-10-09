@@ -147,7 +147,7 @@ module HotCell
     # streams in full and hands them over at exit, so slicing afterwards bounded the Strings this method
     # returns and nothing else: an input that makes a tool print gigabytes of diagnostics had already
     # cost gigabytes of this worker's address space, and took RLIMIT_DATA with it — arriving as a `memory`
-    # verdict, which is permanent, for a document whose only crime was being noisy.
+    # failure, which is permanent, for a document whose only crime was being noisy.
     # `pass` hands the tool a set of the worker's own descriptors — an input to read, an output to write —
     # at their existing fd numbers, so the tool reaches them at `Descriptor#fd_path` — `/dev/fd/N`, or the
     # file's own path on macOS, where opening `/dev/fd/N` would share the worker's offset — and no

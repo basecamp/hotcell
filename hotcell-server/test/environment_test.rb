@@ -93,7 +93,7 @@ class EnvironmentTest < HotCellServerTest
   # capture3 accumulated both streams in full and handed them over at exit, so slicing afterwards bounded
   # only the Strings this method returned. An input that made a tool print 40MB of diagnostics had
   # already cost this worker 40MB of address space — which RLIMIT_DATA charges, arriving as a `memory`
-  # verdict for a document whose only crime was being noisy.
+  # failure for a document whose only crime was being noisy.
   def test_a_noisy_tool_costs_a_bounded_amount_of_the_workers_memory
     TestCell.boot do |cell|
       %w[ out err ].each do |stream|

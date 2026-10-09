@@ -102,7 +102,7 @@ class ResourceLimitsTest < HotCellServerTest
   # RLIMIT_FSIZE is enforced by a signal, and the supervisor used to read that signal off a wait status —
   # which a sibling can forge, because workers share a uid. The worker catches SIGXFSZ instead, which makes
   # the kernel fail the offending write with EFBIG rather than killing the process, and answers for itself
-  # over its own control socket. So the verdict survives and carries no signal: the write that caused it is
+  # over its own control socket. So the failure survives and carries no signal: the write that caused it is
   # the evidence, not the death.
   def test_writing_past_file_size_is_killed_rather_than_truncated
     boot do |cell|
@@ -112,7 +112,7 @@ class ResourceLimitsTest < HotCellServerTest
 
         failure = assert_failed "killed", response, cause: "fsize"
         assert_predicate failure, :permanent?
-        assert_nil failure.signal, "the verdict was inferred from a signal rather than earned"
+        assert_nil failure.signal, "the failure was inferred from a signal rather than earned"
         assert_equal "Errno::EFBIG", failure.error_class
       end
     end
@@ -134,7 +134,7 @@ class ResourceLimitsTest < HotCellServerTest
 
   # An allocation past RLIMIT_DATA is a catchable NoMemoryError rather than a signal, which makes it
   # tempting to report as an ordinary failure. It is the decompression-bomb case, so it belongs with the
-  # other resource verdicts where a caller can act on it without parsing a message.
+  # other resource kills where a caller can act on it without parsing a message.
   def test_allocating_past_the_memory_limit_is_killed_rather_than_failed
     skip MEMORY_UNENFORCED unless memory_clamp_enforced?
 

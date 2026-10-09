@@ -168,7 +168,7 @@ module HotCell
       # rate you cannot size a worker pool. It is `ok` on success, so no subscriber reads success from a
       # missing code.
       #
-      # The cause, signal and verdict go with it, because the code alone cannot classify a kill: `killed`
+      # The cause, signal and `permanent` go with it, because the code alone cannot classify a kill: `killed`
       # is permanent for fsize and memory and transient for deadline and crashed. A subscriber with only
       # the code filed every fsize kill as transient. `permanent` is the Failure's own answer, so no
       # subscriber re-derives it.

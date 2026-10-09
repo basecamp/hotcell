@@ -28,7 +28,7 @@ class WorkerTest < HotCellServerTest
     assert_equal({ idle: true, code: "unavailable" }, report)
   end
 
-  # A home the worker cannot create is a broken deployment, not a verdict on the document — and a request
+  # A home the worker cannot create is a broken deployment, not a permanent failure of the document — and a request
   # that never ran must not be reported as one that succeeded. Creating it used to sit outside the begin, so
   # the failure left the caller with no response while the supervisor was told idle `"ok"`.
   def test_a_home_that_cannot_be_created_is_reported_failed

@@ -83,7 +83,7 @@ module HotCell
     # Derived here rather than reassembled in the client: a client adding up `queue_wait + deadline` plus its
     # own guess at the kill-to-answer step cannot follow a change to any of them, and the error points the
     # unsafe way — the client believes its timeout is generous and takes a transport failure instead of the
-    # cell's verdict. A stage added later that costs a caller time belongs in this sum.
+    # cell's answer. A stage added later that costs a caller time belongs in this sum.
     def answer_within
       queue_wait + limits.deadline + KILL_GRACE
     end

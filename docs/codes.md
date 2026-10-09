@@ -159,7 +159,7 @@ rescue HotCell::Failure::Exception => error
 
 ## What Active Storage records
 
-A permanent verdict is irreversible only if the application records it. In the shipped Active Storage
+A permanent failure is irreversible only if the application records it. In the shipped Active Storage
 integration, analysis records it and nothing else does.
 
 Rails persists a blob's analysis like this:

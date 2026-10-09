@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Writes the payload's megabytes straight through the caller's output descriptor. Past the cell's
-# file-size limit the kernel raises SIGXFSZ and the verdict is `killed: fsize`.
+# file-size limit the kernel raises SIGXFSZ and the cell answers `killed: fsize`.
 module Examples
   class Overflow < HotCell::Operation
     operation "example.overflow"

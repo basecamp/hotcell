@@ -28,7 +28,7 @@ class PerformTest < YabedaHotCellTest
     assert_nil perform_seconds
   end
 
-  # `killed` is one code and several verdicts: which limit the worker hit decides whether the file did it.
+  # `killed` is one code and several causes: which limit the worker hit decides whether the file did it.
   # Every other code carries an empty cause, because a label that is sometimes absent is a separate series in
   # Prometheus, and a query by code would silently split.
   def test_counts_a_kill_under_its_cause

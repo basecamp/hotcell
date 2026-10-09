@@ -28,7 +28,7 @@ module ActiveStorage
     module Client
       # These four jobs declare `retry_on ActiveStorage::IntegrityError` and nothing else, and ActiveJob does
       # not retry by default. They should retry the transient class too: `capacity` most obviously, and every
-      # other transient verdict. The policy matches the one they already declare, so a cell failure and an
+      # other transient failure. The policy matches the one they already declare, so a cell failure and an
       # integrity failure back off the same way.
       #
       # Which of these classes exists depends on the Rails version, so a name that is not loaded is skipped.

@@ -187,7 +187,7 @@ module HotCell
 
     # A tool spawn that fails because the host is out of memory. fork raises Errno::ENOMEM under host
     # pressure, before the tool has read a byte of the input, so this is the cell having a bad moment
-    # rather than a decompression bomb — and it must not be recorded as a permanent memory verdict.
+    # rather than a decompression bomb — and it must not be recorded as a permanent `memory` failure.
     class StarvedSpawn < HotCell::Operation
       operation "test.starved_spawn"
 
@@ -200,7 +200,7 @@ module HotCell
       operation "test.signals_sibling"
 
       # Workers share a uid and a pid namespace, so one finds another by looking for a process the
-      # supervisor also fathered. This is the reproducer for the forged verdict: nothing here touches the
+      # supervisor also fathered. This is the reproducer for the forged failure: nothing here touches the
       # victim's input, and the victim is holding an unrelated one.
       def perform(_inputs, _outputs, signal:)
         sibling = siblings.first

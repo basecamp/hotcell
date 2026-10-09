@@ -427,7 +427,7 @@ module HotCell
       end
 
       # A worker can die between the fork and this write. Answering rather than raising is what keeps one dead
-      # worker from taking the whole cell down with it, and the caller gets a transient verdict either way.
+      # worker from taking the whole cell down with it, and the caller gets a transient failure either way.
       def dispatch(child, connection, queued_ms)
         child.dispatched connection, configuration.limits.deadline, at: Clock.now
 
@@ -784,7 +784,7 @@ module HotCell
       end
 
       def finish(child, code, cause = nil)
-        counters.record outcome_code(code)
+        counters.record reported_code(code)
         counters.record_kill cause if reported_cause?(code, cause)
         child.finished
         discard child
@@ -792,7 +792,7 @@ module HotCell
         retire child if configuration.retire?(child.served)
       end
 
-      # The outcome code rides an untrusted worker report and becomes both a counter key and a Symbol, so it
+      # The code rides an untrusted worker report and becomes both a counter key and a Symbol, so it
       # is bounded to a code this cell mints before either happens. Without this a report of `code: []` raised
       # NoMethodError on `to_sym` past `apply_report`'s rescue and took the cell down, and a stream of unique
       # strings grew the counters without bound. An unknown code is recorded, so a misreporting worker is
@@ -801,7 +801,7 @@ module HotCell
       # It is checked against the known causes rather than passed through, because `record_kill` interns it
       # as a symbol and an unchecked one is an unbounded symbol table keyed by whatever a tool decides.
       def reported_cause?(code, cause)
-        outcome_code(code) == Codes::KILLED && cause.is_a?(String) &&
+        reported_code(code) == Codes::KILLED && cause.is_a?(String) &&
           Codes::PERMANENT_BY_CAUSE.key?(cause)
       end
 
@@ -810,7 +810,7 @@ module HotCell
         reported if reported.is_a?(String) && Registry.lookup(reported)
       end
 
-      def outcome_code(reported)
+      def reported_code(reported)
         return reported if reported.is_a?(String) && (reported == "ok" || Codes.known?(reported))
 
         "unknown"
@@ -853,7 +853,7 @@ module HotCell
         now = Clock.now
 
         @children.each_value.select { |child| child.lingering?(now, Configuration::KILL_GRACE) }.each do |child|
-          # The latch rather than a verdict: a lingering child is never busy, so no caller hears this cause.
+          # The latch rather than an answer: a lingering child is never busy, so no caller hears this cause.
           child.killed_for = Codes::CRASHED
 
           kill_group child
@@ -968,7 +968,7 @@ module HotCell
       end
 
       # A killed worker cannot report its own death, because the deadline KILL is enforced by a signal. So
-      # the supervisor holds its copy of every dispatched connection and writes the verdict itself. Without
+      # the supervisor holds its copy of every dispatched connection and writes the answer itself. Without
       # this the cold side sees a bare end of stream and cannot tell a limit
       # breach from a crash.
       # A worker still holding a connection at reap time never answered: it reports itself idle after writing,
@@ -978,10 +978,10 @@ module HotCell
       # supervisor sent, and it is the one thing here that knows why a worker died. Everything else is a
       # wait status, which says how — and workers share a uid, so any signal in one may have come from a
       # sibling rather than from the kernel. Reading XFSZ, SEGV, ABRT or TRAP as this request's file size or
-      # memory let one compromised worker write a permanent verdict against another request's unrelated
+      # memory let one compromised worker write a permanent failure against another request's unrelated
       # input, which Active Storage then kept. `Codes` already stated the rule this broke.
       #
-      # The verdicts themselves are not gone, they moved to where they can be earned: the worker answers
+      # The failures themselves are not gone, they moved to where they can be earned: the worker answers
       # `memory` when it catches NoMemoryError and `fsize` when a write of its own returns EFBIG, on the
       # connection it is holding. See Worker#disarm_file_size_signal.
       #
@@ -1001,7 +1001,7 @@ module HotCell
                                    signal: signal_name(status), duration_ms: Clock.ms_since(child.dispatched_at),
                                    **captured
 
-        # The capture rides the verdict as well as the log line, so an application logs
+        # The capture rides the failure as well as the log line, so an application logs
         # `killed: crashed (libgomp: ...)` rather than a bare `crashed`. Additive on the wire: `from_wire`
         # reads named keys, so an old client ignores the field and a new one against an old cell meets nil.
         answer child.connection,

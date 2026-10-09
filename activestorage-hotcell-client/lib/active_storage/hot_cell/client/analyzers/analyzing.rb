@@ -16,7 +16,7 @@ module ActiveStorage
         # **Which way `metadata` fails is the whole design of the method.** The built-in vips analyzer rescues
         # every Vips::Error and returns an empty hash, which Rails then merges with `analyzed: true` — so an
         # undecodable image is recorded as successfully analyzed, forever, and nothing ever re-enqueues
-        # AnalyzeJob. That is right for a permanent verdict and catastrophic for a transient one.
+        # AnalyzeJob. That is right for a permanent failure and catastrophic for a transient one.
         #
         # So a permanent failure follows the built-in behaviour and lets the blob be marked analyzed, with the
         # reason written to the log so it can be re-decided later against a newer library. A transient failure

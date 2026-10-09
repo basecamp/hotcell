@@ -18,7 +18,7 @@ module Yabeda
       Yabeda.configure do
         group :hotcell
 
-        counter :requests, comment: "Calls through perform_in_hotcell, by outcome",
+        counter :requests, comment: "Calls through perform_in_hotcell, by code",
           tags: %i[ cell operation code cause ]
         histogram :perform, comment: "Time the cell spent performing", unit: :seconds,
           tags: %i[ cell operation ], buckets: [ 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 120 ]

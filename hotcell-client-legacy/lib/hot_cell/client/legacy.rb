@@ -29,7 +29,7 @@ module HotCell
       INPUT_MODE = 0o640
       OUTPUT_MODE = 0o620
 
-      # A cell's verdict on a request that did not succeed, with the readers of hotcell-core's HotCell::Failure.
+      # A cell's answer to a request that did not succeed, with the readers of hotcell-core's HotCell::Failure.
       class Failure
         attr_reader :code, :cause, :signal, :error_class, :message, :stderr
 

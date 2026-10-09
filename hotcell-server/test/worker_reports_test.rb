@@ -137,7 +137,7 @@ class WorkerReportsTest < HotCellServerTest
     assert_equal [ :total, :unknown ].sort, @supervisor.counters.to_h[:requests].keys.sort
   end
 
-  # A code this cell actually mints is recorded as itself, so the sanitizing does not flatten real outcomes.
+  # A code this cell actually mints is recorded as itself, so the sanitizing does not flatten real codes.
   def test_a_known_idle_code_is_recorded_as_itself
     make_busy
     apply({ idle: true, code: "failed" }.to_json)

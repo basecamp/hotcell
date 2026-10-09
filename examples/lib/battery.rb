@@ -146,7 +146,7 @@ module Examples
       #
       # The extra request waits until metrics show every place taken rather than for a fixed interval: on a
       # slow runner a blocker can arrive late, and the extra request then takes its place and succeeds. The
-      # blockers' own outcomes are not asserted, because the queued ones may run or may wait and either way
+      # blockers' own answers are not asserted, because the queued ones may run or may wait and either way
       # the cell is full. They are reported when the cell never fills, so a blocker that failed says why.
       def overload
         places = @described.fetch(:concurrency) + @described.fetch(:queue_size)

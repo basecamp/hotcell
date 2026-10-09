@@ -47,7 +47,7 @@ For which signal sets which limit, see [Tuning](tuning.md).
 - **Scratch space.** Alert on free space on each host's scratch. For a disk-backed scratch, use
   `node_filesystem_avail_bytes` from the node exporter. For a tmpfs, compare the container's memory usage
   with the tmpfs `size=`. A full scratch fails every request that needs it. A write that fails inside
-  libvips gets `unreadable` from the cell, a permanent verdict against the file (see
+  libvips gets `unreadable` from the cell, a permanent failure against the file (see
   [ImageMagick](imagemagick.md#how-the-limits-interact-in-a-cell)). [Scratch](scratch.md) covers the
   layouts.
 - **Cell errors.** Alert on any `ERROR` event in the cell log, such as `worker.crashed` or
@@ -155,7 +155,7 @@ control socket is local to its host, so the process that polls it must run on th
 `killed_by`, broken down by cause.
 
 `killed_by` counts what workers reported, not what the supervisor observed. A worker decides its own
-`memory` and `fsize` verdicts, because the supervisor can't tell either from a wait status without
+`memory` and `fsize` failures, because the supervisor can't tell either from a wait status without
 believing a signal that a sibling could have sent. The worker reports the cause when it reports itself
 idle. As a result:
 

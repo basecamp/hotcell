@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module HotCell
-  # What an operation raises to choose its own verdict. An operation may also declare the library
+  # What an operation raises to choose its own failure. An operation may also declare the library
   # exceptions that mean the same thing, with `unreadable Vips::Error`.
   class OperationError < StandardError; end
 

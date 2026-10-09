@@ -51,7 +51,7 @@ class MagickTransformImageTest < ActiveStorageHotCellTest
 
   # The production shape that surfaced this: a multi-layer source, its frames kept by
   # `loader: { page: nil }`, into a single-layer destination. ImageProcessing refuses the
-  # combination, which is a verdict on the input — unclassified it was a transient `failed`
+  # combination, which is a permanent failure of the input — unclassified it was a transient `failed`
   # that never marked the blob, so the same file spent a full conversion on every request.
   def test_a_multi_layer_source_into_a_single_layer_format_is_unreadable
     Cell.boot do |cell|

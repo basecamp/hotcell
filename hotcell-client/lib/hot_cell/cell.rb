@@ -11,8 +11,8 @@ module HotCell
   class Cell
     attr_reader :name, :timeout, :control_timeout, :permanent, :transient, :transport
 
-    # `timeout` covers work, so it is sized to clear the cell's `answer_within` and a saturated cell reports
-    # its own verdict rather than a transport failure. `control_timeout` covers `describe` and `metrics`,
+    # `timeout` covers work, so it is sized to clear the cell's `answer_within` and a saturated cell answers
+    # for itself rather than arriving as a transport failure. `control_timeout` covers `describe` and `metrics`,
     # which the supervisor answers inline with no fork or queue — so it is short on purpose. Sharing one
     # number would give the call whose job is to say "this cell is down" the patience of a video transcode.
     #
@@ -189,7 +189,7 @@ module HotCell
       # Being bound tighter than that is defensible and it is a choice, not a mistake. A synchronous
       # representation request wants it tighter, because a thread held for sixty seconds is a thread not
       # serving traffic. A background job wants it looser, so it receives `capacity` or `killed` and can act
-      # on them rather than guessing from a socket error. Both outcomes are transient, so neither is
+      # on them rather than guessing from a socket error. Both failures are transient, so neither is
       # misclassified — which is the only reason this is safe.
       # The cell states this; adding it up here would mean guessing at stages only the supervisor knows about.
       # A cell too old to report it says nothing, which is the right answer for a number we cannot know.
@@ -199,7 +199,7 @@ module HotCell
 
         HotCell.logger.warn "hotcell #{name}: this client waits #{seconds timeout} and the cell says it may " \
                             "take #{seconds needed} to answer, so a saturated cell will arrive here as a " \
-                            "transport failure rather than as its own verdict. Deliberate on a synchronous " \
+                            "transport failure rather than as the cell's own answer. Deliberate on a synchronous " \
                             "path; a mistake for a background job."
       end
 

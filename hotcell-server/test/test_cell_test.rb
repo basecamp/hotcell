@@ -4,7 +4,7 @@ require "test_helper"
 
 # The suite's own harness. A cell that refuses a connection never reads it: accept_work writes the
 # capacity answer and closes. A test client descheduled between connecting and writing then fails its
-# send against the closed peer — with the verdict it came for already queued on its socket.
+# send against the closed peer — with the answer it came for already queued on its socket.
 class TestCellTest < HotCellServerTest
   # Yields a connection the test prepared instead of dialing a cell, which pins the losing side of the
   # race: the peer has answered and closed before send_line writes a byte.
@@ -16,7 +16,7 @@ class TestCellTest < HotCellServerTest
     end
   end
 
-  def test_send_line_returns_a_verdict_that_arrived_before_the_request_was_written
+  def test_send_line_returns_an_answer_that_arrived_before_the_request_was_written
     cell_side, caller_side = UNIXSocket.pair(:STREAM)
     cell_side.write HotCell::Response.failed(HotCell::Failure.new(code: "capacity",
                                                                   message: "the queue is full at 0")).to_line

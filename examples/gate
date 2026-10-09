@@ -14,7 +14,7 @@
 #
 #   2. bin/conformance and bin/load must supply no `--ulimit stack`. docs/container.md forbids it: a
 #      lowered stack turns an overflow into a SIGSEGV the cell reports as killed/crashed, a transient
-#      verdict the caller retries against a limit that will fail it again, so a helper that set it would
+#      failure the caller retries against a limit that will fail it again, so a helper that set it would
 #      measure a shape operators are told not to deploy.
 #
 #   3. The battery's overload check must wait for the cell to empty before it fills it. A worker holds its

@@ -104,7 +104,7 @@ work socket answers, because `describe` and `metrics` cross the control socket i
 | `sleep` | block for `seconds` | the deadline kills and answers; head-of-line behavior under load |
 | `greedy` | allocate `megabytes` | the `memory` clamp → `killed: memory`, where enforceable |
 | `overflow` | write `megabytes` to the output | the `file_size` clamp → `killed: fsize` |
-| `crash` | raise, or die by signal | worker death → a clean verdict and continued service |
+| `crash` | raise, or die by signal | worker death → a clean failure and continued service |
 | `spawn` | start a grandchild that would outlive the worker | the group kill leaves nothing behind |
 | `probe` | whether a pid is alive, asked from inside the cell | how `spawn` is watched, in any pid namespace |
 | `isolation` | interfaces, root writability, scratch `noexec`, a tool's environment | the container-only checks, from the only place that can make them |
@@ -147,7 +147,7 @@ published base image, so the installed scaffold is the only kind of cell image t
 ### `bin/load IMAGE` — how does it behave under pressure?
 
 The same operations at volume against a containerized cell. It reports throughput, latency split into
-`queued_ms` against `perform_ms`, and the verdict breakdown, which is what tells saturation apart from
+`queued_ms` against `perform_ms`, and the count of each code, which is what tells saturation apart from
 slowness. Scenarios: `echo` for a baseline, `sleep` for queueing, `greedy` and `overflow` for the resource
 kills, `crash` for worker death, `spawn` for orphans, and `mix` for a weighted blend.
 
@@ -191,7 +191,7 @@ written down — `unsetenv_others: true` is proved by setting a variable, runnin
 that the tool never saw it. Where a control has no reachable trigger and so cannot be tested, it
 says so where it lives.
 
-**A verdict that cannot be taken back needs a reason.** `permanent` means an application may write a failure
+**A failure that cannot be taken back needs a reason.** `permanent` means an application may write a failure
 down against a blob and serve it from a cache forever, so anything unclassified is transient by default.
 `hotcell-core/lib/hot_cell/codes.rb` carries the argument for each code; a new code goes in that table, and a
 new kill reason goes in `PERMANENT_BY_CAUSE`, or it silently becomes the wrong kind of permanent.

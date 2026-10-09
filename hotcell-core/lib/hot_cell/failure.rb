@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module HotCell
-  # A cell's verdict on a request that did not succeed.
+  # A cell's answer to a request that did not succeed.
   #
   # The message is untrusted and it outlives the request. It comes out of a worker that has just parsed
   # a hostile file, and Vips::Error#message routinely contains the input filename. Applications store
@@ -71,7 +71,7 @@ module HotCell
 
       # A code this client has never heard of is not permanent. An old client will meet a code added
       # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
-      # some work, while writing down a verdict that was temporary is irreversible.
+      # some work, while writing down a failure that was temporary is irreversible.
       # A `permanent` that is present but not a boolean is derived rather than believed. Truthiness would make
       # any non-nil value permanent, and permanent is the answer that cannot be taken back — so a garbled
       # field must not be able to say it.
