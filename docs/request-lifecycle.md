@@ -56,5 +56,6 @@ sequenceDiagram
    group. The supervisor is then the only process that holds the connection, and it answers `killed` with
    the cause.
 8. The client raises the exception class that is registered for the failure's side of the permanent
-   split. On success and on failure, the client publishes a `perform.hot_cell` notification. See
+   split. On success, on failure, and when an exception interrupts the call, the client publishes a
+   `perform.hot_cell` notification. See
    [Response codes](codes.md) and [Observability](observability.md#per-call-notification).

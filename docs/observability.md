@@ -80,7 +80,7 @@ The payload has the following keys:
 | --- | --- |
 | `operation` | The routing name. |
 | `cell` | The registered cell name. |
-| `code` | The failure's code. `nil` on success. |
+| `code` | `ok` on success, the failure's code on failure, or `interrupted` when an exception interrupted the call, such as the application's own request timeout. |
 | `cause` | The cause of a `killed` failure. |
 | `signal` | The signal that ended the worker, if any. |
 | `stderr` | The tail of what a dying worker wrote to file descriptor 2. Write it to a log field and nowhere else: a tool wrote it while it processed a hostile file. |
@@ -106,8 +106,7 @@ In a Rails application, `HotCell::LogSubscriber` writes one `info` line for each
 ```
 
 For a failed call, the line adds `cause` and `stderr` when they exist. For a call that an exception
-interrupted, such as the application's own request timeout, the line has the exception's class in place
-of the code.
+interrupted, the code is `interrupted` and the line adds the exception's class.
 
 To turn the line off, call `HotCell::LogSubscriber.detach_from :hot_cell` in an initializer.
 
@@ -134,8 +133,8 @@ The metrics are in the `hotcell` group:
 
 | Metric | Type | Tags | Description |
 | --- | --- | --- | --- |
-| `requests` | counter | `cell`, `operation`, `code`, `cause` | Each call. `code` is `ok` on success, and `cause` is empty when there's none. |
-| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. A call whose response has no `perform_ms`, such as `capacity`, `unavailable` or `timeout`, records nothing. |
+| `requests` | counter | `cell`, `operation`, `code`, `cause` | Each call, by the event's `code`. `cause` is empty when there's none. |
+| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. A call with no `perform_ms`, such as `capacity`, `unavailable`, `timeout` or `interrupted`, records nothing. |
 | `up` | gauge | `cell` | 1 when the local cell answers its control socket, otherwise 0. |
 | `running` | gauge | `cell` | Workers busy right now. |
 | `queued` | gauge | `cell` | Connections waiting for a worker. |

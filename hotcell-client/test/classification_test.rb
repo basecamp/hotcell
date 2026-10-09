@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "timeout"
 
 # Every failure a client can produce, classified. The transport is a seam, so this drives each verdict
 # straight through it rather than arranging a cell to produce it.
@@ -180,18 +181,30 @@ class ClassificationTest < HotCellClientTest
     assert_equal false, event[:permanent]
   end
 
-  def test_the_event_carries_no_code_on_success
+  def test_the_event_carries_code_ok_on_success
     register_with HotCell::Response.ok(result: {}, timing: { perform_ms: 12, operation_ms: 9 })
 
     event = events_for { Anything.perform_in_hotcell [], [], {} }.first.payload
 
-    assert_nil event[:code]
+    assert_equal "ok", event[:code]
     assert_nil event[:cause]
     assert_nil event[:signal]
     assert_nil event[:stderr]
     assert_nil event[:permanent]
     assert_equal 12, event[:perform_ms]
     assert_equal({ perform_ms: 12, operation_ms: 9 }, event[:timing])
+  end
+
+  def test_the_event_carries_code_interrupted_when_an_exception_escapes_the_call
+    interruption = Timeout::Error.new("the request ran out of time")
+    register_with -> { raise interruption }
+
+    event = events_for do
+      assert_same interruption, assert_raises(Timeout::Error) { Anything.perform_in_hotcell [], [], {} }
+    end.first.payload
+
+    assert_equal "interrupted", event[:code]
+    assert_equal [ "Timeout::Error", "the request ran out of time" ], event[:exception]
   end
 
   # The client never reconnects and never retries. A silent retry doubles a cell's load at the moment it is

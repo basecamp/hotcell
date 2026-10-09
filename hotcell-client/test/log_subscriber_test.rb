@@ -60,9 +60,8 @@ class LogSubscriberTest < HotCellClientTest
     assert_match FORGERY, fields["stderr"]
   end
 
-  # An exception that escapes the call, such as the application's own request timeout, still fires the event,
-  # but before the client has recorded any verdict.
-  def test_a_call_interrupted_by_an_exception_logs_the_exception_rather_than_ok
+  # An exception that escapes the call, such as the application's own request timeout, still fires the event.
+  def test_a_call_interrupted_by_an_exception_logs_code_interrupted_and_the_exception
     HotCell.root = "/nowhere"
     HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable,
                              transport: ->(*) { raise Timeout::Error, "the request ran out of time" }
@@ -72,8 +71,8 @@ class LogSubscriberTest < HotCellClientTest
     fields = logged_fields
     assert_equal "test", fields["cell"]
     assert_equal "test.uppercase", fields["operation"]
+    assert_equal "interrupted", fields["code"]
     assert_equal "Timeout::Error", fields["exception"]
-    assert_nil fields["code"]
   end
 
   class Uppercase < HotCell::Client
