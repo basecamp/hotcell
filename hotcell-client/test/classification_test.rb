@@ -75,15 +75,27 @@ class ClassificationTest < HotCellClientTest
     assert_match "bad PNG header", error.message
   end
 
-  def test_a_verdict_can_be_rescued_as_one
+  def test_a_failure_exception_can_be_rescued_as_one
     register_with failed(code: "capacity")
 
     begin
       Anything.perform_in_hotcell [], [], {}
       flunk "expected a raise"
-    rescue HotCell::Verdict => error
+    rescue HotCell::Failure::Exception => error
       assert_equal "capacity", error.hot_cell_failure.code
     end
+  end
+
+  # `HotCell::Failure::Exception` shadows Ruby's Exception inside `HotCell::Failure`, where `Failure.for` asks
+  # whether its detail is one.
+  def test_a_socket_error_keeps_its_class_on_the_failure
+    HotCell.root = "/nowhere"
+    HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable
+
+    error = assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+
+    assert_equal "unavailable", error.hot_cell_failure.code
+    assert_equal "Errno::ENOENT", error.hot_cell_failure.error_class
   end
 
   def test_the_raised_exception_carries_the_failure_itself

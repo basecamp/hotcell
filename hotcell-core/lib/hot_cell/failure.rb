@@ -59,9 +59,10 @@ module HotCell
     class << self
       # Builds from either a message String or an Exception. An Exception has to become two wire fields, and
       # that rule was written out at three call sites across two gems — the worker, the supervisor's control
-      # answer, and the client's transport.
+      # answer, and the client's transport. `::Exception` because hotcell-client defines Failure::Exception,
+      # which a bare `Exception` here would name.
       def for(code, detail, cause: nil)
-        if detail.is_a?(Exception)
+        if detail.is_a?(::Exception)
           new code: code, cause: cause, error_class: detail.class.name, message: detail.message
         else
           new code: code, cause: cause, message: detail

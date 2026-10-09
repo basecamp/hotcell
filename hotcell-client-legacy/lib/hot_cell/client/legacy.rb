@@ -56,27 +56,27 @@ module HotCell
         def to_s
           [ (code unless code.empty?), cause, error_class, message ].compact.join(": ")
         end
-      end
 
-      # Included in both failure classes, so `rescue Verdict` catches either and `hot_cell_failure` reads the
-      # failure, as with hotcell-client's HotCell::Verdict. The classes share no superclass, so rescuing one by
-      # name never catches the other: a permanent failure may be written down against a file forever, and a
-      # transient one must be retried.
-      module Verdict
-        attr_reader :hot_cell_failure
+        # Included in both failure classes, so `rescue Failure::Exception` catches either and
+        # `hot_cell_failure` reads the failure, as with hotcell-client's HotCell::Failure::Exception. The
+        # classes share no superclass, so rescuing one by name never catches the other: a permanent failure
+        # may be written down against a file forever, and a transient one must be retried.
+        module Exception
+          attr_reader :hot_cell_failure
 
-        def initialize(failure)
-          @hot_cell_failure = failure
-          super(failure.to_s)
+          def initialize(failure)
+            @hot_cell_failure = failure
+            super(failure.to_s)
+          end
         end
       end
 
       class PermanentFailure < StandardError
-        include Verdict
+        include Failure::Exception
       end
 
       class TransientFailure < StandardError
-        include Verdict
+        include Failure::Exception
       end
 
       class Timeout < StandardError; end

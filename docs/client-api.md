@@ -117,7 +117,7 @@ publishes a `perform.hot_cell` notification. See
 [Observability](observability.md#per-call-notification).
 
 The exception carries the failure. Call `hot_cell_failure` on it to read the failure's `code` and `cause`,
-or rescue `HotCell::Verdict` to catch it whatever classes you registered. See
+or rescue `HotCell::Failure::Exception` to catch it whatever classes you registered. See
 [Response codes](codes.md#exception-classes).
 
 ### Errors that the client raises for a bad call

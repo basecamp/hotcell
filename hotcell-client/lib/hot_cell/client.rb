@@ -206,7 +206,7 @@ module HotCell
         return if response.ok?
 
         failure = response.failure
-        error = Verdict.wrap(cell.exception_for(failure).new(failure.to_s), failure)
+        error = Failure::Exception.wrap(cell.exception_for(failure).new(failure.to_s), failure)
         cell.report_contract_skew error if failure.code == "protocol"
 
         raise error

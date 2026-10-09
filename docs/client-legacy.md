@@ -59,7 +59,7 @@ end
 | `HotCell::Client::Legacy::PermanentFailure` | The cell marks the failure permanent. A retry fails the same way. |
 | `HotCell::Client::Legacy::TransientFailure` | Any other failure. A retry might succeed. |
 
-Both classes include `HotCell::Client::Legacy::Verdict`, so you can rescue `Verdict` to catch either one.
+Both classes include `HotCell::Client::Legacy::Failure::Exception`, so you can rescue `Failure::Exception` to catch either one.
 Call `hot_cell_failure` on the exception to read the failure, as with `hotcell-client`. See
 [Exception classes](codes.md#exception-classes). The failure has these attributes:
 
