@@ -15,16 +15,41 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+Some actions that application developers should consider taking when upgrading from an earlier version:
+
+* Replace `rescue HotCell::Verdict` with `rescue HotCell::Failure::Exception`, and `HotCell::Client::Legacy::Verdict` with `HotCell::Client::Legacy::Failure::Exception`. Only the name changed: the exception still carries `hot_cell_failure`.
+* In your own `perform.hot_cell` subscribers, test for success with `payload[:code] == "ok"` instead of `payload[:code].nil?`, and expect `interrupted`. The event now sets `code` on every call; see [Per-call notification](docs/observability.md#per-call-notification).
+* Where a test instruments `perform.hot_cell` by hand to stand in for a successful call, pass `code: "ok"`. `HotCell::LogSubscriber` and `yabeda-hotcell` now record `code` as the event gives it, so an event without one records no code.
+* Count `code="interrupted"` as a failed call wherever a dashboard or alert computes an error rate from `hotcell_requests`. `yabeda-hotcell` counted these calls as `ok` before.
+
 ### HotCell::Client
+
+#### Breaking
+
+* The `perform.hot_cell` event sets `code` on every call: `ok` on success, the failure's code on failure, and `interrupted` when an exception interrupts the call, such as the application's own request timeout. Previously, `code` was `nil` on success and absent from an interrupted call, so each subscriber had to work out the call's result. (#93)
+* `HotCell::Verdict` is renamed `HotCell::Failure::Exception`.
+
+#### Changed
+
+* `HotCell::LogSubscriber` writes `"code":"interrupted"` for a call that an exception interrupted, beside the exception's class. Previously, the line had no code.
 
 #### Fixed
 
 * On macOS, a call to a full cell reports `capacity` instead of occasionally reporting `unavailable`. A full cell answers and closes the connection without reading the request, so the client's send fails. The client already ignored that failure as `EPIPE` or `ECONNRESET` and read the answer, but macOS sometimes raises `ENOTCONN` instead. (#110)
 
+### HotCell::Client::Legacy
+
+#### Breaking
+
+* `HotCell::Client::Legacy::Verdict` is renamed `HotCell::Client::Legacy::Failure::Exception`.
+
 ### Yabeda::HotCell
 
 #### Fixed
 
+* A call that an exception interrupted, such as the application's own request timeout, is counted in `requests` under `code="interrupted"` and records no `perform` observation. Previously, it was counted as `code="ok"` with a `perform` of 0 seconds. (#93)
 * `perform` records nothing for a call whose response has no `perform_ms`: a call that the cell refused with `capacity`, or that the client failed itself with `unavailable` or `timeout`. Previously, it recorded 0 seconds, which pulled down the low percentiles. (#112)
 
 ## v1.1.0 / 2026-10-08
