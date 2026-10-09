@@ -134,8 +134,8 @@ The metrics are in the `hotcell` group:
 
 | Metric | Type | Tags | Description |
 | --- | --- | --- | --- |
-| `requests` | counter | `cell`, `operation`, `code`, `cause` | Each call. `code` is `ok` on success, and `cause` is empty when there's none. |
-| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. |
+| `requests` | counter | `cell`, `operation`, `code`, `cause` | Each call. `code` is `ok` on success, and `exception` when an exception interrupted the call, such as the application's own request timeout. `cause` is empty when there's none. |
+| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. A call that an exception interrupted records nothing. |
 | `up` | gauge | `cell` | 1 when the local cell answers its control socket, otherwise 0. |
 | `running` | gauge | `cell` | Workers busy right now. |
 | `queued` | gauge | `cell` | Connections waiting for a worker. |

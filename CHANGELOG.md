@@ -13,6 +13,14 @@ This changelog covers these gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
+### Yabeda::HotCell
+
+#### Fixed
+
+* A call that an exception interrupted, such as the application's own request timeout, is counted in `requests` under `code="exception"` and records no `perform` observation. Previously, it was counted as `code="ok"` with a `perform` of 0 seconds. (#93)
+
 ## v1.1.0 / 2026-10-08
 
 ### HotCell::Server

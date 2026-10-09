@@ -68,14 +68,17 @@ module Yabeda
     end
 
     # A failed call is not reported from here: the raise the caller sees already reaches the error reporter.
+    #
+    # An exception that escapes the call, such as the application's own request timeout, leaves no code on the
+    # event, and the cell measured nothing.
     def self.record_perform(event)
       labels = { cell: event.payload[:cell], operation: event.payload[:operation] }
+      code = event.payload[:code] || (event.payload[:exception] ? "exception" : "ok")
 
       # Empty rather than absent, because a label that is sometimes missing is a separate series in Prometheus
       # and a query by code would silently split.
-      Yabeda.hotcell.requests.increment(labels.merge(code: event.payload[:code] || "ok",
-                                                     cause: event.payload[:cause].to_s))
-      Yabeda.hotcell.perform.measure(labels, (event.payload[:perform_ms] || 0) / 1000.0)
+      Yabeda.hotcell.requests.increment(labels.merge(code: code, cause: event.payload[:cause].to_s))
+      Yabeda.hotcell.perform.measure(labels, (event.payload[:perform_ms] || 0) / 1000.0) unless code == "exception"
     end
 
     private_class_method def self.set_counters(cell, counters)
