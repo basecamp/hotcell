@@ -15,6 +15,12 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### HotCell::Client
+
+#### Fixed
+
+* On macOS, a call to a full cell reports `capacity` instead of occasionally reporting `unavailable`. A full cell answers and closes the connection without reading the request, so the client's send fails. The client already ignored that failure as `EPIPE` or `ECONNRESET` and read the answer, but macOS sometimes raises `ENOTCONN` instead. (#110)
+
 ### Yabeda::HotCell
 
 #### Fixed
