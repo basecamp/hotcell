@@ -23,6 +23,7 @@ Some actions that application developers should consider taking when upgrading f
 * In your own `perform.hot_cell` subscribers, test for success with `payload[:code] == "ok"` instead of `payload[:code].nil?`, and expect `interrupted`. The event now sets `code` on every call; see [Per-call notification](docs/observability.md#per-call-notification).
 * Where a test instruments `perform.hot_cell` by hand to stand in for a successful call, pass `code: "ok"`. `HotCell::LogSubscriber` and `yabeda-hotcell` now record `code` as the event gives it, so an event without one records no code.
 * Count `code="interrupted"` as a failed call wherever a dashboard or alert computes an error rate from `hotcell_requests`. `yabeda-hotcell` counted these calls as `ok` before.
+* `hotcell_uptime_seconds` is now deprecated. In dashboards and alerts, replace it with `time() - hotcell_start_time_seconds`. `hotcell_start_time_seconds` has a value only for cells running this release.
 
 ### HotCell::Client
 
@@ -39,6 +40,12 @@ Some actions that application developers should consider taking when upgrading f
 
 * On macOS, a call to a full cell reports `capacity` instead of occasionally reporting `unavailable`. A full cell answers and closes the connection without reading the request, so the client's send fails. The client already ignored that failure as `EPIPE` or `ECONNRESET` and read the answer, but macOS sometimes raises `ENOTCONN` instead. (#110)
 
+### HotCell::Server
+
+#### Added
+
+* `metrics` reports `start_time_s`, the time the supervisor booted, in seconds since the Unix epoch. (#112)
+
 ### HotCell::Client::Legacy
 
 #### Breaking
@@ -46,6 +53,14 @@ Some actions that application developers should consider taking when upgrading f
 * `HotCell::Client::Legacy::Verdict` is renamed `HotCell::Client::Legacy::Failure::Exception`.
 
 ### Yabeda::HotCell
+
+#### Added
+
+* The `start_time_seconds` gauge records when each cell booted, in seconds since the Unix epoch. (#112)
+
+#### Deprecated
+
+* `uptime_seconds` is now deprecated. Use `time() - hotcell_start_time_seconds` instead. It will be removed in a future version. (#112)
 
 #### Fixed
 

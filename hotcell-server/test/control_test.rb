@@ -83,6 +83,18 @@ class ControlTest < HotCellServerTest
     end
   end
 
+  def test_metrics_report_when_the_cell_started
+    before_boot = Time.now.to_f
+
+    TestCell.boot do |cell|
+      started = assert_ok(cell.control("hotcell.metrics")).result[:start_time_s]
+
+      assert_operator started, :>=, before_boot
+      assert_operator started, :<=, Time.now.to_f
+      assert_equal started, assert_ok(cell.control("hotcell.metrics")).result[:start_time_s]
+    end
+  end
+
   def test_metrics_report_what_no_single_caller_can_see
     TestCell.boot(concurrency: 1, queue_size: 4, deadline: 30) do |cell|
       blocker = cell.connect
