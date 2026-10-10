@@ -93,7 +93,6 @@ module Yabeda
       Yabeda.hotcell.queue_high_water.set(tags, counters[:queue_high_water])
       Yabeda.hotcell.cancelled.set(tags, counters[:cancelled])
       Yabeda.hotcell.uptime_seconds.set(tags, counters[:uptime_s])
-      # A cell from an earlier release reports no start time.
       Yabeda.hotcell.start_time_seconds.set(tags, counters[:start_time_s]) if counters[:start_time_s]
       ::HotCell::Codes::PERMANENT_BY_CAUSE.each_key do |cause|
         Yabeda.hotcell.killed.set(tags.merge(cause: cause), counters[:killed_by].fetch(cause.to_sym, 0))

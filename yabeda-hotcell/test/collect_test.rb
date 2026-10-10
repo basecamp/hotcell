@@ -31,7 +31,6 @@ class CollectTest < YabedaHotCellTest
     assert_equal 1_760_000_000.25, gauge(:start_time_seconds)
   end
 
-  # A cell from an earlier release reports no start time, and a mixed deploy has one.
   def test_a_cell_that_does_not_report_its_start_time_publishes_none
     HotCell.root = "/nowhere"
     register transport: CannedTransport.new(metrics)
