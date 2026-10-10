@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module HotCell
-  # A cell's verdict on a request that did not succeed.
+  # A cell's answer to a request that did not succeed.
   #
   # The message is untrusted and it outlives the request. It comes out of a worker that has just parsed
   # a hostile file, and Vips::Error#message routinely contains the input filename. Applications store
@@ -59,9 +59,10 @@ module HotCell
     class << self
       # Builds from either a message String or an Exception. An Exception has to become two wire fields, and
       # that rule was written out at three call sites across two gems — the worker, the supervisor's control
-      # answer, and the client's transport.
+      # answer, and the client's transport. `::Exception` because hotcell-client defines Failure::Exception,
+      # which a bare `Exception` here would name.
       def for(code, detail, cause: nil)
-        if detail.is_a?(Exception)
+        if detail.is_a?(::Exception)
           new code: code, cause: cause, error_class: detail.class.name, message: detail.message
         else
           new code: code, cause: cause, message: detail
@@ -70,7 +71,7 @@ module HotCell
 
       # A code this client has never heard of is not permanent. An old client will meet a code added
       # later, and the harm of the two mistakes is not symmetrical: retrying something permanent costs
-      # some work, while writing down a verdict that was temporary is irreversible.
+      # some work, while writing down a failure that was temporary is irreversible.
       # A `permanent` that is present but not a boolean is derived rather than believed. Truthiness would make
       # any non-nil value permanent, and permanent is the answer that cannot be taken back — so a garbled
       # field must not be able to say it.

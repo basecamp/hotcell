@@ -27,7 +27,7 @@ bin/conformance my-cell:test
 1. Boots the image with the flags in [Container flags](container.md#container-flags).
 2. Mounts the example operations over `/hotcell/operations`.
 3. Runs a battery of checks from a second container over a shared volume: descriptor round trips, each
-   kill verdict, refusal at capacity, and the isolation flags.
+   cause of `killed`, refusal at capacity, and the isolation flags.
 4. Runs the same battery again against the image booted without one security flag at a time, and requires
    each run to fail at that flag's own check.
 

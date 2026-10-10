@@ -92,7 +92,7 @@ class CellTest < HotCellServerTest
   # application that ships a client for a new operation before anybody reboots the cell gets this at one
   # hundred percent until they do — and recording that as permanent condemns every blob uploaded during the
   # window. A caller's typo shows up in the `unsupported` rate and in the refusal, which names the operation.
-  def test_an_unknown_operation_is_a_deploy_window_rather_than_a_verdict_on_the_input
+  def test_an_unknown_operation_is_a_deploy_window_rather_than_a_permanent_failure
     TestCell.boot do |cell|
       failure = assert_failed "unsupported", cell.call("test.nonexistent")
 
@@ -125,7 +125,7 @@ class CellTest < HotCellServerTest
   end
 
   # The payload arrives as keyword arguments, so a key the operation did not declare raises inside
-  # perform. Transient, like every unclassified raise: a caller bug must never become a verdict.
+  # perform. Transient, like every unclassified raise: a caller bug must never become a permanent failure.
   def test_a_payload_key_the_operation_does_not_declare_answers_failed
     TestCell.boot do |cell|
       failure = assert_failed "failed", cell.call("test.blocking", payload: { hours: 1 })
@@ -153,7 +153,7 @@ class CellTest < HotCellServerTest
     end
   end
 
-  # A refusal reports only the phases that finished before it, so a verdict says where the request got to
+  # A refusal reports only the phases that finished before it, so a failure says where the request got to
   # rather than only that it failed. The operation never finished here, and posting never started.
   def test_a_refusal_reports_only_the_phases_that_completed
     TestCell.boot do |cell|
@@ -168,7 +168,7 @@ class CellTest < HotCellServerTest
     end
   end
 
-  # Memory belongs with the resource verdicts rather than in `failed`, because it is the
+  # Memory belongs with the resource kills rather than in `failed`, because it is the
   # decompression-bomb case and a caller must be able to act on it without parsing a message.
   def test_running_out_of_memory_is_killed_rather_than_failed
     TestCell.boot do |cell|
@@ -181,7 +181,7 @@ class CellTest < HotCellServerTest
   # A spawn that fails with ENOMEM is the host out of memory, not the input being a bomb, so it must be
   # transient. Recording it as permanent memory would condemn a blob for the cell's own bad moment, the way
   # ENOSPC or EMFILE would if they were not already transient.
-  def test_a_spawn_starved_of_memory_is_transient_rather_than_a_memory_verdict
+  def test_a_spawn_starved_of_memory_is_transient_rather_than_a_memory_kill
     TestCell.boot do |cell|
       failure = assert_failed "failed", cell.call("test.starved_spawn")
 
@@ -222,7 +222,7 @@ class CellTest < HotCellServerTest
 
   # The cell says so rather than leaving it to the caller to notice. It used to answer `ok` here and let the
   # client compare the output's size, which cannot see which of several outputs was the empty one. A full
-  # tmpfs arrives this way, so it is transient rather than a verdict on the document.
+  # tmpfs arrives this way, so it is transient rather than a permanent failure of the document.
   def test_an_operation_that_writes_nothing_is_refused_rather_than_reported_ok
     TestCell.boot do |cell|
       with_files do |source, destination|
@@ -302,7 +302,7 @@ class CellTest < HotCellServerTest
 
   # A worker that dies mid-request without a signal is the cell's fault rather than the input's, and a
   # misconfigured cell does it on every request. Recording that against a blob would condemn everything
-  # uploaded during a broken deploy, so it is the one `killed` verdict that is not permanent alongside the
+  # uploaded during a broken deploy, so it is the one `killed` cause that is not permanent alongside the
   # deadline.
   def test_a_worker_that_dies_without_answering_is_reported_and_is_not_permanent
     TestCell.boot do |cell|
@@ -324,7 +324,7 @@ class CellTest < HotCellServerTest
   # A worker that exits with a dispatch queued unread on its control socket resets it, and the
   # supervisor's read raised Errno::ECONNRESET through the run loop — one dead worker ended the cell
   # and every in-flight request with it. A reset says what end of stream says: the worker is gone. The
-  # reap answers the request it was holding, and the verdict is transient.
+  # reap answers the request it was holding, and the failure is transient.
   def test_a_worker_that_exits_with_a_dispatch_queued_does_not_take_the_cell_down
     with_file do |pid_path|
       TestCell.boot(deadline: 30, concurrency: 1, max_requests_per_worker: 3) do |cell|
@@ -434,7 +434,7 @@ class CellTest < HotCellServerTest
   # workers share a uid, so one can signal another — which the supervisor then read as the victim's own
   # memory exhaustion and wrote against the victim's unrelated input, permanently. Nothing the attacker does
   # here touches that input.
-  def test_a_sibling_signal_is_not_a_verdict_on_the_victims_input
+  def test_a_sibling_signal_is_not_a_permanent_failure_of_the_victims_input
     TestCell.boot(concurrency: 2, queue_size: 4) do |cell|
       victim = Thread.new { cell.call("test.blocking", payload: { seconds: 3 }, timeout: 30) }
       sleep 0.3
@@ -449,11 +449,11 @@ class CellTest < HotCellServerTest
   end
 
   # The same forgery with the one signal that has a real meaning. `XFSZ` is what the kernel raises when a
-  # write passes RLIMIT_FSIZE, and that verdict is permanent — but a sibling sends it just as easily and a
+  # write passes RLIMIT_FSIZE, and that failure is permanent — but a sibling sends it just as easily and a
   # wait status cannot tell the two apart. Catching it in the worker answers both halves at once: the
   # kernel's XFSZ comes back as EFBIG from the write that caused it, and a sibling's does not reach the
   # victim's request at all, because nothing is listening for it.
-  def test_a_sibling_can_not_forge_a_file_size_verdict
+  def test_a_sibling_can_not_forge_an_fsize_failure
     TestCell.boot(concurrency: 2, queue_size: 4) do |cell|
       victim = Thread.new { cell.call("test.blocking", payload: { seconds: 3 }, timeout: 30) }
       sleep 0.3
@@ -465,7 +465,7 @@ class CellTest < HotCellServerTest
   end
 
   # The API takes several outputs and success was inferred from their total size, so writing the first and
-  # skipping the second was a positive total and read as `ok`. Transient rather than a verdict: the
+  # skipping the second was a positive total and read as `ok`. Transient rather than permanent: the
   # commonest way to write nothing is a full tmpfs.
   def test_an_output_that_received_nothing_is_not_success
     TestCell.boot do |cell|
@@ -565,7 +565,7 @@ class CellTest < HotCellServerTest
   def test_a_tools_temp_files_are_removed_with_the_home_of_a_request_that_is_killed
     with_cell_spilling_into_its_root(deadline: 1) do |cell, untouched|
       assert_failed "killed", cell.call("test.spills", payload: { seconds: 30 }, timeout: 30)
-      # The verdict is written before the supervisor discards the home; `worker.reaped` follows the discard.
+      # The answer is written before the supervisor discards the home; `worker.reaped` follows the discard.
       refute_empty wait_for_event(cell, "worker.reaped"), "the killed worker was never reaped"
 
       assert_empty Dir.children(cell.socket_root) - untouched - [ "workspace" ],

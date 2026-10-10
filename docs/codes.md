@@ -147,10 +147,11 @@ the `stderr` tail in parentheses when it exists. For example, `killed: crashed (
 To read the failure without parsing the message, call `hot_cell_failure` on the exception. It returns the
 `HotCell::Failure`, which has `code`, `cause`, `error_class`, `message`, `signal`, `stderr`, and
 `permanent?`. The client extends every exception that it raises for a failed call with the
-`HotCell::Verdict` module, so you can also rescue `HotCell::Verdict` whatever classes you registered:
+`HotCell::Failure::Exception` module, so you can also rescue `HotCell::Failure::Exception` whatever
+classes you registered:
 
 ```ruby
-rescue HotCell::Verdict => error
+rescue HotCell::Failure::Exception => error
   raise unless error.hot_cell_failure.cause == HotCell::Codes::PROTECTED
 
   lock_placeholder
@@ -158,7 +159,7 @@ rescue HotCell::Verdict => error
 
 ## What Active Storage records
 
-A permanent verdict is irreversible only if the application records it. In the shipped Active Storage
+A permanent failure is irreversible only if the application records it. In the shipped Active Storage
 integration, analysis records it and nothing else does.
 
 Rails persists a blob's analysis like this:

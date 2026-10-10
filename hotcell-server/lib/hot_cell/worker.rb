@@ -29,7 +29,7 @@ module HotCell
     #
     # A non-zero status for anything unexpected, because the supervisor holds the connection and is the only
     # thing that can answer for a worker that died mid-request. Exiting zero here would leave a caller reading
-    # a closed socket with no verdict at all.
+    # a closed socket with no answer at all.
     #
     # **The one deliberate `rescue Exception` in this repository.** Not for the exit status — Ruby's own handler
     # would also exit non-zero — but for Failure.sanitize. Left to Ruby, a NoMemoryError or a SystemStackError
@@ -67,8 +67,8 @@ module HotCell
       #
       # Catching it makes the kernel fail the offending write with EFBIG rather than killing the process,
       # and that error return is what a signal is not: it is raised by a write this process made, and no
-      # signal any sibling sends produces one. So the verdict below keys on Errno::EFBIG and this handler
-      # does nothing at all. A handler that set so much as a flag the verdict consulted would hand the
+      # signal any sibling sends produces one. So the `fsize` failure below keys on Errno::EFBIG and this handler
+      # does nothing at all. A handler that set so much as a flag that failure consulted would hand the
       # forgery straight back.
       #
       # EFBIG is evidence of this request's own write and not proof of which limit stopped it. A filesystem
@@ -137,7 +137,7 @@ module HotCell
         # transient. Adding it back would condemn a blob for the cell's own bad moment.
         rescue NoMemoryError, MemoryExhausted => error
           response = refuse(Codes::KILLED, error, timing, cause: Codes::MEMORY)
-        # The one place a file-size verdict can be earned. EFBIG comes back from a write this worker made
+        # The one place an `fsize` failure can be earned. EFBIG comes back from a write this worker made
         # past its own RLIMIT_FSIZE, so unlike the signal it cannot arrive from anywhere else.
         rescue Errno::EFBIG => error
           response = refuse(Codes::KILLED, error, timing, cause: Codes::FSIZE)
@@ -229,7 +229,7 @@ module HotCell
       # reads as success. This is the side that knows which one is empty, so it is the side that says so.
       #
       # Transient, for the reason the client's own check is: the commonest way to write nothing is a full
-      # tmpfs, and a full filesystem must never be recorded as a verdict on the document.
+      # tmpfs, and a full filesystem must never be recorded as a permanent failure of the document.
       def unwritten(outputs, written, timing)
         empty = written.each_index.select { |index| written[index].zero? }
 
@@ -295,7 +295,7 @@ module HotCell
       # that off a wait status; it reads the worker's own report now, and only when there is a cause to send,
       # so an ordinary idle report is the two keys it always was.
       #
-      # **This is a metric and not a verdict.** The verdict went to the caller on the work connection before
+      # **This is a metric and not an answer.** The answer went to the caller on the work connection before
       # this line runs. A compromised worker can report a cause its request never had, or withhold one it
       # did, so `killed_by` is what workers said rather than what happened — which is why the supervisor
       # checks the value against the known causes before interning it, and why nothing downstream may treat

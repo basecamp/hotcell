@@ -107,7 +107,7 @@ Leave `ulimit: stack` unset. A container inherits the Docker daemon's value, nor
 Lowering it to 2MB buys a worker about 24MB more room, and nothing for an operation that shells out. It
 costs far more than that: a thread that overflows the smaller stack dies on `SIGSEGV`, and the cell
 reports that as `killed` with cause `crashed`, which is transient. The caller's job retries the request
-against a limit that fails it again, for as long as the job keeps trying, and nothing in the verdict
+against a limit that fails it again, for as long as the job keeps trying, and nothing in the failure
 points at the setting. Raise the cell's `memory` instead.
 
 The stack limit is a container flag rather than a `config.rb` setting because glibc reads it at exec,

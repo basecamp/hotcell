@@ -119,5 +119,5 @@ See [Inputs and outputs](operation-api.md#inputs-and-outputs).
 ## Code
 
 Every failure carries a code, and each code is permanent or transient. A permanent failure means that the
-input fails this way every time, so the caller can record that verdict against the input. Every uncertain
+input fails this way every time, so the caller can record that failure against the input. Every uncertain
 failure is transient, which means that it might succeed on a retry. See [Response codes](codes.md).

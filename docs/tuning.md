@@ -48,7 +48,7 @@ test tells you nothing useful about them.
 
 - **A limit that's too high costs headroom.** The container's own memory limit still bounds the cell.
 - **A limit that's too low kills a legitimate file.** The cell answers `killed` with cause `memory` or
-  `fsize`. Both verdicts are permanent, so the caller is entitled to record them, and the shipped Active
+  `fsize`. Both failures are permanent, so the caller is entitled to record them, and the shipped Active
   Storage analyzers do. See [What Active Storage records](codes.md#what-active-storage-records).
 
 The two mistakes aren't equal, so use this order:
@@ -83,11 +83,11 @@ reports `answer_within`.
 Which way to fix it depends on the caller:
 
 - **A background job** wants a loose timeout, above `answer_within`, so that it receives the cell's
-  verdict and can act on it. Active Storage's analysis, preview, and variant work all runs in jobs.
+  failure and can act on it. Active Storage's analysis, preview, and variant work all runs in jobs.
 - **A synchronous request** wants the opposite: a short `deadline` on the cell and a tight timeout on the
   client, because a thread held for a minute is a thread that isn't serving traffic.
 
-Both outcomes are transient, so neither choice misclassifies anything. That's the only reason that this
+Both failures are transient, so neither choice misclassifies anything. That's the only reason that this
 is safe to decide for each caller.
 
 ## Constraints between the numbers
@@ -101,7 +101,7 @@ Nothing checks these constraints for you, except where noted.
 - `concurrency × the most scratch that one request holds` must be no more than the scratch. `file_size`
   limits each file, not their sum, and one request can hold a staged input, an output, and a tool's
   intermediate files at once. Above it, concurrent workers fill the scratch, and requests fail with
-  `ENOSPC` instead of with a limit verdict. On the default accessory, the
+  `ENOSPC` instead of with a limit's code. On the default accessory, the
   scratch is the tmpfs, and its `size=` is the number to fit. See [Scratch](scratch.md#what-changes-in-the-numbers).
 - `concurrency × (MAGICK_DISK_LIMIT + everything else that one worker writes on scratch)` must be no more
   than the scratch. Above it, concurrent ImageMagick processes fill the scratch before any of them refuses
@@ -152,8 +152,8 @@ service time.
 bin/load IMAGE [SCENARIO] [SECONDS] [THREADS]
 ```
 
-It runs a cell in a container and drives it from a second container. It reports throughput, the verdict
-breakdown, and latency split into time queued and time performing. That split separates saturation from
+It runs a cell in a container and drives it from a second container. It reports throughput, the count
+of each code, and latency split into time queued and time performing. That split separates saturation from
 slowness: queued time that grows while perform time stays flat means that the cell needs more workers.
 
 It can't give you your own numbers. It drives the example operations rather than yours, and it fixes

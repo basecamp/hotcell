@@ -22,7 +22,7 @@ class ImageAnalyzerVipsTest < ActiveStorageHotCellClientTest
 
   # The built-in vips analyzer rescues every Vips::Error and returns an empty hash, which Rails merges with
   # `analyzed: true` — so an undecodable image is recorded as successfully analyzed, forever, and nothing ever
-  # re-enqueues AnalyzeJob. That is the right answer for a permanent verdict, so it is copied deliberately.
+  # re-enqueues AnalyzeJob. That is the right answer for a permanent failure, so it is copied deliberately.
   def test_a_permanently_undecodable_image_is_marked_analyzed_the_way_rails_marks_it
     with_cell do
       assert_empty analyze("broken.png")

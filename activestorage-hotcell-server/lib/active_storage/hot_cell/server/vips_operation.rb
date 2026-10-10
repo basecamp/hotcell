@@ -22,7 +22,7 @@ module ActiveStorage
 
         # Vips::Error is how libvips reports a file it cannot decode, which is common rather than exceptional: it
         # covers truncated uploads, formats this build was not compiled with, and formats deliberately refused by
-        # block_untrusted. ImageProcessing::Error is the pipeline's own verdict on the input against the
+        # block_untrusted. ImageProcessing::Error is the pipeline's own rejection of the input against the
         # requested transform, classified the same way. All of those are the input's fault and none is
         # the operation's.
         unreadable Vips::Error, ImageProcessing::Error

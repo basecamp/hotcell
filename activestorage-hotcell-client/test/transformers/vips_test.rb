@@ -115,9 +115,9 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
   # declares Vips::Error `unreadable`, so it lands permanent.
   #
   # KNOWN DEVIATION (resolved by the planned ImageMagick operations): this is a caller bug, not a bad
-  # document, and Rails treats it as an unclassified job failure rather than a verdict on the blob. The
+  # document, and Rails treats it as an unclassified job failure rather than a permanent failure of the blob. The
   # `unreadable Vips::Error` rule was written for the load phase, where a Vips::Error means bad pixels; a
-  # bad operation name raising the same class slips through as a false permanent verdict. The real fix is an
+  # bad operation name raising the same class slips through as a false permanent failure. The real fix is an
   # ImageMagick transformer where `coalesce` is a real operation — until then an application moving from
   # mini_magick to vips rewrites these URLs at its own boundary. This test pins the current behavior so the
   # deviation is visible, not hidden.
@@ -139,7 +139,7 @@ class TransformersVipsTest < ActiveStorageHotCellClientTest
     end
   end
 
-  # A caller bug, not a verdict on the document: ImageProcessing refuses the name, the failure is
+  # A caller bug, not a permanent failure of the document: ImageProcessing refuses the name, the failure is
   # unclassified and therefore transient, and it stays distinguishable from an undecodable image — which
   # raises the permanent class and gets a placeholder.
   def test_an_unknown_transformation_raises_the_transient_class

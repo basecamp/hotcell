@@ -18,7 +18,7 @@ module ActiveStorage
           # deliberately does not copy: it rescues every Vips::Error and returns an empty hash, which is then
           # merged with `analyzed: true`. An undecodable image is recorded as successfully analyzed, forever,
           # and nothing re-enqueues AnalyzeJob. Here an undecodable input raises Vips::Error, the cell answers
-          # `unreadable`, and the client decides — because only the client knows whether that verdict is safe
+          # `unreadable`, and the client decides — because only the client knows whether that failure is safe
           # to write down.
           class Vips < VipsOperation
             operation "active_storage.analyzers.image.vips"

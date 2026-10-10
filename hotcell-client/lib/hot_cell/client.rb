@@ -106,6 +106,11 @@ module HotCell
       ActiveSupport::Notifications.instrument "perform.hot_cell", operation: self.class.operation, cell: cell.name do |event|
         response = verify_output(cell.transport.call(cell, line, descriptors), outputs)
         publish event, cell, response, inputs, outputs
+      # The transport answers its own failures with a code, so what lands here is the caller's own exception,
+      # such as its request timeout, and the call has no answer to describe.
+      rescue Exception
+        event[:code] = "interrupted"
+        raise
       end
 
       raise_for response, cell
@@ -160,9 +165,10 @@ module HotCell
       # `code` belongs on the event rather than only on an exception. A caller configured to treat
       # `unreadable` as data would otherwise make those requests invisible, and unreadable rates are exactly
       # what you want to watch after a library upgrade. `capacity` matters for the same reason: without its
-      # rate you cannot size a worker pool.
+      # rate you cannot size a worker pool. It is `ok` on success, so no subscriber reads success from a
+      # missing code.
       #
-      # The cause, signal and verdict go with it, because the code alone cannot classify a kill: `killed`
+      # The cause, signal and `permanent` go with it, because the code alone cannot classify a kill: `killed`
       # is permanent for fsize and memory and transient for deadline and crashed. A subscriber with only
       # the code filed every fsize kill as transient. `permanent` is the Failure's own answer, so no
       # subscriber re-derives it.
@@ -178,7 +184,7 @@ module HotCell
       def publish(event, cell, response, inputs, outputs)
         failure = response.failure
 
-        event[:code] = failure&.code
+        event[:code] = failure ? failure.code : "ok"
         event[:cause] = failure&.cause
         event[:signal] = failure&.signal
         event[:stderr] = failure&.stderr
@@ -200,7 +206,7 @@ module HotCell
         return if response.ok?
 
         failure = response.failure
-        error = Verdict.wrap(cell.exception_for(failure).new(failure.to_s), failure)
+        error = Failure::Exception.wrap(cell.exception_for(failure).new(failure.to_s), failure)
         cell.report_contract_skew error if failure.code == "protocol"
 
         raise error

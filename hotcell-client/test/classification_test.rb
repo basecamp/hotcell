@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "timeout"
 
-# Every failure a client can produce, classified. The transport is a seam, so this drives each verdict
+# Every failure a client can produce, classified. The transport is a seam, so this drives each failure
 # straight through it rather than arranging a cell to produce it.
 #
 # Anything a client can raise that the consuming application does not classify becomes a user-facing 500.
 # That is not hypothetical: applications carry rails_ext patches that exist because
 # `system(exception: true)` raised a bare RuntimeError outside their rescue lists.
 class ClassificationTest < HotCellClientTest
-  # Only the verdicts something actually knew: an operation naming what it could not decode, a caller
+  # Only the failures something actually knew: an operation naming what it could not decode, a caller
   # breaking the protocol, and the two limits this request provably hit by itself.
   PERMANENT = [
     { code: "unreadable" },
@@ -74,15 +75,27 @@ class ClassificationTest < HotCellClientTest
     assert_match "bad PNG header", error.message
   end
 
-  def test_a_verdict_can_be_rescued_as_one
+  def test_a_failure_exception_can_be_rescued_as_one
     register_with failed(code: "capacity")
 
     begin
       Anything.perform_in_hotcell [], [], {}
       flunk "expected a raise"
-    rescue HotCell::Verdict => error
+    rescue HotCell::Failure::Exception => error
       assert_equal "capacity", error.hot_cell_failure.code
     end
+  end
+
+  # `HotCell::Failure::Exception` shadows Ruby's Exception inside `HotCell::Failure`, where `Failure.for` asks
+  # whether its detail is one.
+  def test_a_socket_error_keeps_its_class_on_the_failure
+    HotCell.root = "/nowhere"
+    HotCell.register "test", permanent: Unprocessable, transient: TemporarilyUnavailable
+
+    error = assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+
+    assert_equal "unavailable", error.hot_cell_failure.code
+    assert_equal "Errno::ENOENT", error.hot_cell_failure.error_class
   end
 
   def test_the_raised_exception_carries_the_failure_itself
@@ -141,8 +154,8 @@ class ClassificationTest < HotCellClientTest
 
   # `code` alone cannot classify a kill: `killed` is permanent for fsize and memory and transient for
   # deadline and crashed. A subscriber that only had the code filed every fsize kill as transient. So the
-  # event carries what the Failure knows — the cause, the signal, and the verdict itself.
-  def test_the_event_carries_the_cause_and_the_verdict_so_a_subscriber_can_classify_a_kill
+  # event carries what the Failure knows — the cause, the signal, and `permanent` itself.
+  def test_the_event_carries_the_cause_and_permanent_so_a_subscriber_can_classify_a_kill
     register_with failed(code: "killed", cause: "fsize", signal: "XFSZ")
 
     event = events_for do
@@ -168,7 +181,7 @@ class ClassificationTest < HotCellClientTest
     assert_equal "libgomp: Thread creation failed\n", event[:stderr]
   end
 
-  def test_the_event_carries_a_transient_verdict_for_a_deadline_kill
+  def test_the_event_marks_a_deadline_kill_transient
     register_with failed(code: "killed", cause: "deadline")
 
     event = events_for do
@@ -180,18 +193,30 @@ class ClassificationTest < HotCellClientTest
     assert_equal false, event[:permanent]
   end
 
-  def test_the_event_carries_no_code_on_success
+  def test_the_event_carries_code_ok_on_success
     register_with HotCell::Response.ok(result: {}, timing: { perform_ms: 12, operation_ms: 9 })
 
     event = events_for { Anything.perform_in_hotcell [], [], {} }.first.payload
 
-    assert_nil event[:code]
+    assert_equal "ok", event[:code]
     assert_nil event[:cause]
     assert_nil event[:signal]
     assert_nil event[:stderr]
     assert_nil event[:permanent]
     assert_equal 12, event[:perform_ms]
     assert_equal({ perform_ms: 12, operation_ms: 9 }, event[:timing])
+  end
+
+  def test_the_event_carries_code_interrupted_when_an_exception_escapes_the_call
+    interruption = Timeout::Error.new("the request ran out of time")
+    register_with -> { raise interruption }
+
+    event = events_for do
+      assert_same interruption, assert_raises(Timeout::Error) { Anything.perform_in_hotcell [], [], {} }
+    end.first.payload
+
+    assert_equal "interrupted", event[:code]
+    assert_equal [ "Timeout::Error", "the request ran out of time" ], event[:exception]
   end
 
   # The client never reconnects and never retries. A silent retry doubles a cell's load at the moment it is
@@ -226,9 +251,9 @@ class ClassificationTest < HotCellClientTest
   # The cell is the untrusted side, so its answer is untrusted bytes and every way of failing to read one
   # has to land inside the taxonomy. JSON.parse raises EncodingError rather than JSON::ParserError for a
   # key holding bytes that are not valid UTF-8, and Transport::Socket rescues neither by name — so a
-  # hostile cell could raise an exception in the application that no code, no verdict and no
+  # hostile cell could raise an exception in the application that no code, no failure and no
   # `perform.hot_cell` event described, past whatever the caller had arranged to rescue.
-  def test_an_answer_that_cannot_be_read_is_a_verdict_rather_than_an_escaping_exception
+  def test_an_answer_that_cannot_be_read_is_a_failure_rather_than_an_escaping_exception
     hostile = %({"v":1,"ok":true,"result":{"\xff\xfe":1},"timing":{}}\n).b
 
     with_cell_answering(hostile) do
@@ -241,9 +266,9 @@ class ClassificationTest < HotCellClientTest
   end
 
   # A full cell writes its answer and closes the connection without reading the request. The client's send
-  # then fails, but the answer is already on its socket. The answer is the verdict. A request larger than the
+  # then fails, but the answer is already on its socket. The answer is what counts. A request larger than the
   # socket buffer makes the send fail every time.
-  def test_an_answer_that_arrives_before_the_request_is_sent_is_still_the_verdict
+  def test_an_answer_that_arrives_before_the_request_is_sent_is_still_the_answer
     response = call_a_full_cell
 
     assert_equal "capacity", response.failure.code, response.failure.to_s
@@ -251,7 +276,7 @@ class ClassificationTest < HotCellClientTest
 
   # macOS reports the same early close as ENOTCONN rather than EPIPE when the close lands while its kernel is
   # copying the request in. That window is narrow, so the test above passes there almost every time.
-  def test_an_answer_that_arrives_before_a_send_refused_as_not_connected_is_still_the_verdict
+  def test_an_answer_that_arrives_before_a_send_refused_as_not_connected_is_still_the_answer
     failing_sends_with Errno::ENOTCONN do
       response = call_a_full_cell
 
@@ -295,7 +320,7 @@ class ClassificationTest < HotCellClientTest
     #
     # It reads the request before answering, the way a real supervisor does. Answering without reading
     # raced the client: a close that landed before the client's `sendmsg` gave it EPIPE on the write leg,
-    # so it produced a verdict for a broken pipe and never reached the read this test is about.
+    # so it produced a failure for a broken pipe and never reached the read this test is about.
     def with_cell_answering(line, name: "test")
       Dir.mktmpdir "hotcell-hostile" do |root|
         directory = File.join(root, name)

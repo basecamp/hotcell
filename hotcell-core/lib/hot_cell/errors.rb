@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 module HotCell
-  # What this gem raises when a call is wrong, as distinct from a cell's verdict on a conversion.
+  # What this gem raises when a call is wrong, as distinct from a cell's failure.
   #
   # These must be raised outside the client's transport rescue. An application injects its own
-  # exception classes for a cell's verdicts, and if one of those descends from IOError then a bad call
+  # exception classes for a cell's failures, and if one of those descends from IOError then a bad call
   # swallowed by the transport rescue comes back as a socket failure and gets retried forever.
   class Error < StandardError; end
 
@@ -24,7 +24,7 @@ module HotCell
   # cannot hold its limits and a client that cannot classify a failure are both worse discovered in traffic.
   class ConfigurationError < Error; end
 
-  # A peer that stopped mid-message. Distinct from a cell answering `timeout`, which is a verdict: this is
+  # A peer that stopped mid-message. Distinct from a cell answering `timeout`, which is a failure: this is
   # the caller's own deadline passing with the response incomplete.
   class ReadTimeout < Error; end
 

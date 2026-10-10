@@ -124,7 +124,7 @@ class DescriptorsTest < HotCellTest
     end
   end
 
-  # Zero bytes is a verdict the client already has to handle, because a full tmpfs arrives the same way.
+  # Zero bytes is a failure the client already has to handle, because a full tmpfs arrives the same way.
   def test_posting_a_staged_output_the_operation_never_wrote_reports_zero
     with_file do |destination|
       Dir.mktmpdir do |scratch|

@@ -28,7 +28,7 @@ class PerformTest < YabedaHotCellTest
     assert_nil perform_seconds
   end
 
-  # `killed` is one code and several verdicts: which limit the worker hit decides whether the file did it.
+  # `killed` is one code and several causes: which limit the worker hit decides whether the file did it.
   # Every other code carries an empty cause, because a label that is sometimes absent is a separate series in
   # Prometheus, and a query by code would silently split.
   def test_counts_a_kill_under_its_cause
@@ -37,6 +37,15 @@ class PerformTest < YabedaHotCellTest
     assert_raises(Unprocessable) { Anything.perform_in_hotcell [], [], {} }
 
     assert_equal 1, requests(code: "killed", cause: "fsize")
+  end
+
+  def test_counts_a_call_interrupted_by_an_exception_under_its_own_code_and_measures_nothing
+    answer_by_raising
+
+    assert_raises(RuntimeError) { Anything.perform_in_hotcell [], [], {} }
+
+    assert_equal({ { **labels, code: "interrupted", cause: "" } => 1 }, all_requests)
+    assert_nil perform_seconds
   end
 
   # A subscriber raises into whoever called instrument, so a bug here would otherwise arrive as a failed call.
@@ -52,12 +61,21 @@ class PerformTest < YabedaHotCellTest
       register transport: CannedTransport.new(response)
     end
 
+    def answer_by_raising
+      HotCell.root = "/nowhere"
+      register transport: BrokenTransport.new
+    end
+
     def failed(code:, cause: nil)
       HotCell::Response.failed HotCell::Failure.new(code: code, cause: cause, message: "no"), timing: { perform_ms: 1 }
     end
 
     def requests(**tags)
       Yabeda::TestAdapter.instance.counters[Yabeda.hotcell.requests][{ **labels, **tags }]
+    end
+
+    def all_requests
+      Yabeda::TestAdapter.instance.counters[Yabeda.hotcell.requests]
     end
 
     def perform_seconds

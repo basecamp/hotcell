@@ -60,7 +60,7 @@ module ActiveStorage
 
         # MiniMagick::Error is how mini_magick reports a `magick` that exited non-zero — the common shape of an
         # input it cannot decode. MiniMagick::Invalid is an input `identify` rejects outright.
-        # ImageProcessing::Error is the pipeline's own verdict on the input against the requested
+        # ImageProcessing::Error is the pipeline's own rejection of the input against the requested
         # transform — a multi-layer source into a single-layer destination, for example. All three are
         # the input's fault rather than the operation's; unclassified, each was a transient `failed`
         # that never marked the blob, so the same file spent a full conversion on every request.
@@ -69,7 +69,7 @@ module ActiveStorage
         # **Accepted risk.** A tool's output is not bounded on this path. `Operation#run_tool` caps what it
         # reads at 64KB and drops the rest as it arrives, because an input that makes a tool print gigabytes
         # of diagnostics costs this worker gigabytes of address space, takes RLIMIT_DATA with it, and arrives
-        # as a `memory` verdict — which is permanent, for a document whose only crime was being noisy.
+        # as a `memory` failure — which is permanent, for a document whose only crime was being noisy.
         # mini_magick reads both streams to EOF in a thread apiece and has no setting that bounds either;
         # `graphicsmagick`, `cli_prefix`, `cli_env`, `restricted_env`, `timeout`, `logger`, `tmpdir`,
         # `errors` and `warnings` are the whole list. The premise is that patching the library is worse than

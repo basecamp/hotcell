@@ -75,7 +75,7 @@ set a `temporary-path` policy, which overrides it.
 **`file_size` can't do the disk limit's job.** `file_size` is `RLIMIT_FSIZE`, a limit on each file. A
 layered PSD writes one cache file for each layer, and twenty 40MiB caches total 800MiB with no file near a
 48MiB `file_size`. Only `MAGICK_DISK_LIMIT` bounds the sum. Where the two meet, the smaller fires first, as
-an `fsize` kill or as `cache resources exhausted`. Both are permanent verdicts on the file.
+an `fsize` kill or as `cache resources exhausted`. Both are permanent failures of the file.
 
 **A disk limit larger than the scratch isn't a limit.** The scratch fills first. A full scratch fails every
 request on the cell that needs scratch, and a write that fails inside libvips is a `Vips::Error`, which the

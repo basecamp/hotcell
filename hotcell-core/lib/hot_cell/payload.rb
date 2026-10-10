@@ -33,7 +33,7 @@ module HotCell
       # cell.
       #
       # The body is one JSON.parse call, so the rescue cannot hide a bug of our own. NoMemoryError is not
-      # a StandardError and stays uncaught: a document that large is the worker's memory verdict, not a
+      # a StandardError and stays uncaught: a document that large is the worker's `memory` failure, not a
       # bad line.
       def parse(json)
         JSON.parse json, symbolize_names: true, max_nesting: MAX_NESTING, allow_nan: false

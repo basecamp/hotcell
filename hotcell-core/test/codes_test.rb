@@ -20,7 +20,7 @@ class CodesTest < HotCellTest
   # `failed` is whatever an unclassified exception became. Errno::ENOSPC is a StandardError, so a full tmpfs
   # or a full disk under the caller's output arrives here — and permanent meant those were written down
   # against a customer's file forever, for a condition that would have succeeded on retry.
-  def test_an_unclassified_exception_is_not_a_verdict_on_the_input
+  def test_an_unclassified_exception_is_not_permanent
     refute HotCell::Codes.permanent?("failed")
   end
 
@@ -28,7 +28,7 @@ class CodesTest < HotCellTest
   # anybody reboots the cell gets this at one hundred percent for as long as that takes. Recording it as
   # permanent condemns every blob uploaded during the window, and a caller's typo shows up in the rate and in
   # the refusal, which names the operation.
-  def test_an_operation_a_cell_does_not_carry_yet_is_a_deploy_window_rather_than_a_verdict
+  def test_an_operation_a_cell_does_not_carry_yet_is_a_deploy_window_rather_than_permanent
     refute HotCell::Codes.permanent?("unsupported")
   end
 
@@ -40,9 +40,9 @@ class CodesTest < HotCellTest
 
   # A signal says how a process died, never why. The supervisor names its own deadline kill; anything else
   # arrived from a cgroup OOM chosen on aggregate pressure, or from a sibling worker sharing this uid.
-  # Reading that as a verdict condemns an input for something it did not do — so it is `crashed`, the same
+  # Reading that as permanent condemns an input for something it did not do — so it is `crashed`, the same
   # answer as a worker that exited without saying anything, because it is the same amount of knowledge.
-  def test_a_worker_dying_for_an_unattributable_reason_is_not_a_verdict_on_the_input
+  def test_a_worker_dying_for_an_unattributable_reason_is_not_permanent
     refute HotCell::Codes.permanent?("killed", cause: "crashed")
   end
 
@@ -58,7 +58,7 @@ class CodesTest < HotCellTest
   end
 
   # The whole point of the table's default. A cell mints these, and a kill reason added to the supervisor
-  # without a row here is a forgotten row rather than a verdict — so it must not come out permanent, which is
+  # without a row here is a forgotten row rather than a decision — so it must not come out permanent, which is
   # the answer that cannot be taken back.
   def test_a_limit_the_table_has_never_heard_of_is_not_permanent
     refute HotCell::Codes.permanent?("killed", cause: "oom")

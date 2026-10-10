@@ -26,7 +26,7 @@ class ControlTest < HotCellServerTest
   # response and the supervisor increments the counter when it later reads that worker's idle report — two
   # processes — so a caller can be holding its answer before the count exists. Anything reading these for
   # alarms should expect the same skew.
-  def test_metrics_count_the_outcomes
+  def test_metrics_count_each_code
     TestCell.boot do |cell|
       2.times { assert_ok cell.call("test.echo") }
       assert_failed "failed", cell.call("test.broken")
@@ -53,8 +53,8 @@ class ControlTest < HotCellServerTest
                       cause: "fsize"
       end
 
-      # Polled: the worker answers this verdict itself now, so the caller has its response before the
-      # supervisor has read the idle report the count comes from. Every non-killed outcome was already
+      # Polled: the worker answers this failure itself now, so the caller has its response before the
+      # supervisor has read the idle report the count comes from. Every code but `killed` was already
       # counted on that report; this moves `fsize` into the same place rather than into a new one.
       result = wait_for_metrics(cell) { |metrics| metrics[:killed_by][:fsize] == 1 }
 
@@ -64,7 +64,7 @@ class ControlTest < HotCellServerTest
     end
   end
 
-  # The one outcome that appears in no response, by definition: nobody is left to receive it. A cell quietly
+  # The one count that appears in no response, by definition: nobody is left to receive it. A cell quietly
   # doing work for callers who have gone away can only be seen from here.
   def test_metrics_count_a_caller_that_gave_up_before_the_cell_answered
     TestCell.boot(deadline: 1) do |cell|

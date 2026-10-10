@@ -3,7 +3,7 @@
 
 # The example operations at volume: the driver half of bin/load, run inside a second container against a
 # containerized cell. Threads hammer one scenario for a duration, and the report splits what the doc's
-# knobs are for — time spent queued against time spent performing, the verdict mix, and throughput.
+# knobs are for — time spent queued against time spent performing, the count of each code, and throughput.
 #
 #   load [SCENARIO] [SECONDS] [THREADS]
 #
@@ -70,9 +70,9 @@ end
 
 abort "unknown scenario #{SCENARIO.inspect} (#{CALLS.keys.join(", ")}, mix)" unless SCENARIO == "mix" || CALLS.key?(SCENARIO)
 
-# The verdict, as a caller sees it: `ok`, or the failure's code — with the cause kept for `killed`,
+# The code, as a caller sees it: `ok`, or the failure's code — with the cause kept for `killed`,
 # because `killed: memory` and `killed: deadline` call for different responses to pressure.
-def verdict_for(error)
+def code_for(error)
   return "ok" if error.nil?
 
   parts = error.message.split(": ")
@@ -89,7 +89,7 @@ ActiveSupport::Notifications.subscribe "perform.hot_cell" do |event|
   recorder.synchronize { samples << sample }
 end
 
-verdicts = Hash.new(0)
+codes = Hash.new(0)
 started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 stop_at = started + SECONDS
 
@@ -104,7 +104,7 @@ THREADS.times.map do
         raised
       end
 
-      recorder.synchronize { verdicts[verdict_for(error)] += 1 }
+      recorder.synchronize { codes[code_for(error)] += 1 }
     end
   end
 end.each(&:join)
@@ -120,12 +120,12 @@ def percentiles(values)
   end.join(" ")
 end
 
-total = verdicts.values.sum
+total = codes.values.sum
 puts
 puts format("%d requests in %.1fs — %.1f req/s on %d threads", total, elapsed, total / elapsed, THREADS)
 puts
-puts "verdicts:"
-verdicts.sort_by { |_, count| -count }.each { |verdict, count| puts format("  %-18s %6d", verdict, count) }
+puts "codes:"
+codes.sort_by { |_, count| -count }.each { |code, count| puts format("  %-18s %6d", code, count) }
 puts
 puts "latency (wall):    #{percentiles(samples.map { |sample| sample[:duration_ms] })}"
 puts "latency (queued):  #{percentiles(samples.map { |sample| sample[:queued_ms] })}"

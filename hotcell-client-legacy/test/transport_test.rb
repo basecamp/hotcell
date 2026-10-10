@@ -155,13 +155,13 @@ class TransportTest < LegacyTest
     end
   end
 
-  def test_a_verdict_can_be_rescued_as_one
+  def test_a_failure_exception_can_be_rescued_as_one
     answer = %({"v":1,"ok":false,"error":{"code":"unreadable","permanent":true,"cause":"protected"}}\n)
     with_peer(lambda { |connection| connection.write answer }) do |client|
       begin
         client.perform "test.echo", [], []
         flunk "expected a raise"
-      rescue HotCell::Client::Legacy::Verdict => error
+      rescue HotCell::Client::Legacy::Failure::Exception => error
         assert_equal "protected", error.hot_cell_failure.cause
       end
     end

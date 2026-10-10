@@ -54,7 +54,7 @@ class ActiveStorageHotCellClientTest < Minitest::Test
       end
     end
 
-    # For the cases about classification, where booting a cell to produce one verdict would be theatre.
+    # For the cases about classification, where booting a cell to produce one failure would be theatre.
     def with_canned_response(response)
       HotCell.root = "/nowhere"
       transport = CannedTransport.new(response)

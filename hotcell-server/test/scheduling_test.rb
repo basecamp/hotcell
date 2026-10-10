@@ -61,7 +61,7 @@ class SchedulingTest < HotCellServerTest
 
   # macOS refuses a signal to a process group whose only members are zombies, with EPERM rather than ESRCH.
   # A killed worker's tool is one such zombie until launchd reaps it, so the reap's sweep raised, unwound the
-  # run loop and ended the cell, and the caller read end of stream instead of the verdict.
+  # run loop and ended the cell, and the caller read end of stream instead of the answer.
   def test_a_deadline_kill_is_answered_when_the_reap_sweep_is_refused
     refuse_group_signals(after: 1) do
       TestCell.boot(deadline: 0.3, concurrency: 1) do |cell|
@@ -250,7 +250,7 @@ class SchedulingTest < HotCellServerTest
   end
 
   # Without queue_wait a queued connection waits until the client's own timeout fires, so the client
-  # reports a transport error and the cell's capacity verdict is never delivered — making the code the
+  # reports a transport error and the cell's `capacity` failure is never delivered — making the code the
   # queue exists to surface unreachable exactly when the cell is saturated.
   def test_a_connection_that_waits_too_long_is_told_so_by_the_cell_rather_than_timing_out
     TestCell.boot(concurrency: 1, queue_size: 4, queue_wait: 0.3, deadline: 30) do |cell|

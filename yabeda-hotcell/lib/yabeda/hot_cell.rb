@@ -18,7 +18,7 @@ module Yabeda
       Yabeda.configure do
         group :hotcell
 
-        counter :requests, comment: "Calls through perform_in_hotcell, by outcome",
+        counter :requests, comment: "Calls through perform_in_hotcell, by code",
           tags: %i[ cell operation code cause ]
         histogram :perform, comment: "Time the cell spent performing", unit: :seconds,
           tags: %i[ cell operation ], buckets: [ 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 120 ]
@@ -70,14 +70,15 @@ module Yabeda
     # A failed call is not reported from here: the raise the caller sees already reaches the error reporter.
     def self.record_perform(event)
       labels = { cell: event.payload[:cell], operation: event.payload[:operation] }
+      code = event.payload[:code]
 
       # Empty rather than absent, because a label that is sometimes missing is a separate series in Prometheus
       # and a query by code would silently split.
-      Yabeda.hotcell.requests.increment(labels.merge(code: event.payload[:code] || "ok",
-                                                     cause: event.payload[:cause].to_s))
+      Yabeda.hotcell.requests.increment(labels.merge(code: code, cause: event.payload[:cause].to_s))
 
-      # The response has no perform_ms when the cell refuses the call with `capacity`, or when the client fails
-      # the call itself with `unavailable` or `timeout`. Recording 0 would pull down the low percentiles.
+      # The event has no perform_ms when the cell refuses the call with `capacity`, when the client fails the
+      # call itself with `unavailable` or `timeout`, or when an exception interrupts the call. Recording 0
+      # would pull down the low percentiles.
       perform_ms = event.payload[:perform_ms]
       Yabeda.hotcell.perform.measure(labels, perform_ms / 1000.0) if perform_ms
     end

@@ -53,7 +53,7 @@ class AnalyzeImageTest < ActiveStorageHotCellTest
 
   # The built-in vips analyzer rescues every Vips::Error and returns an empty hash, which is then merged with
   # `analyzed: true` — so an undecodable image is recorded as successfully analyzed, forever, and nothing
-  # re-enqueues AnalyzeJob. This deliberately does not copy that: the cell reports the verdict and the client
+  # re-enqueues AnalyzeJob. This deliberately does not copy that: the cell reports the failure and the client
   # decides, because only the client knows whether it is safe to write down.
   # Rails imposes no size limit on analysis, and neither may the cell. The input is read through its
   # descriptor rather than copied onto scratch, so a file far larger than the operation's file_size — which

@@ -82,10 +82,10 @@ module HotCell
     #
     # So the supervisor never infers either of them from a signal. They are decided in the worker, which is
     # the process that holds the request: `memory` when it catches NoMemoryError itself, and `fsize` when a
-    # write of its own returns EFBIG. See Worker#disarm_file_size_signal for why the file-size verdict has
+    # write of its own returns EFBIG. See Worker#disarm_file_size_signal for why the `fsize` failure has
     # to be earned that way rather than read off a wait status.
     #
-    # That is a narrower guarantee than "a permanent verdict cannot be forged", and the difference matters.
+    # That is a narrower guarantee than "a permanent failure cannot be forged", and the difference matters.
     # It removes the supervisor as an instrument: a sibling's signal no longer travels through a wait status
     # into someone else's blob. It does nothing about a cell that has been compromised outright and answers
     # a connection itself — `from_wire` believes a `permanent` boolean off the wire, and a worker that stole

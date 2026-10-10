@@ -186,7 +186,7 @@ class TransformImageTest < ActiveStorageHotCellTest
   # A name that is neither an ImageProcessing operation nor a Vips::Image method is refused by
   # ImageProcessing itself, exactly as it is under Rails on vips. It arrives `failed` — transient — so a
   # caller bug is never written down against the document.
-  def test_an_unknown_transformation_is_not_a_verdict_on_the_document
+  def test_an_unknown_transformation_is_not_a_permanent_failure_of_the_document
     Cell.boot do |cell|
       with_output do |destination|
         failure = assert_failed "failed", cell.call("active_storage.transformers.image.vips",

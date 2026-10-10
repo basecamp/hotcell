@@ -21,7 +21,7 @@ Expect the ratio to look worst on the smallest thumbnails and to stop mattering 
 
 Four candidates were tested and eliminated, recorded so nobody re-runs them:
 
-| Candidate | Verdict |
+| Candidate | Finding |
 | --- | --- |
 | The container | Within noise of the native cell on two of three sources, 12ms on the largest. |
 | The `fork` syscall | 2.8 ms of a 20–30 ms cost. |
