@@ -18,6 +18,7 @@ module HotCell
   class Counters
     def initialize
       @started_at = Clock.now
+      @start_time = Time.now.to_f
       @requests = Hash.new(0)
       @killed_by = Hash.new(0)
       @cancelled = 0
@@ -42,8 +43,8 @@ module HotCell
     end
 
     def to_h(running: 0, queued: 0)
-      { uptime_s: (Clock.now - @started_at).round, running: running, queued: queued,
-        queue_high_water: @queue_high_water, requests: @requests, killed_by: @killed_by,
+      { start_time_s: @start_time, uptime_s: (Clock.now - @started_at).round, running: running,
+        queued: queued, queue_high_water: @queue_high_water, requests: @requests, killed_by: @killed_by,
         cancelled: @cancelled }
     end
   end

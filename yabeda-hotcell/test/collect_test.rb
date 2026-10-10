@@ -19,6 +19,29 @@ class CollectTest < YabedaHotCellTest
     assert_equal 0, gauge(:queue_high_water)
     assert_equal 0, gauge(:cancelled)
     assert_kind_of Integer, gauge(:uptime_seconds)
+    assert_kind_of Float, gauge(:start_time_seconds)
+  end
+
+  def test_publishes_when_the_cell_started
+    HotCell.root = "/nowhere"
+    register transport: CannedTransport.new(metrics(start_time_s: 1_760_000_000.25))
+
+    Yabeda.collect!
+
+    assert_equal 1_760_000_000.25, gauge(:start_time_seconds)
+  end
+
+  # A cell from an earlier release reports no start time, and a mixed deploy has one.
+  def test_a_cell_that_does_not_report_its_start_time_publishes_none
+    HotCell.root = "/nowhere"
+    register transport: CannedTransport.new(metrics)
+
+    Yabeda.collect!
+
+    refute_includes Yabeda::TestAdapter.instance.gauges[Yabeda.hotcell.start_time_seconds], { cell: "test" }
+    assert_equal 41, gauge(:uptime_seconds)
+    assert_equal 0, gauge(:killed, cause: "memory")
+    assert_empty @reported
   end
 
   def test_publishes_kills_by_cause

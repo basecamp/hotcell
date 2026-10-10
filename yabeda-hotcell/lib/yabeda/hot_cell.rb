@@ -33,7 +33,9 @@ module Yabeda
           tags: %i[ cell ], aggregation: :most_recent
         gauge :killed, comment: "Workers killed since boot, by cause",
           tags: %i[ cell cause ], aggregation: :most_recent
-        gauge :uptime_seconds, comment: "Seconds since the supervisor booted",
+        gauge :uptime_seconds, comment: "Seconds since the supervisor booted. Deprecated: use start_time_seconds",
+          tags: %i[ cell ], aggregation: :most_recent
+        gauge :start_time_seconds, comment: "When the supervisor booted, in seconds since the Unix epoch",
           tags: %i[ cell ], aggregation: :most_recent
 
         collect { Yabeda::HotCell.collect_stats }
@@ -91,6 +93,8 @@ module Yabeda
       Yabeda.hotcell.queue_high_water.set(tags, counters[:queue_high_water])
       Yabeda.hotcell.cancelled.set(tags, counters[:cancelled])
       Yabeda.hotcell.uptime_seconds.set(tags, counters[:uptime_s])
+      # A cell from an earlier release reports no start time.
+      Yabeda.hotcell.start_time_seconds.set(tags, counters[:start_time_s]) if counters[:start_time_s]
       ::HotCell::Codes::PERMANENT_BY_CAUSE.each_key do |cause|
         Yabeda.hotcell.killed.set(tags.merge(cause: cause), counters[:killed_by].fetch(cause.to_sym, 0))
       end
