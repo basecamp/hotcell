@@ -23,7 +23,7 @@ Some actions that application developers should consider taking when upgrading f
 * In your own `perform.hot_cell` subscribers, test for success with `payload[:code] == "ok"` instead of `payload[:code].nil?`, and expect `interrupted`. The event now sets `code` on every call; see [Per-call notification](docs/observability.md#per-call-notification).
 * Where a test instruments `perform.hot_cell` by hand to stand in for a successful call, pass `code: "ok"`. `HotCell::LogSubscriber` and `yabeda-hotcell` now record `code` as the event gives it, so an event without one records no code.
 * Count `code="interrupted"` as a failed call wherever a dashboard or alert computes an error rate from `hotcell_requests`. `yabeda-hotcell` counted these calls as `ok` before.
-* Replace `hotcell_uptime_seconds` with `time() - hotcell_start_time_seconds` in dashboards and alerts. `hotcell_uptime_seconds` is deprecated, and a future release removes it. Deploy cells running this release too: until a cell runs it, `hotcell_start_time_seconds` has no value for that cell.
+* `hotcell_uptime_seconds` is now deprecated. In dashboards and alerts, replace it with `time() - hotcell_start_time_seconds`. `hotcell_start_time_seconds` has a value only for cells running this release.
 
 ### HotCell::Client
 
@@ -56,11 +56,11 @@ Some actions that application developers should consider taking when upgrading f
 
 #### Added
 
-* The `start_time_seconds` gauge records when each cell booted, in seconds since the Unix epoch. A cell from an earlier release reports no start time, so the gauge has no value for it. (#112)
+* The `start_time_seconds` gauge records when each cell booted, in seconds since the Unix epoch. (#112)
 
 #### Deprecated
 
-* The `uptime_seconds` gauge. Use `time() - hotcell_start_time_seconds` instead. A future release removes it. (#112)
+* `uptime_seconds` is now deprecated. Use `time() - hotcell_start_time_seconds` instead. It will be removed in a future version. (#112)
 
 #### Fixed
 

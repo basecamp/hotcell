@@ -142,7 +142,7 @@ The metrics are in the `hotcell` group:
 | `cancelled` | gauge | `cell` | Callers that gave up before the cell answered. This is a floor. |
 | `killed` | gauge | `cell`, `cause` | Workers killed since boot, by cause. |
 | `start_time_seconds` | gauge | `cell` | When the supervisor booted, in seconds since the Unix epoch. `time() - hotcell_start_time_seconds` is the uptime. |
-| `uptime_seconds` | gauge | `cell` | Seconds since the supervisor booted. Deprecated: use `start_time_seconds`. A future release removes it. |
+| `uptime_seconds` | gauge | `cell` | ⚠️ Deprecated: use `start_time_seconds`. Seconds since the supervisor booted. This field will be removed in a future version. |
 
 On each scrape, the gem reads `metrics` from each registered cell and sets the gauges from it. A scrape
 never fails because a cell misbehaves: the gem reports the error to the Active Support error reporter.
