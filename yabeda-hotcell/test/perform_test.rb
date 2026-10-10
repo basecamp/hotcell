@@ -20,6 +20,14 @@ class PerformTest < YabedaHotCellTest
     assert_equal 1, requests(code: "capacity", cause: "")
   end
 
+  def test_records_no_perform_time_when_the_cell_refuses_a_call_with_capacity
+    answer HotCell::Response.failed(HotCell::Failure.new(code: "capacity", message: "no"), timing: { queued_ms: 0 })
+
+    assert_raises(TemporarilyUnavailable) { Anything.perform_in_hotcell [], [], {} }
+
+    assert_nil perform_seconds
+  end
+
   # `killed` is one code and several verdicts: which limit the worker hit decides whether the file did it.
   # Every other code carries an empty cause, because a label that is sometimes absent is a separate series in
   # Prometheus, and a query by code would silently split.

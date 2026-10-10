@@ -75,7 +75,11 @@ module Yabeda
       # and a query by code would silently split.
       Yabeda.hotcell.requests.increment(labels.merge(code: event.payload[:code] || "ok",
                                                      cause: event.payload[:cause].to_s))
-      Yabeda.hotcell.perform.measure(labels, (event.payload[:perform_ms] || 0) / 1000.0)
+
+      # The response has no perform_ms when the cell refuses the call with `capacity`, or when the client fails
+      # the call itself with `unavailable` or `timeout`. Recording 0 would pull down the low percentiles.
+      perform_ms = event.payload[:perform_ms]
+      Yabeda.hotcell.perform.measure(labels, perform_ms / 1000.0) if perform_ms
     end
 
     private_class_method def self.set_counters(cell, counters)

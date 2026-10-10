@@ -13,6 +13,14 @@ This changelog covers these gems, which release together on the same version:
 A `Tooling` section records changes to the checks and scripts in `bin/` and `examples/`, which ship in no
 gem but are what an operator runs against their own image.
 
+## next / unreleased
+
+### Yabeda::HotCell
+
+#### Fixed
+
+* `perform` records nothing for a call whose response has no `perform_ms`: a call that the cell refused with `capacity`, or that the client failed itself with `unavailable` or `timeout`. Previously, it recorded 0 seconds, which pulled down the low percentiles. (#112)
+
 ## v1.1.0 / 2026-10-08
 
 ### HotCell::Server
