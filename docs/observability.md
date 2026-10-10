@@ -135,7 +135,7 @@ The metrics are in the `hotcell` group:
 | Metric | Type | Tags | Description |
 | --- | --- | --- | --- |
 | `requests` | counter | `cell`, `operation`, `code`, `cause` | Each call. `code` is `ok` on success, and `cause` is empty when there's none. |
-| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. |
+| `perform` | histogram | `cell`, `operation` | Seconds that the cell spent in `perform`. A call whose response has no `perform_ms`, such as `capacity`, `unavailable` or `timeout`, records nothing. |
 | `up` | gauge | `cell` | 1 when the local cell answers its control socket, otherwise 0. |
 | `running` | gauge | `cell` | Workers busy right now. |
 | `queued` | gauge | `cell` | Connections waiting for a worker. |
