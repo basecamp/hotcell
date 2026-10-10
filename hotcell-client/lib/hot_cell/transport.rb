@@ -13,9 +13,9 @@ module HotCell
       # `timeout` covers the answer and not the connection. On Linux a blocking `connect` to a Unix socket waits
       # in the kernel while the listener's backlog is full, which is where a supervisor that stops calling
       # `accept` leaves it. `UNIXSocket.new` does not wait: Ruby opens every socket non-blocking and takes the
-      # kernel's EAGAIN for a connection in progress, so it returns a socket that never connected, the send
-      # fails with ENOTCONN, and the caller gets `unavailable` at once. That is Ruby's behavior rather than
-      # this gem's, so ControlTimeoutTest holds it.
+      # kernel's EAGAIN for a connection in progress, so it returns a socket that never connected. The send
+      # fails with ENOTCONN, which `deliver` ignores, then the read fails with EINVAL, and the caller gets
+      # `unavailable` at once. That is Ruby's behavior rather than this gem's, so ControlTimeoutTest holds it.
       #
       # If Ruby ever starts waiting, `connect_nonblock` plus `wait_writable` against a deadline would bound the
       # call only by spinning: on Linux an unconnected Unix socket is always writable, so it retries EAGAIN until
@@ -39,9 +39,12 @@ module HotCell
         # then fail while the answer is already waiting on the socket. So this ignores the failed send, and
         # `receive` reads the answer. If the peer closed without an answer, `receive` reports that the
         # supervisor is gone.
+        #
+        # Linux fails that send with EPIPE or ECONNRESET. macOS usually does too, but answers ENOTCONN when the
+        # close lands while its kernel is copying the request in, between checking the socket and queueing.
         def deliver(connection, line, descriptors)
           connection.send_message line, descriptors: descriptors
-        rescue Errno::EPIPE, Errno::ECONNRESET
+        rescue Errno::EPIPE, Errno::ECONNRESET, Errno::ENOTCONN
           nil
         end
 

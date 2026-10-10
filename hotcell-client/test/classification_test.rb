@@ -244,27 +244,53 @@ class ClassificationTest < HotCellClientTest
   # then fails, but the answer is already on its socket. The answer is the verdict. A request larger than the
   # socket buffer makes the send fail every time.
   def test_an_answer_that_arrives_before_the_request_is_sent_is_still_the_verdict
-    refusal = HotCell::Response.failed(HotCell::Failure.new(code: "capacity", message: "the queue is full at 8")).to_line
+    response = call_a_full_cell
 
-    Dir.mktmpdir "hotcell-refusing" do |directory|
-      path = File.join(directory, "work.sock")
-      work = UNIXServer.new(path)
-      refuser = Thread.new do
-        connection = HotCell::Connection.new(work.accept)
-        connection.write_line refusal
-        connection.close
-      end
+    assert_equal "capacity", response.failure.code, response.failure.to_s
+  end
 
-      response = HotCell::Transport::Socket.new.call(nil, "x" * (4 * 1024 * 1024), [], socket: path, timeout: 5)
+  # macOS reports the same early close as ENOTCONN rather than EPIPE when the close lands while its kernel is
+  # copying the request in. That window is narrow, so the test above passes there almost every time.
+  def test_an_answer_that_arrives_before_a_send_refused_as_not_connected_is_still_the_verdict
+    failing_sends_with Errno::ENOTCONN do
+      response = call_a_full_cell
 
       assert_equal "capacity", response.failure.code, response.failure.to_s
-    ensure
-      refuser&.join
-      work&.close
     end
   end
 
   private
+    def call_a_full_cell
+      refusal = HotCell::Response.failed(HotCell::Failure.new(code: "capacity", message: "the queue is full at 8")).to_line
+
+      Dir.mktmpdir "hotcell-refusing" do |directory|
+        path = File.join(directory, "work.sock")
+        work = UNIXServer.new(path)
+        refuser = Thread.new do
+          connection = HotCell::Connection.new(work.accept)
+          connection.write_line refusal
+          connection.close
+        end
+
+        HotCell::Transport::Socket.new.call(nil, "x" * (4 * 1024 * 1024), [], socket: path, timeout: 5)
+      ensure
+        refuser&.join
+        work&.close
+      end
+    end
+
+    # The send fails only once the cell's answer is on the socket, as it does when the cell has answered and closed.
+    def failing_sends_with(error)
+      original = HotCell::Connection.instance_method(:send_message)
+      HotCell::Connection.define_method(:send_message) do |*|
+        socket.wait_readable 5
+        raise error, "sendmsg(2)"
+      end
+      yield
+    ensure
+      HotCell::Connection.define_method(:send_message, original)
+    end
+
     # A cell whose supervisor answers one fixed line and closes, so the client reads exactly these bytes.
     #
     # It reads the request before answering, the way a real supervisor does. Answering without reading
