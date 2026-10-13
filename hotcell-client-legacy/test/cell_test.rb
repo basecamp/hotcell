@@ -6,11 +6,11 @@ require "test_helper"
 class CellTest < LegacyTest
   def test_a_conversion_crosses_the_boundary_and_comes_back
     with_files("hello from the cold side") do |source, destination|
-      result = File.open(source, "rb") do |input|
+      response = File.open(source, "rb") do |input|
         File.open(destination, "wb") { |output| client.perform "test.uppercase", [ input ], [ output ] }
       end
 
-      assert_equal({ "bytes" => 24 }, result)
+      assert_equal({ "bytes" => 24 }, response.result)
       assert_equal "HELLO FROM THE COLD SIDE", File.binread(destination)
     end
   end
@@ -26,9 +26,30 @@ class CellTest < LegacyTest
   end
 
   def test_a_payload_and_a_result_round_trip_with_string_keys
-    result = client.perform("test.echo", [], [], "format" => "png", "resize" => [ 800, 600 ])
+    response = client.perform("test.echo", [], [], "format" => "png", "resize" => [ 800, 600 ])
 
-    assert_equal({ "echoed" => { "format" => "png", "resize" => [ 800, 600 ] } }, result)
+    assert_equal({ "echoed" => { "format" => "png", "resize" => [ 800, 600 ] } }, response.result)
+  end
+
+  def test_a_success_carries_the_cells_timing_and_the_calls_duration
+    response = client.perform("test.echo", [], [])
+
+    assert response.ok?
+    assert_nil response.failure
+    assert_kind_of Numeric, response.timing["queued_ms"]
+    assert_kind_of Numeric, response.timing["perform_ms"]
+    assert_operator response.duration_ms, :>=, response.timing["perform_ms"]
+  end
+
+  def test_a_failure_carries_the_cells_timing_and_the_calls_duration
+    error = assert_raises(HotCell::Client::Legacy::PermanentFailure) { client.perform "test.undecodable", [], [] }
+    response = error.hot_cell_response
+
+    refute response.ok?
+    assert_nil response.result
+    assert_same error.hot_cell_failure, response.failure
+    assert_kind_of Numeric, response.timing["perform_ms"]
+    assert_operator response.duration_ms, :>=, response.timing["perform_ms"]
   end
 
   def test_a_permanent_failure_raises_permanent_failure
@@ -72,6 +93,8 @@ class CellTest < LegacyTest
     end
 
     assert_equal "timeout", error.hot_cell_failure.code
+    assert_equal({}, error.hot_cell_response.timing)
+    assert_operator error.hot_cell_response.duration_ms, :>=, 400
     assert_operator took, :<, 2
   end
 
@@ -85,14 +108,14 @@ class CellTest < LegacyTest
   end
 
   def test_describe_answers_on_the_control_socket_beside_the_work_socket
-    described = client.describe
+    described = client.describe.result
 
     assert_equal 1, described["v"]
     assert_includes described["operations"], "test.uppercase"
   end
 
   def test_metrics_answers_on_the_control_socket_beside_the_work_socket
-    metrics = client.metrics
+    metrics = client.metrics.result
 
     assert_kind_of Integer, metrics["running"]
     assert_kind_of Hash, metrics["killed_by"]
