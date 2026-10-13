@@ -80,11 +80,11 @@ The client raises the cell's `permanent:` or `transient:` class. See [Response c
 
 - **Analyzers** rescue the permanent class and return no metadata, so Rails marks the blob analyzed. They
   don't rescue the transient class. See [What Active Storage records](codes.md#what-active-storage-records).
-- **Jobs** retry the transient class. At boot and on every code reload, the gem adds
-  `retry_on <transient class>, wait: :polynomially_longer, attempts: 10` to `ActiveStorage::AnalyzeJob`,
-  `ActiveStorage::CreateVariantsJob`, `ActiveStorage::PreviewImageJob`, and `ActiveStorage::TransformJob`,
-  for each one that this Rails version has. Each registered cell that a shipped client names contributes
-  its transient class. A cell that isn't registered yet contributes nothing.
+- **Jobs** retry the transient class. Each time `ActiveStorage::AnalyzeJob`, `ActiveStorage::CreateVariantsJob`,
+  `ActiveStorage::PreviewImageJob` or `ActiveStorage::TransformJob` loads, including after a code reload, the
+  gem adds `retry_on <transient class>, wait: :polynomially_longer, attempts: 10` to it. A job that this Rails
+  version doesn't have never loads. Each registered cell that a shipped client names contributes its
+  transient class. A cell that isn't registered yet contributes nothing.
 - **`Previewers::Pdf::Mutool`** and **`Previewers::Pdf::Poppler`** answer `unreadable` with cause `protected`
   for a password-protected PDF. See [Causes of `unreadable`](codes.md#causes-of-unreadable).
 

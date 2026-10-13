@@ -31,7 +31,8 @@ module ActiveStorage
       # other transient failure. The policy matches the one they already declare, so a cell failure and an
       # integrity failure back off the same way.
       #
-      # Which of these classes exists depends on the Rails version, so a name that is not loaded is skipped.
+      # Which of these classes exists depends on the Rails version. A name the application does not have is
+      # never loaded, so the retry is never applied to it.
       JOBS = %w[
         ActiveStorage::AnalyzeJob
         ActiveStorage::CreateVariantsJob
@@ -51,22 +52,18 @@ module ActiveStorage
                   Operations::Previewers::Video::Ffmpeg ].freeze
 
       class << self
-        # The railtie calls this from a to_prepare block. Applied once at boot it would not survive a code
+        # The railtie calls this each time one of the JOBS loads. Applied once it would not survive a code
         # reload: a gem engine's app/jobs is in the reloadable autoloader, so these classes are discarded and
         # redefined, and the retry would silently disappear after the first file save in development.
         #
         # Every registered cell contributes its transient class, because the documented multi-cell
         # arrangement routes PreviewVideo to a cell of its own and each cell names its own class. A cell not
-        # yet registered contributes nothing rather than raising: this runs on the boot where the application
-        # has bundled the gem and not yet written the initializer, and that boot has to succeed for the
-        # rollout to take two deploys rather than one.
-        def retry_transient_failures!(jobs: JOBS)
-          transients = CLIENTS.filter_map { |client| client.cell.transient if client.registered? }
-                              .uniq
-          return [] if transients.empty?
-
-          jobs.filter_map(&:safe_constantize)
-              .each { |job| job.retry_on(*transients, **RETRY) }
+        # yet registered contributes nothing rather than raising: this runs in an application that has
+        # bundled the gem and not yet written the initializer, and that boot has to succeed for the rollout
+        # to take two deploys rather than one.
+        def retry_transient_failures!(job)
+          transients = CLIENTS.filter_map { |client| client.cell.transient if client.registered? }.uniq
+          job.retry_on(*transients, **RETRY) if transients.any?
         end
       end
     end
