@@ -104,19 +104,37 @@ module HotCell
         share inputs, INPUT_MODE
         share outputs, OUTPUT_MODE
 
-        line = JSON.generate("v" => PROTOCOL_VERSION, "op" => operation.to_s, "inputs" => inputs.size,
-                             "outputs" => outputs.size, "payload" => payload) + "\n"
+        call socket_path, operation.to_s, inputs, outputs, payload
+      end
 
-        answer = exchange(line, inputs + outputs)
-        return answer["result"] if answer["ok"]
+      # The cell's static description, from the control socket beside the work socket. Raises as `perform` does.
+      def describe
+        call control_socket_path, "hotcell.describe", [], [], {}
+      end
 
-        # Built rather than passed to raise, because Ruby 2.x reads a trailing Hash given to raise as its options
-        # and takes `cause` out of it.
-        failure = Failure.new(sanitize(answer["error"]))
-        raise (failure.permanent? ? PermanentFailure : TransientFailure).new(failure)
+      # The cell's counters, from the control socket beside the work socket. Raises as `perform` does.
+      def metrics
+        call control_socket_path, "hotcell.metrics", [], [], {}
       end
 
       private
+        def control_socket_path
+          File.join File.dirname(socket_path), "control.sock"
+        end
+
+        def call(path, operation, inputs, outputs, payload)
+          line = JSON.generate("v" => PROTOCOL_VERSION, "op" => operation, "inputs" => inputs.size,
+                               "outputs" => outputs.size, "payload" => payload) + "\n"
+
+          answer = exchange(path, line, inputs + outputs)
+          return answer["result"] if answer["ok"]
+
+          # Built rather than passed to raise, because Ruby 2.x reads a trailing Hash given to raise as its options
+          # and takes `cause` out of it.
+          failure = Failure.new(sanitize(answer["error"]))
+          raise (failure.permanent? ? PermanentFailure : TransientFailure).new(failure)
+        end
+
         def share(ios, mode)
           return if group.nil?
 
@@ -126,10 +144,10 @@ module HotCell
           end
         end
 
-        def exchange(line, descriptors)
+        def exchange(path, line, descriptors)
           deadline = now + timeout
           socket = Socket.new(:UNIX, :STREAM)
-          connect socket, deadline
+          connect socket, path, deadline
           deliver socket, line, descriptors, deadline
           response = receive(socket, deadline)
           return unavailable("the connection closed with no response, so the cell's supervisor is gone") if response.nil?
@@ -147,8 +165,8 @@ module HotCell
         # with no deadline, and a supervisor that has stopped calling `accept` leaves it full. Linux answers a
         # non-blocking connect to that backlog with EAGAIN and leaves the socket unconnected, so it is retried
         # rather than waited on: an unconnected Unix socket is always writable, and `select` would not wait.
-        def connect(socket, deadline)
-          socket.connect_nonblock Socket.sockaddr_un(socket_path)
+        def connect(socket, path, deadline)
+          socket.connect_nonblock Socket.sockaddr_un(path)
         rescue Errno::EAGAIN
           remaining = deadline - now
           raise Timeout unless remaining > 0
