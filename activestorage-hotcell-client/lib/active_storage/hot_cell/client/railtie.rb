@@ -9,11 +9,15 @@ module ActiveStorage
       # reads those from config and there is no way for a gem to set them that the engine does not later
       # overwrite. Everything else this gem needs is done here.
       class Railtie < ::Rails::Railtie
-        # to_prepare rather than after_initialize, because it runs again on every code reload and the job
-        # classes do not survive one. See retry_transient_failures!.
-        initializer "active_storage.hot_cell.client.retry_transient_failures" do |app|
-          app.config.to_prepare do
-            ActiveStorage::HotCell::Client.retry_transient_failures!
+        # on_load rather than to_prepare, because to_prepare runs while the application is initializing, and
+        # loading a job there loads Active Job, which Rails' guard_load_hooks reports when eager loading is off.
+        # on_load also runs again each time a job is reloaded, and never for a job the application's Rails
+        # version does not have.
+        initializer "active_storage.hot_cell.client.retry_transient_failures" do
+          ActiveStorage::HotCell::Client::JOBS.each do |name|
+            Rails.autoloaders.main.on_load(name) do |job|
+              ActiveStorage::HotCell::Client.retry_transient_failures! job
+            end
           end
         end
 

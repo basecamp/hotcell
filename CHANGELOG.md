@@ -46,6 +46,16 @@ Some actions that application developers should consider taking when upgrading f
 
 * `metrics` reports `start_time_s`, the time the supervisor booted, in seconds since the Unix epoch. (#112)
 
+### ActiveStorage::HotCell::Client
+
+#### Breaking
+
+* `ActiveStorage::HotCell::Client.retry_transient_failures!` takes one job class, such as `ActiveStorage::AnalyzeJob`, instead of a `jobs:` list of class names.
+
+#### Fixed
+
+* Booting a Rails application no longer loads Active Job early. The gem added its retries to Active Storage's jobs in a `to_prepare` block, which loaded the jobs while the application was still initializing. With a cell registered and eager loading off, Rails main logged a warning on every boot, and raised with `config.action_on_early_load_hook = :raise`. The gem now adds the retries with `Rails.autoloaders.main.on_load` each time a job loads, including after a code reload. (#115)
+
 ### HotCell::Client::Legacy
 
 #### Breaking
