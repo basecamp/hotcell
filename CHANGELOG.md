@@ -52,6 +52,10 @@ Some actions that application developers should consider taking when upgrading f
 
 * `HotCell::Client::Legacy::Verdict` is renamed `HotCell::Client::Legacy::Failure::Exception`.
 
+#### Added
+
+* `describe` and `metrics` read a cell's description and counters from the `control.sock` beside the client's `work.sock`. See [Read a cell's description and metrics](docs/client-legacy.md#read-a-cells-description-and-metrics).
+
 ### Yabeda::HotCell
 
 #### Added

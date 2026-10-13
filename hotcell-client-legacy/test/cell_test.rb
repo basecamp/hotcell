@@ -84,6 +84,20 @@ class CellTest < LegacyTest
     assert_equal "deadline", error.hot_cell_failure.cause
   end
 
+  def test_describe_answers_on_the_control_socket_beside_the_work_socket
+    described = client.describe
+
+    assert_equal 1, described["v"]
+    assert_includes described["operations"], "test.uppercase"
+  end
+
+  def test_metrics_answers_on_the_control_socket_beside_the_work_socket
+    metrics = client.metrics
+
+    assert_kind_of Integer, metrics["running"]
+    assert_kind_of Hash, metrics["killed_by"]
+  end
+
   def test_the_group_can_read_an_input_and_write_an_output
     with_files("hello") do |source, destination|
       File.open(source, "rb") do |input|

@@ -12,6 +12,13 @@ class TransportTest < LegacyTest
     assert_equal "unavailable", error.hot_cell_failure.code
   end
 
+  def test_a_control_socket_that_does_not_exist_is_unavailable
+    client = HotCell::Client::Legacy.new(File.join(Dir.tmpdir, "no-such-cell", "work.sock"))
+    error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.metrics }
+
+    assert_equal "unavailable", error.hot_cell_failure.code
+  end
+
   # A supervisor that stops calling accept leaves its backlog full, where a blocking connect on Linux would wait
   # in the kernel with no deadline at all. Darwin refuses the connection instead, which is unavailable.
   def test_the_deadline_covers_a_connect_to_a_full_backlog

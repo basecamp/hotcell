@@ -78,11 +78,24 @@ When the client gets no usable answer, it raises `TransientFailure` with one of 
 | `timeout` | The deadline passed. |
 | `unavailable` | The socket is missing or refuses the connection, the cell closed the connection without answering, or the answer isn't valid. |
 
+## Read a cell's description and metrics
+
+`describe` and `metrics` ask the cell's `control.sock`, in the same directory as the `work.sock` that you
+gave the client. Each returns a `Hash` with `String` keys, and raises as `perform` does.
+
+```ruby
+client.describe # => { "v" => 1, "server_version" => "1.1.0", "operations" => [...], "groups" => [...], ... }
+client.metrics  # => { "running" => 0, "queued" => 0, "killed_by" => {}, ... }
+```
+
+The control socket is local to the cell's host, so call these from a process on that host. For the fields
+that `metrics` reports, see [Cell metrics](observability.md#cell-metrics).
+
 ## Differences from `hotcell-client`
 
 Unlike `hotcell-client`, the legacy client doesn't do the following:
 
-- Integrate with Rails or Active Storage, register cells, publish `perform.hot_cell`, or report metrics.
+- Integrate with Rails or Active Storage, register cells, or publish `perform.hot_cell`.
 - Raise your own exception classes. Rescue its classes and raise yours.
 - Check files or the payload before sending. The cell checks the files and answers `invalid`.
   `JSON.generate` turns a `Symbol` or a `Time` in the payload into a `String`.
