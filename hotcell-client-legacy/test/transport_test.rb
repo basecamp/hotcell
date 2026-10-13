@@ -153,6 +153,33 @@ class TransportTest < LegacyTest
     end
   end
 
+  def test_the_cells_timing_reaches_the_caller_as_sent_on_success_and_on_failure
+    timing = { "queued_ms" => 1.5, "perform_ms" => 2, "phases" => { "decode_ms" => 1 } }
+    success = %({"v":1,"ok":true,"result":{},"timing":{"queued_ms":1.5,"perform_ms":2,"phases":{"decode_ms":1}}}\n)
+    with_peer(lambda { |connection| connection.write success }) do |client|
+      assert_equal timing, client.perform("test.echo", [], []).timing
+    end
+
+    failure = %({"v":1,"ok":false,"error":{"code":"failed"},"timing":{"queued_ms":1.5,"perform_ms":2,"phases":{"decode_ms":1}}}\n)
+    with_peer(lambda { |connection| connection.write failure }) do |client|
+      error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+
+      assert_equal timing, error.hot_cell_response.timing
+    end
+  end
+
+  def test_an_answer_with_no_timing_has_empty_timing
+    with_peer(lambda { |connection| connection.write %({"v":1,"ok":true,"result":{}}\n) }) do |client|
+      assert_equal({}, client.perform("test.echo", [], []).timing)
+    end
+  end
+
+  def test_an_answer_whose_timing_is_not_an_object_has_empty_timing
+    with_peer(lambda { |connection| connection.write %({"v":1,"ok":true,"result":{},"timing":[ 1 ]}\n) }) do |client|
+      assert_equal({}, client.perform("test.echo", [], []).timing)
+    end
+  end
+
   def test_a_failure_with_no_code_leaves_it_out_of_the_message
     answer = %({"v":1,"ok":false,"error":{"cause":"protected","message":"locked"}}\n)
     with_peer(lambda { |connection| connection.write answer }) do |client|
@@ -187,21 +214,25 @@ class TransportTest < LegacyTest
 
   # Ruby before 2.2 never frees a Symbol, so a key the cell chooses must not become one.
   def test_keys_the_cell_chooses_do_not_become_symbols
-    answers = [ %({"v":1,"ok":true,"result":{"result_key_from_the_cell":1}}\n),
-                %({"v":1,"ok":false,"error":{"code":"failed","error_key_from_the_cell":1}}\n) ]
-    answers.each do |answer|
-      with_peer(lambda { |connection| connection.write answer }) do |client|
-        begin
-          client.perform "test.echo", [], []
-        rescue HotCell::Client::Legacy::TransientFailure
-          nil
-        end
-      end
+    success = %({"v":1,"ok":true,"result":{"result_key_from_the_cell":1},"timing":{"timing_key_from_the_cell":1}}\n)
+    with_peer(lambda { |connection| connection.write success }) do |client|
+      response = client.perform("test.echo", [], [])
+
+      assert_equal({ "result_key_from_the_cell" => 1 }, response.result)
+      assert_equal({ "timing_key_from_the_cell" => 1 }, response.timing)
+    end
+
+    failure = %({"v":1,"ok":false,"error":{"code":"failed","error_key_from_the_cell":1}}\n)
+    with_peer(lambda { |connection| connection.write failure }) do |client|
+      error = assert_raises(HotCell::Client::Legacy::TransientFailure) { client.perform "test.echo", [], [] }
+
+      assert_equal "failed", error.hot_cell_failure.code
     end
 
     names = Symbol.all_symbols.map { |symbol| symbol.to_s }
     refute_includes names, "result_key_from_the_cell"
     refute_includes names, "error_key_from_the_cell"
+    refute_includes names, "timing_key_from_the_cell"
   end
 
   # JSON.parse passes raw bytes that are not UTF-8 straight through, on every json from 1.5 to 3.0.

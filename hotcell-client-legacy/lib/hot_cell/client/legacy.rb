@@ -62,12 +62,35 @@ module HotCell
         # classes share no superclass, so rescuing one by name never catches the other: a permanent failure
         # may be written down against a file forever, and a transient one must be retried.
         module Exception
-          attr_reader :hot_cell_failure
+          attr_reader :hot_cell_response
 
-          def initialize(failure)
-            @hot_cell_failure = failure
-            super(failure.to_s)
+          def initialize(response)
+            @hot_cell_response = response
+            super(response.failure.to_s)
           end
+
+          def hot_cell_failure
+            hot_cell_response.failure
+          end
+        end
+      end
+
+      # The outcome of one call, success or failure. `timing` is the cell's own open map, such as
+      # `queued_ms` and `perform_ms`, and is empty when the answer carried none. `duration_ms` is the time this
+      # client measures across the connect, the send and the read, so `duration_ms` minus `perform_ms` is
+      # transport plus queueing.
+      class Response
+        attr_reader :result, :failure, :timing, :duration_ms
+
+        def initialize(result, failure, timing, duration_ms)
+          @result = result
+          @failure = failure
+          @timing = timing
+          @duration_ms = duration_ms
+        end
+
+        def ok?
+          failure.nil?
         end
       end
 
@@ -93,7 +116,7 @@ module HotCell
         @group = options[:group]
       end
 
-      # Returns the operation's result, a Hash with String keys. Raises PermanentFailure or TransientFailure
+      # Returns a Response whose result is a Hash with String keys. Raises PermanentFailure or TransientFailure
       # according to the `permanent` flag on the cell's answer; a failure with no answer at all is transient.
       def perform(operation, inputs, outputs, payload = {})
         inputs = [ inputs ] unless inputs.is_a?(Array)
@@ -126,13 +149,17 @@ module HotCell
           line = JSON.generate("v" => PROTOCOL_VERSION, "op" => operation, "inputs" => inputs.size,
                                "outputs" => outputs.size, "payload" => payload) + "\n"
 
+          started = now
           answer = exchange(path, line, inputs + outputs)
-          return answer["result"] if answer["ok"]
+          duration_ms = (now - started) * 1000
+          timing = answer["timing"].is_a?(Hash) ? answer["timing"] : {}
+          return Response.new(answer["result"], nil, timing, duration_ms) if answer["ok"]
 
           # Built rather than passed to raise, because Ruby 2.x reads a trailing Hash given to raise as its options
           # and takes `cause` out of it.
           failure = Failure.new(sanitize(answer["error"]))
-          raise (failure.permanent? ? PermanentFailure : TransientFailure).new(failure)
+          response = Response.new(nil, failure, timing, duration_ms)
+          raise (failure.permanent? ? PermanentFailure : TransientFailure).new(response)
         end
 
         def share(ios, mode)

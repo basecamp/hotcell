@@ -20,6 +20,7 @@ gem but are what an operator runs against their own image.
 Some actions that application developers should consider taking when upgrading from an earlier version:
 
 * Replace `rescue HotCell::Verdict` with `rescue HotCell::Failure::Exception`, and `HotCell::Client::Legacy::Verdict` with `HotCell::Client::Legacy::Failure::Exception`. Only the name changed: the exception still carries `hot_cell_failure`.
+* Where you use the return value of `HotCell::Client::Legacy#perform`, `#describe` or `#metrics`, call `result` on it. Each now returns a `HotCell::Client::Legacy::Response`.
 * In your own `perform.hot_cell` subscribers, test for success with `payload[:code] == "ok"` instead of `payload[:code].nil?`, and expect `interrupted`. The event now sets `code` on every call; see [Per-call notification](docs/observability.md#per-call-notification).
 * Where a test instruments `perform.hot_cell` by hand to stand in for a successful call, pass `code: "ok"`. `HotCell::LogSubscriber` and `yabeda-hotcell` now record `code` as the event gives it, so an event without one records no code.
 * Count `code="interrupted"` as a failed call wherever a dashboard or alert computes an error rate from `hotcell_requests`. `yabeda-hotcell` counted these calls as `ok` before.
@@ -51,6 +52,7 @@ Some actions that application developers should consider taking when upgrading f
 #### Breaking
 
 * `HotCell::Client::Legacy::Verdict` is renamed `HotCell::Client::Legacy::Failure::Exception`.
+* `perform`, `describe` and `metrics` return a `HotCell::Client::Legacy::Response` instead of the result `Hash`. The response carries the `result`, the cell's `timing`, and `duration_ms`, which the client measures across the call. Previously, the client dropped the timing, so an application could not measure how long the cell spent on a call. A failure exception carries its response as `hot_cell_response`. See [Read the response](docs/client-legacy.md#read-the-response).
 
 #### Added
 

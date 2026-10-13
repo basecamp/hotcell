@@ -1,7 +1,7 @@
 ---
 type: Reference
 title: "Legacy client"
-description: "HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the failures it raises, and how it differs from hotcell-client."
+description: "HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the response it returns, the failures it raises, and how it differs from hotcell-client."
 sources:
   - hotcell-client-legacy/lib/hot_cell/client/legacy.rb
 ---
@@ -48,7 +48,31 @@ end
 | `outputs` | An IO or an `Array` of IOs. Open each one write-only, on a regular file, without `O_APPEND`. |
 | `payload` | Optional. A `Hash` of JSON values. |
 
-`perform` returns the operation's result, a `Hash` with `String` keys.
+`perform` returns a `HotCell::Client::Legacy::Response`. See [Read the response](#read-the-response).
+
+## Read the response
+
+A `Response` holds the outcome of one call:
+
+| Attribute | Description |
+| --- | --- |
+| `result` | The operation's result, a `Hash` with `String` keys. `nil` on failure. |
+| `failure` | The failure, or `nil` on success. See [Handle failures](#handle-failures). |
+| `ok?` | `true` on success, and `false` otherwise. |
+| `timing` | The timings that the cell reported, such as `queued_ms` and `perform_ms`, in a `Hash` with `String` keys. An operation can add its own keys, and any key can be missing. Empty when the answer has no `timing` object, or when the client got no usable answer. |
+| `duration_ms` | The milliseconds that the client measured across the call: connecting, sending, and reading the answer. |
+
+```ruby
+response = client.perform "images.transform", [input], [output], "format" => "png"
+response.result               # => { "width" => 800, "height" => 600 }
+response.timing["perform_ms"] # => 38.2
+response.duration_ms          # => 41.7
+```
+
+`duration_ms` minus `perform_ms` is transport plus queueing. Track the two separately. See
+[Per-call notification](observability.md#per-call-notification).
+
+The keys and values in `timing` come from the cell. Treat them as untrusted.
 
 ## Handle failures
 
@@ -61,7 +85,8 @@ end
 
 Both classes include `HotCell::Client::Legacy::Failure::Exception`, so you can rescue `Failure::Exception` to catch either one.
 Call `hot_cell_failure` on the exception to read the failure, as with `hotcell-client`. See
-[Exception classes](codes.md#exception-classes). The failure has these attributes:
+[Exception classes](codes.md#exception-classes). Call `hot_cell_response` to read the whole
+[response](#read-the-response), with its `timing` and `duration_ms`. The failure has these attributes:
 
 | Attribute | Description |
 | --- | --- |
@@ -81,11 +106,11 @@ When the client gets no usable answer, it raises `TransientFailure` with one of 
 ## Read a cell's description and metrics
 
 `describe` and `metrics` ask the cell's `control.sock`, in the same directory as the `work.sock` that you
-gave the client. Each returns a `Hash` with `String` keys, and raises as `perform` does.
+gave the client. Each returns a `Response`, and raises as `perform` does.
 
 ```ruby
-client.describe # => { "v" => 1, "server_version" => "1.1.0", "operations" => [...], "groups" => [...], ... }
-client.metrics  # => { "running" => 0, "queued" => 0, "killed_by" => {}, ... }
+client.describe.result # => { "v" => 1, "server_version" => "1.1.0", "operations" => [...], "groups" => [...], ... }
+client.metrics.result  # => { "running" => 0, "queued" => 0, "killed_by" => {}, ... }
 ```
 
 The control socket is local to the cell's host, so call these from a process on that host. For the fields
