@@ -7,6 +7,7 @@ sources:
   - hotcell-client/lib/hot_cell/cells.rb
   - hotcell-client/lib/hot_cell/cell.rb
   - hotcell-client/lib/hot_cell/client.rb
+  - hotcell-client/lib/hot_cell/transport.rb
   - hotcell-client/lib/hot_cell/diagnosis.rb
   - hotcell-client/lib/hot_cell/failures.rb
   - hotcell-core/lib/hot_cell/errors.rb
@@ -47,7 +48,7 @@ HotCell.register "images",
 
 ### Turn cells off
 
-When `HotCell.root` is unset and a cell has no `dir:`, the cell is off: `enabled?` returns `false`, and
+When `HotCell.root` is unset and a cell has no `dir:` and no `transport:` of its own, the cell is off: `enabled?` returns `false`, and
 `perform_in_hotcell` raises `HotCell::CellNotConfigured`. Hot Cell has no automatic in-process fallback.
 A caller that wants one checks `enabled?` and takes its old path. This is how an application rolls out a
 cell as a configuration change rather than a release.
@@ -67,6 +68,7 @@ preview that they handle raises `HotCell::CellNotConfigured`.
 | `permanent:` | `HotCell::PermanentFailure` | The exception class that the client raises for a permanent failure. See [Response codes](codes.md#exception-classes). |
 | `transient:` | `HotCell::TransientFailure` | The exception class that the client raises for a transient failure. It must not descend from `permanent:`. |
 | `on_contract_skew:` | none | A callable, `->(error, cell)`, that the client calls when a cell answers `protocol`, before it raises. Use it to make a protocol version mismatch visible to an application that rescues broadly. |
+| `transport:` | `HotCell::Transport::Socket.new` | The object that delivers each request to the cell. See [Use your own transport](#use-your-own-transport). |
 
 `timeout:` and `control_timeout:` must be positive, finite numbers. `register` raises
 `HotCell::ConfigurationError` for anything else, including `nil`, so a bad value stops the boot rather
@@ -74,6 +76,42 @@ than leaving the wait for a cell to decide. `register` also raises `HotCell::Con
 `transient:` descends from `permanent:`.
 
 Both timeouts bound the answer, not the connection. See [Boot checks](#boot-checks).
+
+### Use your own transport
+
+A transport delivers each request to the cell and returns its answer. The default, `HotCell::Transport::Socket`,
+sends the request line and the descriptors over the cell's UNIX socket. To reach a cell some other way, for
+example through a relay, pass an object that answers `call`:
+
+```ruby
+class RelayTransport
+  # kind is :work for an operation and :control for describe or metrics.
+  def call(cell, line, descriptors, kind:, timeout:)
+    # Deliver line and the inputs' bytes, write each output's bytes into its descriptor's `io` and flush it,
+    # and return HotCell::Response.parse(response_line).
+  end
+end
+
+HotCell.register "images", transport: RelayTransport.new
+```
+
+`call` receives the following:
+
+- `cell`: the registered `HotCell::Cell`.
+- `line`: the request line, which the client has already validated and serialized.
+- `descriptors`: the request's `HotCell::Input` and `HotCell::Output` objects, in order. A `:control` request
+  has none.
+- `kind:`: `:work` for an operation, or `:control` for `describe` and `metrics`.
+- `timeout:`: seconds to wait for the answer: the cell's `timeout` for work, and its `control_timeout` for
+  control.
+
+`call` returns a `HotCell::Response`. Before it returns a successful response, it writes each output's bytes
+into the output's `io` and flushes it: the client measures each output's size on disk, and reports an output
+that's still empty as `unavailable`. Answer a failure to reach the cell with a failed response rather than an
+exception, as `HotCell::Transport::Socket` does, so that the client classifies it.
+
+A cell with its own transport is on without a socket directory, because the transport decides where its
+requests go.
 
 ### Look up a cell
 

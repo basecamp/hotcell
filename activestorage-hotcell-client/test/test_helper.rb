@@ -116,7 +116,7 @@ class ActiveStorageHotCellClientTest < Minitest::Test
         @lines = []
       end
 
-      def call(_cell, line, _descriptors, socket: nil, timeout: nil)
+      def call(_cell, line, _descriptors, kind: nil, timeout: nil)
         @lines << line
         @response
       end

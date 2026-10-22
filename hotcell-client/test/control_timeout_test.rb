@@ -12,10 +12,9 @@ class ControlTimeoutTest < HotCellClientTest
       @calls = []
     end
 
-    # The defaults are Transport::Socket's own, so this records what a caller overrode rather than what it
-    # passed. The work path overrides neither.
-    def call(cell, line, descriptors, socket: cell.work_socket, timeout: cell.timeout)
-      @calls << { line: line, socket: socket, timeout: timeout }
+    # timeout has no default, so a call that doesn't forward one fails here rather than passing on a default.
+    def call(_cell, line, _descriptors, kind:, timeout:)
+      @calls << { line: line, kind: kind, timeout: timeout }
       HotCell::Response.parse %({"ok":true,"result":{}})
     end
   end
@@ -35,7 +34,7 @@ class ControlTimeoutTest < HotCellClientTest
     cell.metrics
     Echo.perform_in_hotcell [], [], {}
 
-    control, work = transport.calls.partition { |recorded| recorded[:socket].end_with?("control.sock") }
+    control, work = transport.calls.partition { |recorded| recorded[:kind] == :control }
 
     assert_equal [ 3, 3 ], control.map { |recorded| recorded[:timeout] }
     assert_equal [ 300 ], work.map { |recorded| recorded[:timeout] }

@@ -3,7 +3,9 @@
 require "socket"
 
 module HotCell
-  # The transport is a seam, and the socket one is the only implementation used outside tests.
+  # The transport is a seam, and the socket one is the only implementation in this repository outside tests.
+  # A transport answers `call(cell, line, descriptors, kind:, timeout:)` with a Response: `kind` is `:work`
+  # for an operation, with the request's descriptors, or `:control` for `describe` and `metrics`, with none.
   #
   # It never reconnects and never retries. One request per connection invites exactly that on
   # ECONNREFUSED, and a silent retry doubles a cell's load at the moment it is least able to take it.
@@ -20,7 +22,9 @@ module HotCell
       # If Ruby ever starts waiting, `connect_nonblock` plus `wait_writable` against a deadline would bound the
       # call only by spinning: on Linux an unconnected Unix socket is always writable, so it retries EAGAIN until
       # the deadline.
-      def call(cell, line, descriptors, socket: cell.work_socket, timeout: cell.timeout)
+      # `socket` names a path directly, for a caller that has no registered cell.
+      def call(cell, line, descriptors, kind: :work, socket: kind == :control ? cell.control_socket : cell.work_socket,
+               timeout: cell.timeout)
         connection = Connection.new(UNIXSocket.new(socket))
         deliver connection, line, descriptors
         receive connection, timeout

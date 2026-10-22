@@ -50,13 +50,13 @@ class YabedaHotCellTest < Minitest::Test
         @response = response
       end
 
-      def call(_cell, _line, _descriptors, socket: nil, timeout: nil)
+      def call(_cell, _line, _descriptors, kind: nil, timeout: nil)
         @response
       end
     end
 
     class BrokenTransport
-      def call(_cell, _line, _descriptors, socket: nil, timeout: nil)
+      def call(_cell, _line, _descriptors, kind: nil, timeout: nil)
         raise "the transport itself is broken"
       end
     end
