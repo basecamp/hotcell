@@ -104,7 +104,7 @@ module HotCell
 
       response = nil
       ActiveSupport::Notifications.instrument "perform.hot_cell", operation: self.class.operation, cell: cell.name do |event|
-        response = verify_output(cell.transport.call(cell, line, descriptors), outputs)
+        response = verify_output(cell.transport.call(cell, line, descriptors, kind: :work, timeout: cell.timeout), outputs)
         publish event, cell, response, inputs, outputs
       # The transport answers its own failures with a code, so what lands here is the caller's own exception,
       # such as its request timeout, and the call has no answer to describe.

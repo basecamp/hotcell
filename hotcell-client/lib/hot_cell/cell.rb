@@ -43,9 +43,10 @@ module HotCell
       @dir || (HotCell.root && File.join(HotCell.root, name))
     end
 
-    # Unset means this path is off, and the caller runs in process exactly as it did before.
+    # Unset means this path is off, and the caller runs in process exactly as it did before. A cell with a
+    # transport of its own is on without a directory, because the transport decides where its requests go.
     def enabled?
-      !directory.nil?
+      !directory.nil? || !transport.is_a?(Transport::Socket)
     end
 
     def work_socket
@@ -180,7 +181,7 @@ module HotCell
       end
 
       def control(op)
-        transport.call self, Request.new(op: op).to_line, [], socket: control_socket, timeout: control_timeout
+        transport.call self, Request.new(op: op).to_line, [], kind: :control, timeout: control_timeout
       end
 
       # The client's timeout is a sum rather than a comparison: a request may wait queue_wait in the queue

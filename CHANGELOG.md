@@ -15,6 +15,21 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+* If you pass your own `transport:` to `HotCell.register`, change its `call` to take `kind:` instead of `socket:`. `kind` is `:work` for an operation and `:control` for `describe` and `metrics`.
+
+### HotCell::Client
+
+#### Breaking
+
+* A transport's `call` takes `kind:` (`:work` or `:control`) instead of `socket:`, so a transport that doesn't use the cell's UNIX sockets doesn't need their paths. `HotCell::Transport::Socket` still accepts `socket:` to name a path directly.
+
+#### Added
+
+* `transport:` is documented in [Use your own transport](docs/client-api.md#use-your-own-transport).
+* A cell with its own `transport:` is enabled without `HotCell.root` or `dir:`.
+
 ## v1.2.0 / 2026-10-13
 
 ### Upgrading

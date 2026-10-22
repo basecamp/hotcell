@@ -39,6 +39,14 @@ class RegistrationTest < HotCellClientTest
     assert_nil cell.directory
   end
 
+  # A transport of its own decides where requests go, so the cell needs no socket directory to be on.
+  def test_a_cell_with_its_own_transport_is_on_without_a_directory
+    cell = HotCell.register "remote", transport: Object.new
+
+    assert_predicate cell, :enabled?
+    assert_nil cell.directory
+  end
+
   def test_naming_a_cell_nobody_registered
     error = assert_raises(HotCell::UnregisteredCell) { HotCell.cell("nothing_like_it") }
 

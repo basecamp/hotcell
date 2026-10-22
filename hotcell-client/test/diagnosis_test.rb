@@ -4,14 +4,14 @@ require "test_helper"
 
 class DiagnosisTest < HotCellClientTest
   class RecordingTransport
-    attr_reader :sockets
+    attr_reader :kinds
 
     def initialize
-      @sockets = []
+      @kinds = []
     end
 
-    def call(cell, line, descriptors, socket: cell.work_socket, timeout: cell.timeout)
-      @sockets << socket
+    def call(_cell, _line, _descriptors, kind:, timeout: nil)
+      @kinds << kind
       HotCell::Response.parse %({"ok":true,"result":{}})
     end
   end
@@ -22,8 +22,8 @@ class DiagnosisTest < HotCellClientTest
       @result = result
     end
 
-    def call(cell, _line, descriptors, socket: cell.work_socket, timeout: cell.timeout)
-      descriptors.last.to_io.syswrite @bytes if socket == cell.work_socket
+    def call(_cell, _line, descriptors, kind:, timeout: nil)
+      descriptors.last.to_io.syswrite @bytes if kind == :work
       HotCell::Response.parse JSON.generate(ok: true, result: @result)
     end
   end
@@ -101,7 +101,7 @@ class DiagnosisTest < HotCellClientTest
 
     HotCell.diagnose
 
-    assert_equal [ "/nowhere/test/control.sock" ], transport.sockets.uniq
+    assert_equal [ :control ], transport.kinds.uniq
   end
 
   def test_work_round_trips_echo_and_reopen_through_the_work_socket

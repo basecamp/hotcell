@@ -237,8 +237,8 @@ class ClassificationTest < HotCellClientTest
       @calls = []
     end
 
-    def call(_cell, line, descriptors, socket: nil, timeout: nil)
-      @calls << { line: line, descriptors: descriptors, socket: socket, timeout: timeout }
+    def call(_cell, line, descriptors, kind: nil, timeout: nil)
+      @calls << { line: line, descriptors: descriptors, kind: kind, timeout: timeout }
       @response.respond_to?(:call) ? @response.call : @response
     end
   end
