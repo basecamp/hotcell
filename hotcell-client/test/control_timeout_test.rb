@@ -12,9 +12,8 @@ class ControlTimeoutTest < HotCellClientTest
       @calls = []
     end
 
-    # The timeout's default is Transport::Socket's own, so this records what a caller overrode rather than what
-    # it passed. The work path doesn't override it.
-    def call(cell, line, descriptors, kind:, timeout: cell.timeout)
+    # timeout has no default, so a call that doesn't forward one fails here rather than passing on a default.
+    def call(_cell, line, _descriptors, kind:, timeout:)
       @calls << { line: line, kind: kind, timeout: timeout }
       HotCell::Response.parse %({"ok":true,"result":{}})
     end

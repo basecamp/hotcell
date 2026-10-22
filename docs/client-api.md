@@ -87,8 +87,8 @@ example through a relay, pass an object that answers `call`:
 class RelayTransport
   # kind is :work for an operation and :control for describe or metrics.
   def call(cell, line, descriptors, kind:, timeout:)
-    # Deliver line and the inputs' bytes, write each output's bytes into its descriptor's `io`, and return
-    # HotCell::Response.parse(response_line).
+    # Deliver line and the inputs' bytes, write each output's bytes into its descriptor's `io` and flush it,
+    # and return HotCell::Response.parse(response_line).
   end
 end
 
@@ -105,7 +105,9 @@ HotCell.register "images", transport: RelayTransport.new
 - `timeout:`: seconds to wait for the answer: the cell's `timeout` for work, and its `control_timeout` for
   control.
 
-`call` returns a `HotCell::Response`. Answer a failure to reach the cell with a failed response rather than an
+`call` returns a `HotCell::Response`. Before it returns a successful response, it writes each output's bytes
+into the output's `io` and flushes it: the client measures each output's size on disk, and reports an output
+that's still empty as `unavailable`. Answer a failure to reach the cell with a failed response rather than an
 exception, as `HotCell::Transport::Socket` does, so that the client classifies it.
 
 A cell with its own transport is on without a socket directory, because the transport decides where its
