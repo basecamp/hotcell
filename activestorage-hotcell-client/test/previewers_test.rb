@@ -97,6 +97,51 @@ class PreviewersTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # Rails raises ActiveStorage::PreviewError for a file in a format outside
+  # `config.active_storage.ffmpeg_allowed_formats`. Here the cell answers `unreadable`, so the client raises
+  # the permanent class, which an application can set to ActiveStorage::PreviewError.
+  def test_a_video_in_a_format_outside_the_allowed_formats_raises_the_permanent_class
+    with_cell do
+      assert_raises Unprocessable do
+        preview(ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mxf") { flunk "should not have yielded" }
+      end
+    end
+  end
+
+  def test_the_default_allowed_formats_are_not_sent
+    [ ActiveStorage.ffmpeg_allowed_formats, ActiveStorage.ffmpeg_allowed_formats.join(",") ].each do |default|
+      transport = with_canned_response failed("unreadable")
+
+      with_active_storage_setting :ffmpeg_allowed_formats, default do
+        assert_raises Unprocessable do
+          preview(ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mp4") { flunk "should not have yielded" }
+        end
+      end
+
+      refute JSON.parse(transport.lines.last).fetch("payload", {}).key?("formats"), "sent #{default.inspect}"
+    end
+  end
+
+  def test_allowed_formats_reach_the_cell
+    with_active_storage_setting :ffmpeg_allowed_formats, %w[ mxf ] do
+      with_cell do
+        preview ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mxf" do |attachable|
+          assert_equal "JPEG", identify(attachable[:io].path)[:format]
+        end
+      end
+    end
+  end
+
+  def test_nil_allowed_formats_let_the_cell_open_any_format
+    with_active_storage_setting :ffmpeg_allowed_formats, nil do
+      with_cell do
+        preview ActiveStorage::HotCell::Client::Previewers::Video::Ffmpeg, "sample.mxf" do |attachable|
+          assert_equal "JPEG", identify(attachable[:io].path)[:format]
+        end
+      end
+    end
+  end
+
   def test_options_are_passed_through_to_the_attachable
     with_cell do
       preview ActiveStorage::HotCell::Client::Previewers::Pdf::Mutool, "sample.pdf", service_name: "somewhere" do |attachable|

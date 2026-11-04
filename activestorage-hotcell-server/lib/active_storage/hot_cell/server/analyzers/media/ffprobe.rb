@@ -34,14 +34,16 @@ module ActiveStorage
 
             ROTATIONS = [ 90, 270, -90, -270 ].freeze
 
-            # `probe_arguments` is `config.active_storage.ffprobe_arguments`, split, and it goes where Rails
-            # puts it: before the input path, which is where an input option such as `-codec_whitelist` has
-            # to be to take effect.
-            def perform(inputs, _outputs, probe_arguments: [])
+            # `probe_arguments` is `config.active_storage.ffprobe_arguments`, split, and `formats` is
+            # `config.active_storage.ffmpeg_allowed_formats`. Both go where Rails puts them: before the input
+            # path, which is where an input option such as `-codec_whitelist` has to be to take effect, with
+            # the allowed formats last, so that ffprobe keeps them over a whitelist in the probe arguments.
+            def perform(inputs, _outputs, probe_arguments: [], formats: FFMPEG_ALLOWED_FORMATS)
               source, = inputs
               probed = JSON.parse(run!("ffprobe", "-v", "quiet", "-print_format", "json",
                                        "-show_format", "-show_streams",
-                                       *arguments!(:probe_arguments, probe_arguments), source.fd_path,
+                                       *arguments!(:probe_arguments, probe_arguments),
+                                       *format_whitelist!(formats), source.fd_path,
                                        pass: [ source.to_io ]).out)
 
               video = stream_of(probed, "video")

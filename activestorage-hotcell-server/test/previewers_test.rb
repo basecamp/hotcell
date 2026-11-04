@@ -237,6 +237,78 @@ class PreviewersTest < ActiveStorageHotCellTest
     end
   end
 
+  # Rails' default `config.active_storage.ffmpeg_allowed_formats` leaves out MXF, so ffmpeg refuses to open
+  # sample.mxf, which it previews when the list is lifted below.
+  def test_a_format_outside_the_default_list_is_unreadable
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.video.ffmpeg",
+                                                        inputs: [ fixture("sample.mxf") ],
+                                                        outputs: [ destination ])
+
+        assert_predicate failure, :permanent?
+        assert_match "Format not on whitelist", failure.message
+      end
+    end
+  end
+
+  def test_formats_nil_lets_ffmpeg_open_any_format
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        assert_ok cell.call("active_storage.previewers.video.ffmpeg", inputs: [ fixture("sample.mxf") ],
+                                                                      outputs: [ destination ],
+                                                                      payload: { formats: nil })
+
+        assert_equal "JPEG", identify(destination)[:format]
+      end
+    end
+  end
+
+  def test_formats_replaces_the_default_list
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        assert_ok cell.call("active_storage.previewers.video.ffmpeg", inputs: [ fixture("sample.mxf") ],
+                                                                      outputs: [ destination ],
+                                                                      payload: { formats: [ "mxf" ] })
+
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.video.ffmpeg",
+                                                        inputs: [ fixture("sample.mp4") ],
+                                                        outputs: [ destination ],
+                                                        payload: { formats: [ "mxf" ] })
+        assert_match "Format not on whitelist 'mxf'", failure.message
+      end
+    end
+  end
+
+  # ffmpeg keeps the last `-format_whitelist` before `-i` and applies one after `-i` to the output, so the
+  # allowed formats go between the application's input arguments and `-i`, where Rails puts them. A
+  # whitelist in those arguments cannot widen the list, and one that landed after `-i` would not apply.
+  def test_formats_go_after_the_input_arguments_and_before_the_input
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "unreadable", cell.call("active_storage.previewers.video.ffmpeg",
+                                                        inputs: [ fixture("sample.mxf") ],
+                                                        outputs: [ destination ],
+                                                        payload: { input_arguments: [ "-format_whitelist", "mxf" ] })
+
+        assert_match "Format not on whitelist 'mov,", failure.message
+      end
+    end
+  end
+
+  def test_formats_that_are_not_an_array_of_strings_are_a_caller_bug
+    Cell.boot do |cell|
+      with_output(".jpg") do |destination|
+        failure = assert_failed "invalid", cell.call("active_storage.previewers.video.ffmpeg",
+                                                     inputs: [ fixture("sample.mp4") ],
+                                                     outputs: [ destination ],
+                                                     payload: { formats: [ "mov", 1 ] })
+
+        assert_match "formats must be an array of strings", failure.message
+      end
+    end
+  end
+
   def test_input_arguments_that_are_not_an_array_of_strings_are_a_caller_bug
     Cell.boot do |cell|
       with_output(".jpg") do |destination|

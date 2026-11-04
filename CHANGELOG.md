@@ -15,6 +15,25 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+Some actions that application developers should consider taking when upgrading from an earlier version:
+
+* Upgrade the cells that serve the media operations before you change `config.active_storage.ffmpeg_allowed_formats`. A cell from an earlier release answers `failed` to a changed list; see [Change the allowed formats](docs/active-storage.md#change-the-allowed-formats).
+* If your application analyzes or previews video or audio in formats outside Rails' default list, such as MXF, DV or AC3, add their demuxers to `config.active_storage.ffmpeg_allowed_formats`. Those files now get no metadata and no preview.
+
+### ActiveStorage::HotCell::Server
+
+#### Security
+
+* ffprobe and ffmpeg open only the formats in `config.active_storage.ffmpeg_allowed_formats`, which defaults to Rails' list of common audio and video containers. The operations now pass `-format_whitelist` before the input, as Rails does since [GHSA-3f4q-8x5m-76v8](https://github.com/rails/rails/security/advisories/GHSA-3f4q-8x5m-76v8), and take the application's list as the new `formats:` payload key.
+
+### ActiveStorage::HotCell::Client
+
+#### Security
+
+* The media analyzers and the video previewer send `config.active_storage.ffmpeg_allowed_formats` to the cell when it differs from Rails' default, and the gem defines the setting on a Rails version that lacks it. ([GHSA-3f4q-8x5m-76v8](https://github.com/rails/rails/security/advisories/GHSA-3f4q-8x5m-76v8))
+
 ## v1.2.0 / 2026-10-13
 
 ### Upgrading

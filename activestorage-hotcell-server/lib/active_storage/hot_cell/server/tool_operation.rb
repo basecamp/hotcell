@@ -20,6 +20,12 @@ module ActiveStorage
         # UnreadableInput is always in the rescue list, and this descends from it.
         class UnreadableDocument < ::HotCell::UnreadableInput; end
 
+        # The default of Rails' `config.active_storage.ffmpeg_allowed_formats`, copied because the cell does
+        # not load the application's Active Storage. The client sends the application's list only when it
+        # differs from this one, so an application on the default keeps working against a cell that predates
+        # the `formats:` keyword, which would answer `failed` to it.
+        FFMPEG_ALLOWED_FORMATS = %w[ mov matroska avi mpeg mpegts flv asf ogg mp3 wav flac aac aiff caf ].freeze
+
         # The document demands credentials the cell does not have.
         class ProtectedDocument < UnreadableDocument
           def self.cause
@@ -73,6 +79,15 @@ module ActiveStorage
             return value if value.is_a?(Array) && value.all?(String)
 
             refuse! "#{name} must be an array of strings, and this is #{value.inspect[0, 80]}"
+          end
+
+          # The `-format_whitelist` for `config.active_storage.ffmpeg_allowed_formats`, which names the demuxers
+          # ffmpeg and ffprobe may open the input with. `nil` lets them use any demuxer they were built with, as
+          # it does in Rails.
+          def format_whitelist!(formats)
+            return [] if formats.nil?
+
+            [ "-format_whitelist", arguments!(:formats, formats).join(",") ]
           end
       end
     end

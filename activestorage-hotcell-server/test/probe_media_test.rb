@@ -77,6 +77,55 @@ class ProbeMediaTest < ActiveStorageHotCellTest
     end
   end
 
+  # Rails' default `config.active_storage.ffmpeg_allowed_formats` leaves out MXF, so ffprobe refuses to open
+  # sample.mxf, which it probes when the list is lifted below.
+  def test_a_format_outside_the_default_list_is_unreadable
+    Cell.boot do |cell|
+      failure = assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
+                                                      inputs: [ fixture("sample.mxf") ])
+
+      assert_predicate failure, :permanent?
+    end
+  end
+
+  def test_formats_nil_lets_ffprobe_open_any_format
+    Cell.boot do |cell|
+      result = assert_ok(cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mxf") ],
+                                                                             payload: { formats: nil })).result
+
+      assert_in_delta 64.0, result[:width], 0.01
+    end
+  end
+
+  def test_formats_replaces_the_default_list
+    Cell.boot do |cell|
+      assert_ok cell.call("active_storage.analyzers.media.ffprobe", inputs: [ fixture("sample.mxf") ],
+                                                                    payload: { formats: [ "mxf" ] })
+      assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
+                                            inputs: [ fixture("sample.mp4") ], payload: { formats: [ "mxf" ] })
+    end
+  end
+
+  # ffprobe keeps the last `-format_whitelist` it is given, so the allowed formats go after the application's
+  # probe arguments, where Rails puts them, and a whitelist in those arguments cannot widen the list.
+  def test_formats_take_precedence_over_a_whitelist_in_probe_arguments
+    Cell.boot do |cell|
+      assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
+                                            inputs: [ fixture("sample.mxf") ],
+                                            payload: { probe_arguments: [ "-format_whitelist", "mxf" ] })
+    end
+  end
+
+  def test_formats_that_are_not_an_array_of_strings_are_a_caller_bug
+    Cell.boot do |cell|
+      failure = assert_failed "invalid", cell.call("active_storage.analyzers.media.ffprobe",
+                                                   inputs: [ fixture("sample.mp4") ],
+                                                   payload: { formats: "mov,mxf" })
+
+      assert_match "formats must be an array of strings", failure.message
+    end
+  end
+
   def test_something_that_is_not_media_is_unreadable
     Cell.boot do |cell|
       failure = assert_failed "unreadable", cell.call("active_storage.analyzers.media.ffprobe",
