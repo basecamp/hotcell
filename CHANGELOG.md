@@ -15,6 +15,16 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Upgrading
+
+* If a cell renders PostScript, PDF, XPS, or PCL through ImageMagick, allow the `gs` delegate and those coders again in a policy of your own. The shipped ImageMagick security policy denies them; see [Customize the policy](docs/imagemagick.md#customize-the-policy).
+
+### ActiveStorage::HotCell::Server
+
+#### Security
+
+* Every ImageMagick process a cell runs now applies Rails' ImageMagick security policy, so an uploaded file can no longer reach the coders that read or write other files, fetch from the network, or run Ghostscript. Previously a cell applied only the policy its image installed. This covers `identify` and `magick` under the magick operations, and `magickload` inside a worker. A `MAGICK_CONFIGURE_PATH` the image sets, and the image's own `policy.xml`, are read after the shipped policy, so either can deny more or allow again. The image's own `policy.xml` is read after the directories on `MAGICK_CONFIGURE_PATH`. ([GHSA-f3w6-w445-fwh9](https://github.com/rails/rails/security/advisories/GHSA-f3w6-w445-fwh9))
+
 ## v1.2.0 / 2026-10-13
 
 ### Upgrading

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "active_storage/hot_cell/server/operation"
+require "active_storage/hot_cell/server/image_magick"
 
 # Loaded here, in the supervisor, rather than lazily in a worker.
 #

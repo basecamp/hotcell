@@ -110,6 +110,7 @@ it.
 | `OMP_NUM_THREADS` | `2` | The OpenMP pool size that libvips and ImageMagick use. Match it to `cpus`. See [Bound the OpenMP thread pools](container.md#bound-the-openmp-thread-pools). |
 | `OMP_THREAD_LIMIT` | `8` | The ceiling on that pool, including for a library that raises the count itself. |
 | `MAGICK_MEMORY_LIMIT`, `MAGICK_MAP_LIMIT`, `MAGICK_DISK_LIMIT` | unset | ImageMagick's pixel cache limits. The installed `Dockerfile` installs no ImageMagick. An image that installs it sets these from the container's `memory`, the scratch, and `concurrency`. See [ImageMagick](imagemagick.md). |
+| `MAGICK_CONFIGURE_PATH` | unset | Directories that hold ImageMagick policies of your own. `activestorage-hotcell-server` puts its security policy's directory before them, so yours are read after it. See [Security policy](imagemagick.md#security-policy). |
 
 ## Load order
 

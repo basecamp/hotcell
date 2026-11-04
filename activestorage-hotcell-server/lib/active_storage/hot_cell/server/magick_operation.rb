@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "active_storage/hot_cell/server/operation"
+require "active_storage/hot_cell/server/image_magick"
 
 # Loaded here rather than lazily in a worker, so mini_magick resolves the ImageMagick binary once at boot
 # rather than shelling out to find it on the first request under a tight limit. mini_magick shells out for
@@ -45,10 +46,14 @@ module ActiveStorage
         # `Operation#initialize` maps the second from it — which is why this is read per request, after
         # `super`, and not once at require: a hash built then hands `magick` the supervisor's `/tmp`, which is
         # swept only at the next boot.
+        #
+        # `MAGICK_CONFIGURE_PATH` is where ImageMagick finds the security policy: the shipped one first, then
+        # any directory the image names. See ImageMagick.
         def self.cli_env
           { "LANG" => "C.UTF-8", "LC_ALL" => "C.UTF-8",
             "OMP_NUM_THREADS" => ENV["OMP_NUM_THREADS"], "OMP_THREAD_LIMIT" => ENV["OMP_THREAD_LIMIT"],
-            "TMPDIR" => ENV["TMPDIR"], "MAGICK_TMPDIR" => ENV["MAGICK_TMPDIR"] }
+            "TMPDIR" => ENV["TMPDIR"], "MAGICK_TMPDIR" => ENV["MAGICK_TMPDIR"],
+            "MAGICK_CONFIGURE_PATH" => ImageMagick.configure_path(ENV["MAGICK_CONFIGURE_PATH"]) }
             .merge(ENV.select { |name, _| name.match?(/\AMAGICK_\w+_LIMIT\z/) })
             .compact
         end

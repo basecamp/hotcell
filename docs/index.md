@@ -25,7 +25,7 @@ This manual describes Hot Cell one topic per page. For an introduction and a qui
 | [Observability](observability.md) | Recommended alerts, the perform.hot_cell notification, the application log line, Yabeda metrics, cell metrics, the cell log schema, and the healthchecks. |
 | [Conformance](conformance.md) | What bin/conformance checks about a cell image, and what it cannot check. |
 | [Active Storage operations](active-storage.md) | The Active Storage client classes, the cell operations that serve them, how their failures are retried, and the limits each declares. |
-| [ImageMagick](imagemagick.md) | ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them. |
+| [ImageMagick](imagemagick.md) | The security policy Hot Cell applies to ImageMagick and how to customize it, and ImageMagick's MAGICK_* resource limits and the formulas to set them. |
 | [Legacy client](client-legacy.md) | HotCell::Client::Legacy, the dependency-free client for legacy Ruby versions: its options, the response it returns, the failures it raises, and how it differs from hotcell-client. |
 
 <!-- indexstop -->
