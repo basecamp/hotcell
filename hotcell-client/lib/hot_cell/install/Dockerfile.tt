@@ -25,6 +25,20 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends && rm -rf /var/
 #     apt-get install -y --no-install-recommends libvips42 mupdf-tools ffmpeg && \
 #     rm -rf /var/lib/apt/lists/*
 
+# activestorage-hotcell-server applies its own ImageMagick security policy, which denies the coders that
+# reach files, the network or Ghostscript. ImageMagick reads your policies after it, so a rule of yours can
+# deny more or allow again. It reads the distribution's own policy after your directory, so to allow a coder
+# that policy denies, replace it. Add yours in either of two ways, and see docs/imagemagick.md:
+#
+# A directory on MAGICK_CONFIGURE_PATH, beside the distribution's own policy:
+#
+# COPY imagemagick/policy.xml /etc/hotcell-imagemagick/policy.xml
+# ENV MAGICK_CONFIGURE_PATH=/etc/hotcell-imagemagick
+#
+# Or a replacement for the distribution's own policy:
+#
+# COPY imagemagick/policy.xml /etc/ImageMagick-7/policy.xml
+
 # The cell's user: no home directory and no shell. Pick a uid your host does not also use for a person —
 # without user namespace remapping this uid is the host's uid, and Debian's own range runs to 60000, so
 # 10001 is not outside it. What isolates the cell is the container, not the number.

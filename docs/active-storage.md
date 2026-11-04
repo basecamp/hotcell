@@ -39,7 +39,8 @@ The `Magick` classes replace Rails' `variant_processor = :magick`. If your appli
 today, use `Magick` wherever the README uses `Vips`, and `magick` wherever it uses `vips`.
 
 If an image that installs ImageMagick serves any of these operations, set ImageMagick's own limits. libvips
-also delegates PSD, BMP, and ICO to ImageMagick. See [ImageMagick](imagemagick.md).
+also delegates PSD, BMP, and ICO to ImageMagick. These operations apply a security policy to ImageMagick
+that denies the coders that reach files, the network, or Ghostscript. See [ImageMagick](imagemagick.md).
 
 ### Mix with Rails' own classes
 

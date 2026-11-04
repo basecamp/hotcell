@@ -2,23 +2,121 @@
 type: Reference
 title: "ImageMagick"
 order: 13
-description: "ImageMagick's MAGICK_* resource limits, how they interact with a cell, and the formulas to set them."
+description: "The security policy Hot Cell applies to ImageMagick and how to customize it, and ImageMagick's MAGICK_* resource limits and the formulas to set them."
 sources:
+  - activestorage-hotcell-server/lib/active_storage/hot_cell/server/image_magick.rb
+  - activestorage-hotcell-server/lib/active_storage/hot_cell/server/image_magick
   - activestorage-hotcell-server/lib/active_storage/hot_cell/server/magick_operation.rb
   - activestorage-hotcell-server/lib/active_storage/hot_cell/server/operation.rb
+  - hotcell-client/lib/hot_cell/install/Dockerfile.tt
 ---
 
 # ImageMagick
 
-This page describes ImageMagick's resource limits and how to set them in a cell. ImageMagick bounds itself
-through the `MAGICK_*_LIMIT` environment variables and a `policy.xml`. The installed `Dockerfile` installs
-no ImageMagick and sets none of them. An image that installs ImageMagick must set them.
+This page describes the security policy that Hot Cell applies to ImageMagick, and ImageMagick's resource
+limits and how to set them in a cell.
+
+## Security policy
+
+ImageMagick chooses a *coder*, the reader or writer for a format, from the content of the file it's
+given. Some coders act on files that the image names rather than on the image itself. `MSL`, for
+example, runs a script that reads and writes any file the worker can open, including the scratch files of
+other requests in flight in the same cell.
+
+`activestorage-hotcell-server` ships the security policy that Rails ships for the same reason, unchanged,
+from [rails/rails@468aa9a](https://github.com/rails/rails/commit/468aa9a93fc98f5476b6821770f4ccfcb7f7d328)
+([GHSA-f3w6-w445-fwh9](https://github.com/rails/rails/security/advisories/GHSA-f3w6-w445-fwh9)). It
+applies the policy to every ImageMagick process that a cell runs:
+
+- `identify` and `magick`, which mini_magick spawns for `analyzers.image.magick` and
+  `transformers.image.magick`.
+- `magickload`, which runs ImageMagick in the worker's own process when libvips delegates a format to it.
+  libvips refuses `magickload` on untrusted input, so the shipped operations don't reach it. An operation
+  that allows it again gets the policy too.
+
+The policy denies the following:
+
+| What | Coders |
+| --- | --- |
+| A script that reads and writes files | `MSL` |
+| Reading or deleting a file other than the image | `TEXT`, `EPHEMERAL`, `FILE` |
+| Reading a pixel cache that the image's header names | `MPC` |
+| Fetching a remote reference | `URL`, `HTTP`, `HTTPS`, `FTP` |
+| Displaying on a screen | `SHOW`, `WIN`, `PLT` |
+| Ghostscript, GhostXPS, and GhostPCL | `PS`, `EPS`, `PDF`, and every alias of them; `XPS`, `PCL`; the `gs` delegate |
+| `@filename` indirection, which substitutes a file's contents for an argument | the `@*` path |
+
+It sets no resource limits. Set those as [Set the limits](#set-the-limits) describes.
+
+### How the policy is applied
+
+`activestorage-hotcell-server` puts the policy's directory first in `MAGICK_CONFIGURE_PATH` and keeps any
+directories that the image already set after it. It does this in two places:
+
+- In the supervisor's environment, when the operations load. Every worker inherits it, so `magickload`
+  reads it.
+- In `MiniMagick.cli_env`, which `MagickOperation` rebuilds for every request. mini_magick doesn't pass
+  the worker's environment to `identify` and `magick`, so `cli_env` must carry the variable.
+
+ImageMagick splits `MAGICK_CONFIGURE_PATH` at `:`, so if the gem is installed under a path that contains
+one, loading the operations raises `HotCell::ConfigurationError` rather than run without the policy.
+
+ImageMagick reads every `policy.xml` on `MAGICK_CONFIGURE_PATH` in order, then its system `policy.xml`, and
+applies all of them. For a coder, the last rule that matches wins. The shipped policy is read first, so a
+later rule for the same coder overrides it, and the system policy overrides a directory that you name.
+
+### Customize the policy
+
+You can add a policy in either of two ways. Each one is read after the shipped policy, so either one can
+deny more or allow again:
+
+- **A directory on `MAGICK_CONFIGURE_PATH`.** Put your `policy.xml` in a directory and name it in the
+  image's `MAGICK_CONFIGURE_PATH`. The system policy stays in place.
+- **The system policy.** Replace the image's own `policy.xml`: `/etc/ImageMagick-7/policy.xml` on the
+  installed `Dockerfile`'s Debian base, or `/etc/ImageMagick-6/policy.xml` with ImageMagick 6. The
+  distribution's own rules and resource limits go with it.
+
+The system policy is read after a directory that you name. To allow a coder that the system policy
+denies, replace the system policy: Debian 12's, for example, denies `PS`, `EPS`, `PDF`, and `XPS`.
+
+The installed `Dockerfile` has an example of each, commented out.
+
+An application that renders PostScript or PDF through ImageMagick must allow the `gs` delegate and the
+coders it uses:
+
+```xml
+<policymap>
+  <policy domain="delegate" rights="execute" pattern="gs"/>
+  <policy domain="coder" rights="read|write" pattern="PDF"/>
+</policymap>
+```
+
+A rule that allows a coder, including a wildcard such as `pattern="*"`, overrides the shipped deny. Allow
+only the coders that you use.
+
+### Check the policy
+
+`activestorage-hotcell-server` sets `MAGICK_CONFIGURE_PATH` when it loads, so a shell in the image doesn't
+have the shipped directory. To list the policy that a cell applies, run this in the image:
+
+```
+MAGICK_CONFIGURE_PATH="$(bundle exec ruby -r active_storage/hot_cell/server/image_magick \
+  -e 'print ENV["MAGICK_CONFIGURE_PATH"]')" identify -list policy
+```
+
+The shipped `policy.xml` must be listed. On ImageMagick 7, the command can also be `magick identify`.
+
+## Resource limits
+
+ImageMagick bounds itself through the `MAGICK_*_LIMIT` environment variables and a `policy.xml`. The
+installed `Dockerfile` installs no ImageMagick and sets none of them. An image that installs ImageMagick
+must set them.
 
 The formulas start from the container flags and cell settings in [Container](container.md),
 [Cell settings](cell-settings.md), and [Scratch](scratch.md): `memory`, `concurrency`, `file_size`, and
 the scratch's size.
 
-## Variables
+### Variables
 
 ImageMagick decodes every frame into a *pixel cache*, an uncompressed `width × height × bytes per pixel`
 array, and the limits decide where each cache lives. ImageMagick's
@@ -54,7 +152,7 @@ ImageMagick reads the limits once: when the `magick` process starts, or at Image
 process that loaded the library. Limits apply to each process. `identify -list resource` prints the
 result.
 
-## How the limits interact in a cell
+### How the limits interact in a cell
 
 **The environment reaches both ways that ImageMagick runs in a cell.**
 
@@ -63,7 +161,7 @@ result.
 - As a child, when mini_magick spawns `identify` or `magick` for `analyzers.image.magick` and
   `transformers.image.magick`. mini_magick runs with `restricted_env`, which passes the child only `HOME`,
   `PATH`, `LANG`, and `MiniMagick.cli_env`. So `MagickOperation` rebuilds `cli_env` for every request from
-  the worker's `MAGICK_*_LIMIT`, `TMPDIR`, and `MAGICK_TMPDIR`.
+  the worker's `MAGICK_*_LIMIT`, `TMPDIR`, `MAGICK_TMPDIR`, and `MAGICK_CONFIGURE_PATH`.
 
 **The gem sets `MAGICK_TMPDIR`.** `Operation#initialize` sets it from the request's `TMPDIR`, so in-process
 cache files land in the request's directory and are removed with it. Don't set it in the image, and don't
@@ -101,9 +199,9 @@ it in bytes. Set below `memory`, it sends frames to scratch that the heap could 
 **`MAGICK_THREAD_LIMIT` raises the OpenMP count itself**, and `OMP_THREAD_LIMIT` caps it. See
 [Bound the OpenMP thread pools](container.md#bound-the-openmp-thread-pools).
 
-## Set the limits
+### Set the limits
 
-### Formulas
+#### Formulas
 
 Every "MiB" is `1024²` bytes, as `config.rb` writes it. Work out each operation that can reach ImageMagick
 separately, and set the image to the smallest result.
@@ -140,7 +238,7 @@ separately, and set the image to the smallest result.
 
 **`policy.xml`**: the same `disk` value as `MAGICK_DISK_LIMIT`.
 
-### Worked example
+#### Worked example
 
 This example is a production cell that serves image transforms and analysis for a Rails application.
 
@@ -233,7 +331,7 @@ on its first request, and the scratch is empty afterward. The limits that the im
 the application were `1GiB`, `5GiB`, and `10GiB`: memory twice a worker's share of the cgroup, and disk two
 and a half times the scratch.
 
-### Check a built image
+#### Check a built image
 
 Inside the image, as the cell's user, run `identify -list resource` to print the effective limits. `Disk`
 must be the number that you computed, and `Area` must be unbounded. Run `identify -list policy` to see what
@@ -254,7 +352,7 @@ To check end to end, send a layered file larger than the disk limit through the 
 `unreadable`, and the scratch root must be empty afterward. A cache file left behind means that the spill
 went to `/tmp` rather than to the request's directory.
 
-### When to recompute
+#### When to recompute
 
 Recompute the limits when any input changes:
 
