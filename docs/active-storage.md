@@ -64,6 +64,47 @@ ActiveStorage::HotCell::Client::Operations::Previewers::Video::Ffmpeg.hotcell "v
 
 Register that cell too. See [Client API](client-api.md#register-a-cell).
 
+## ffmpeg and ffprobe settings
+
+The media operations honor the Active Storage settings that Rails passes to ffmpeg and ffprobe. The client
+reads each setting in the application and sends it with the request, and the cell puts it in the command
+line where Rails puts it.
+
+| Setting | Routing names | Position in the command line |
+| --- | --- | --- |
+| `config.active_storage.ffprobe_arguments` | `active_storage.analyzers.media.ffprobe` | Before the input |
+| `config.active_storage.video_preview_input_arguments` | `active_storage.previewers.video.ffmpeg` | Before `-i` |
+| `config.active_storage.ffmpeg_allowed_formats` | Both | As `-format_whitelist`, after the arguments above and before the input |
+
+If your Rails version doesn't have one of these settings, the client gem defines it.
+
+### Allowed formats
+
+`config.active_storage.ffmpeg_allowed_formats` names the demuxers that ffmpeg and ffprobe may open a file
+with. Names match `ffmpeg -demuxers`, and one name admits a demuxer that registers several, so `mov` also
+admits MP4, M4A, and 3GP files. The default is Rails' default:
+
+```ruby
+%w[ mov matroska avi mpeg mpegts flv asf ogg mp3 wav flac aac aiff caf ]
+```
+
+Set it to `nil` to let ffmpeg and ffprobe use any demuxer they were built with.
+
+The cell answers `unreadable` for a file in any other format, such as MXF, DV, or AC3. As in Rails, analysis
+then stores no metadata and logs a warning, and the preview fails: the client raises the cell's `permanent:`
+class where Rails raises `ActiveStorage::PreviewError`. See [Failures](#failures).
+
+### Change the allowed formats
+
+The client sends the allowed formats only when they differ from the default, because a cell whose
+`activestorage-hotcell-server` predates the setting answers `failed` to it. To change the list:
+
+1. Upgrade `activestorage-hotcell-server` in every cell that serves a media operation.
+2. Change `config.active_storage.ffmpeg_allowed_formats` in the application.
+
+If you change the list first, every media call answers `failed`, which is transient: the jobs retry, and
+analysis and previews fail until the cells are upgraded.
+
 ## Remove packages from the application image
 
 After a file type's processing moves into the cell, remove its packages, such as libvips, from the

@@ -44,6 +44,60 @@ class MediaAnalyzerTest < ActiveStorageHotCellClientTest
     end
   end
 
+  # An application that leaves `config.active_storage.ffmpeg_allowed_formats` at Rails' default sends no
+  # `formats`, because a cell that predates the keyword answers `failed` to it, and the cell's own default is
+  # the same list.
+  def test_the_default_allowed_formats_are_not_sent
+    [ ActiveStorage.ffmpeg_allowed_formats, ActiveStorage.ffmpeg_allowed_formats.join(",") ].each do |default|
+      transport = with_canned_response failed("unreadable")
+
+      with_active_storage_setting :ffmpeg_allowed_formats, default do
+        Video.new(Blob.new(fixture("sample.mp4"))).metadata
+      end
+
+      refute JSON.parse(transport.lines.last).fetch("payload", {}).key?("formats"), "sent #{default.inspect}"
+    end
+  end
+
+  # Rails' outcome for a file in a format outside the list: no metadata, and a warning in the log.
+  def test_a_format_outside_the_allowed_formats_is_marked_analyzed_with_a_warning
+    log = StringIO.new
+
+    with_active_storage_setting :logger, Logger.new(log) do
+      with_cell do
+        assert_equal({}, Video.new(Blob.new(fixture("sample.mxf"))).metadata)
+      end
+    end
+
+    assert_match "sample.mxf could not be analyzed", log.string
+  end
+
+  def test_allowed_formats_reach_the_cell
+    with_active_storage_setting :ffmpeg_allowed_formats, %w[ mxf ] do
+      with_cell do
+        assert_in_delta 64.0, Video.new(Blob.new(fixture("sample.mxf"))).metadata[:width], 0.01
+        assert_equal({}, Video.new(Blob.new(fixture("sample.mp4"))).metadata)
+      end
+    end
+  end
+
+  # Rails joins the setting with commas, so a comma-separated string works there and has to work here.
+  def test_allowed_formats_given_as_a_comma_separated_string_reach_the_cell
+    with_active_storage_setting :ffmpeg_allowed_formats, "matroska,mxf" do
+      with_cell do
+        assert_in_delta 64.0, Video.new(Blob.new(fixture("sample.mxf"))).metadata[:width], 0.01
+      end
+    end
+  end
+
+  def test_nil_allowed_formats_let_the_cell_open_any_format
+    with_active_storage_setting :ffmpeg_allowed_formats, nil do
+      with_cell do
+        assert_in_delta 64.0, Video.new(Blob.new(fixture("sample.mxf"))).metadata[:width], 0.01
+      end
+    end
+  end
+
   # Exactly Rails' AudioAnalyzer keys, minus tags.
   def test_the_audio_analyzer_returns_rails_audio_metadata_without_tags
     with_cell do

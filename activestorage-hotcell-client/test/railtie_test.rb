@@ -31,18 +31,21 @@ class RailtieTest < ActiveStorageHotCellClientTest
   # is asserted here. The job lives in the application's app/jobs so that the main autoloader manages it, as it
   # manages the Active Storage engine's, and the application raises on any framework loaded while it initializes.
   # The tool-argument settings are the same line an application writes for the in-process analyzer, and one is
-  # left unset — nil in config, which must arrive as nothing rather than reach Shellwords. This application does
+  # left unset — nil in config, which must arrive as nothing rather than reach Shellwords. The allowed formats
+  # are set to nil, which lifts the list, so it must arrive as nil rather than as the default. This application does
   # not load the Active Storage engine, so it creates the config namespace the engine would have.
   def test_boot_leaves_the_jobs_unloaded_and_applies_the_settings_and_each_load_of_a_job_applies_the_retry
     with_canned_response failed("capacity")
     application.config.active_storage = ActiveSupport::OrderedOptions.new
     application.config.active_storage.ffprobe_arguments = "-codec_whitelist h264,aac"
+    application.config.active_storage.ffmpeg_allowed_formats = nil
 
     application.initialize!
 
     assert ActiveStorage.autoload?(:AnalyzeJob), "boot loaded the job"
     assert_equal "-codec_whitelist h264,aac", ActiveStorage.ffprobe_arguments
     assert_equal "", ActiveStorage.video_preview_input_arguments
+    assert_nil ActiveStorage.ffmpeg_allowed_formats
 
     assert_equal [ TemporarilyUnavailable.name ], ActiveStorage::AnalyzeJob.rescue_handlers.map(&:first),
                  "loading the job did not teach it to retry the transient class"
@@ -55,6 +58,7 @@ class RailtieTest < ActiveStorageHotCellClientTest
   ensure
     ActiveStorage.send :remove_const, :AnalyzeJob if ActiveStorage.const_defined?(:AnalyzeJob, false)
     ActiveStorage.ffprobe_arguments = ""
+    ActiveStorage.ffmpeg_allowed_formats = ActiveStorage::HotCell::Client::ToolArguments::FFMPEG_ALLOWED_FORMATS
   end
 
   private

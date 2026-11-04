@@ -23,10 +23,11 @@ module ActiveStorage
             end
 
             private
-              # `config.active_storage.video_preview_input_arguments`, which Rails splices before `-i`, carried
-              # to the cell so it can do the same. Split here, the way Rails splits it, and omitted when empty.
+              # `config.active_storage.video_preview_input_arguments` and `ffmpeg_allowed_formats`, which Rails
+              # splices before `-i`, carried to the cell so it can do the same.
               def payload
                 ToolArguments.payload(:input_arguments, ActiveStorage.video_preview_input_arguments)
+                  .merge(ToolArguments.formats_payload)
               end
           end
 

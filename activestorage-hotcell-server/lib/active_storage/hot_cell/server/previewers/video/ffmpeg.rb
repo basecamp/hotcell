@@ -13,7 +13,7 @@ module ActiveStorage
           # argument lists as shell strings it splits with Shellwords. This honours the input half:
           # `video_preview_input_arguments` arrives split, and it goes before `-i` exactly as it does in
           # Rails, because that is where an input option has to be. The output half is fixed here — see
-          # RELEVANT_FRAME — and the only other thing a caller says is how many seconds in to seek.
+          # RELEVANT_FRAME. A caller also says how many seconds in to seek, and which formats ffmpeg may open.
           class Ffmpeg < ToolOperation
             operation "active_storage.previewers.video.ffmpeg"
 
@@ -31,12 +31,13 @@ module ActiveStorage
             # what an application needs to shape, and that travels separately as `input_arguments`.
             RELEVANT_FRAME = 'select=eq(n\,0)+eq(key\,1)+gt(scene\,0.015),loop=loop=-1:size=2,trim=start_frame=1'
 
-            def perform(inputs, outputs, seek: 0, input_arguments: [])
+            def perform(inputs, outputs, seek: 0, input_arguments: [], formats: FFMPEG_ALLOWED_FORMATS)
               source, = inputs
               destination, = outputs
 
               seek = seek!(seek)
               input_arguments = arguments!(:input_arguments, input_arguments)
+              format_whitelist = format_whitelist!(formats)
 
               # JPEG rather than PNG, because Rails' own video previewer yields image/jpeg and this is meant to
               # drop into its place. A preview that changed the attached blob's content type would not be a
@@ -44,8 +45,9 @@ module ActiveStorage
               #
               # -ss before -i seeks by keyframe, which is orders of magnitude cheaper on a long file than
               # decoding up to the point. -nostdin because ffmpeg reads the terminal otherwise, and a worker has
-              # no terminal. The application's input arguments go directly before -i, so they cannot drift
-              # past it as the fixed flags around them change.
+              # no terminal. The application's input arguments and then its allowed formats go directly before
+              # -i, as they do in Rails, so they cannot drift past it as the fixed flags around them change, and
+              # ffmpeg keeps the allowed formats over a whitelist in the input arguments.
               #
               # Both descriptors go to ffmpeg: it reads /dev/fd for the source and writes /dev/fd for the frame,
               # so neither the input nor the output touches scratch. Writing the descriptor directly leaves
@@ -53,7 +55,7 @@ module ActiveStorage
               # it empty — harmless here, because run! turns a non-zero exit into a refusal and the previewer
               # discards its output on any failure, but it is a real property of the direct write.
               run! "ffmpeg", "-nostdin", "-loglevel", "error", "-ss", seek.to_s,
-                   *input_arguments, "-i", source.fd_path,
+                   *input_arguments, *format_whitelist, "-i", source.fd_path,
                    "-vf", RELEVANT_FRAME,
                    "-frames:v", "1", "-f", "image2", "-c:v", "mjpeg", "-y", destination.fd_path,
                    pass: [ source.to_io, destination.to_io ]
