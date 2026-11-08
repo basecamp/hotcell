@@ -113,3 +113,25 @@ input through the descriptor.
 
 A cell must allow the highest of these limits for every operation that it carries. See
 [Tuning](tuning.md#size-against-the-container).
+
+## Decode large images in memory
+
+libvips decodes an image into memory when it reads the file with random access, which is its default. When the
+decode is larger than `VIPS_DISC_THRESHOLD`, libvips writes it to a temporary file in the scratch instead. The
+threshold is 100MB by default. An 8000×6000 photograph has 48 million pixels, so its 8-bit RGB decode is 144MB.
+The temporary file then passes the operation's `file_size`, and the write fails with `wbuffer_write: write failed`.
+The cell answers `unreadable`, which is permanent.
+
+Don't set `access: :sequential` in the loader options to avoid the temporary file. A sequential source can't
+serve an operation that reads rows out of order. `autorot` is the common one: a photograph with an EXIF
+orientation of 3, 6 or 8 fails with `out of order read at line N`, which the cell also answers `unreadable`.
+
+Set `VIPS_DISC_THRESHOLD` instead. Choose a value above the decode of the largest image that the application
+accepts, and keep the sum of the decodes that run at once under the operation's `memory`. A decode held in
+memory counts against `memory`. Set it in `config.rb` before the first operation loads libvips, or in the
+image's `ENV`:
+
+```ruby
+# 50 million pixels of 8-bit RGBA is 200MB.
+ENV["VIPS_DISC_THRESHOLD"] ||= "300m"
+```

@@ -15,6 +15,10 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Documentation
+
+* [Active Storage operations](docs/active-storage.md#decode-large-images-in-memory) explains why a large image can fail with `wbuffer_write: write failed`, why `access: :sequential` fails with `out of order read` for a photograph with an EXIF orientation, and how `VIPS_DISC_THRESHOLD` avoids both.
+
 ## v1.2.0 / 2026-10-13
 
 ### Upgrading
