@@ -75,7 +75,8 @@ set a `temporary-path` policy, which overrides it.
 **`file_size` can't do the disk limit's job.** `file_size` is `RLIMIT_FSIZE`, a limit on each file. A
 layered PSD writes one cache file for each layer, and twenty 40MiB caches total 800MiB with no file near a
 48MiB `file_size`. Only `MAGICK_DISK_LIMIT` bounds the sum. Where the two meet, the smaller fires first, as
-an `fsize` kill or as `cache resources exhausted`. Both are permanent failures of the file.
+a failed write or as `cache resources exhausted`. ImageMagick reports both itself, so the cell answers
+`unreadable`, which is a permanent failure of the file.
 
 **A disk limit larger than the scratch isn't a limit.** The scratch fills first. A full scratch fails every
 request on the cell that needs scratch, and a write that fails inside libvips is a `Vips::Error`, which the
@@ -198,7 +199,8 @@ its default 5% root reserve take part of the image, so a 4G image reports under 
 same arithmetic gives 716MiB. Size the image above what the arithmetic needs, and take the number from
 `df` on a cell host.
 
-On the analyzer, whose `file_size` is 48MB, a cache file over 48MB takes the `fsize` kill first.
+On the analyzer, whose `file_size` is 48MB, a cache file over 48MB reaches `file_size` first, and the cell
+answers `unreadable`.
 
 **Memory.**
 

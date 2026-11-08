@@ -48,8 +48,9 @@ test tells you nothing useful about them.
 
 - **A limit that's too high costs headroom.** The container's own memory limit still bounds the cell.
 - **A limit that's too low kills a legitimate file.** The cell answers `killed` with cause `memory` or
-  `fsize`. Both failures are permanent, so the caller is entitled to record them, and the shipped Active
-  Storage analyzers do. See [What Active Storage records](codes.md#what-active-storage-records).
+  `fsize`, or `unreadable` when a library or a tool reports the failure itself. All three are permanent, so
+  the caller is entitled to record them, and the shipped Active Storage analyzers do. See
+  [What Active Storage records](codes.md#what-active-storage-records).
 
 The two mistakes aren't equal, so use this order:
 

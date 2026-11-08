@@ -55,7 +55,7 @@ These four settings are sized like performance settings, and they exist as limit
 | --- | --- | --- |
 | `deadline` | `60` | Maximum wall-clock seconds for one request. The supervisor kills the worker's process group and answers `killed` with cause `deadline`. This is the only bound on a stuck or deliberately slow input. |
 | `memory` | `1536MB` | `RLIMIT_DATA` for each worker, and the bound on a decompression bomb. A breach answers `killed` with cause `memory`. The floor is `1024MB`: a cell or an operation below it raises `HotCell::ConfigurationError` and doesn't boot. |
-| `file_size` | `64MB` | `RLIMIT_FSIZE` for each worker. A breach raises `SIGXFSZ` and answers `killed` with cause `fsize`. |
+| `file_size` | `64MB` | `RLIMIT_FSIZE` for each worker and the tools that it runs. A write past it by the worker itself fails with `EFBIG` and answers `killed` with cause `fsize`. A library or a tool that passes it reports its own error instead, which the operation classifies. See [Causes of `killed`](codes.md#causes-of-killed). |
 | `open_files` | `256` | `RLIMIT_NOFILE` for each worker. |
 
 `MB` here means 1024² bytes. Every limit must be positive.

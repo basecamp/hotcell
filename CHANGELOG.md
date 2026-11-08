@@ -15,6 +15,11 @@ gem but are what an operator runs against their own image.
 
 ## next / unreleased
 
+### Documentation
+
+* [Active Storage operations](docs/active-storage.md#decode-large-images-in-memory) explains why a large image can fail with `wbuffer_write: write failed`, why `access: :sequential` fails with `out of order read` for a photograph with an EXIF orientation, and how `VIPS_DISC_THRESHOLD` avoids both.
+* [Cell settings](docs/cell-settings.md#request-limits), [Tuning](docs/tuning.md) and [ImageMagick](docs/imagemagick.md) no longer say that every `file_size` breach answers `killed` with cause `fsize`. Only a write by the worker itself does. A library or a tool that passes `file_size` reports its own error, which the shipped image operations answer `unreadable`.
+
 ## v1.2.0 / 2026-10-13
 
 ### Upgrading

@@ -113,3 +113,30 @@ input through the descriptor.
 
 A cell must allow the highest of these limits for every operation that it carries. See
 [Tuning](tuning.md#size-against-the-container).
+
+## Decode large images in memory
+
+When libvips reads an image with random access, which is its default, it decodes the whole image before it
+transforms it. ImageProcessing skips that decode when a resize is the first step and `loader` sets no options,
+because libvips then shrinks the image as it loads it. Every other pipeline decodes the whole image.
+
+libvips holds a decode of up to `VIPS_DISC_THRESHOLD`, 100MB by default, in memory, and writes a larger one to a
+temporary file on [scratch](scratch.md). An 8000×6000 photograph has 48 million pixels, so its 8-bit RGB decode
+is 137MB. That file passes the transformer's 48MB `file_size`, and the write fails with
+`wbuffer_write: write failed`. libvips raises `Vips::Error` for the failed write, so the cell answers
+`unreadable`, which is permanent, and not `killed` with cause `fsize`.
+
+Don't set `access: :sequential` in the `loader` options to avoid the temporary file. ImageProcessing turns
+each image upright from its EXIF orientation as it loads it, which reads rows out of order, and a sequential
+read can't serve that. A photograph with an EXIF orientation from 3 to 8 can then fail with
+`out of order read at line N`, which the cell also answers `unreadable`.
+
+Set `VIPS_DISC_THRESHOLD` instead, above the decode of the largest image that the application accepts. A
+decode held in memory counts against the operation's `memory`, and about 450MB of that is Ruby's own
+reservation. Keep the threshold well under the rest. See [Tuning](tuning.md#sizing-guidelines). Set it in the
+image's `ENV`, or in `config.rb`:
+
+```ruby
+# 50 million pixels of 8-bit RGBA, at 4 bytes each, is 191MB.
+ENV["VIPS_DISC_THRESHOLD"] ||= "300m"
+```
